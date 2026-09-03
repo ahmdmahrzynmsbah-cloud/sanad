@@ -1,0 +1,6 @@
+{
+  "name": "مساعد الجمارك والضرائب الفلسطيني",
+  "description": "منصة رسمية ذكية للاستفسارات القانونية والضريبية والجمركية استناداً إلى نصوص التشريعات الفلسطينية وقاعدة المعرفة المعتمدة.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

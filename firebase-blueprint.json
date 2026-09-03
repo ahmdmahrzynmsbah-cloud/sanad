@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Firestore Database Blueprint",
+  "description": "Schema definitions for the Palestinian Customs and Tax Assistant database",
+  "collections": {
+    "users": {
+      "description": "Registered taxpayers, beneficiaries, and administrators",
+      "fields": {
+        "id": { "type": "string", "description": "Unique user document ID" },
+        "username": { "type": "string", "description": "Unique username" },
+        "fullName": { "type": "string", "description": "Full name of the user" },
+        "phone": { "type": "string", "description": "Mobile phone number" },
+        "password": { "type": "string", "description": "Encrypted or stored credential" },
+        "recoveryCode": { "type": "string", "description": "Secret recovery key for password reset" },
+        "role": { "type": "string", "enum": ["user", "admin"], "description": "User role" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"], "description": "Approval status" },
+        "createdAt": { "type": "string", "description": "ISO timestamp of registration" },
+        "reviewedAt": { "type": "string", "description": "ISO timestamp of admin review" }
+      },
+      "required": ["id", "username", "fullName", "phone", "role", "status", "createdAt"]
+    },
+    "laws": {
+      "description": "Legal knowledge base for Palestinian taxes and customs",
+      "fields": {
+        "id": { "type": "string", "description": "Unique law identifier" },
+        "title": { "type": "string", "description": "Official title of the law / decree" },
+        "category": { "type": "string", "description": "Dynamic tax or legal category" },
+        "content": { "type": "string", "description": "Full statutory and article text" },
+        "updatedAt": { "type": "string", "description": "ISO timestamp of last modification" }
+      },
+      "required": ["id", "title", "category", "content", "updatedAt"]
+    },
+    "legal_categories": {
+      "description": "Dynamic legal and tax categories managed by administrators",
+      "fields": {
+        "id": { "type": "string", "description": "Unique category identifier" },
+        "name": { "type": "string", "description": "Category name (e.g. جمارك, ضريبة دخل)" },
+        "isDefault": { "type": "boolean", "description": "Whether this is a system default category" },
+        "createdAt": { "type": "string", "description": "ISO timestamp of creation" }
+      },
+      "required": ["id", "name"]
+    }
+  }
+}
