@@ -1569,6 +1569,16 @@ app.get('/api/admin/users', (req, res) => {
   res.json({ users: safeUsers });
 });
 
+// Get a single user by username (for real-time sync of current user status)
+app.get('/api/users/by-username/:username', (req, res) => {
+  const username = req.params.username;
+  const user = db.users.find(u => u.username === username);
+  if (!user) {
+    return res.status(404).json({ error: 'المستخدم غير موجود' });
+  }
+  res.json({ user: toSafeUser(user) });
+});
+
 // Update user status (Accept or Reject)
 app.post('/api/admin/users/:id/status', async (req, res) => {
   const id = String(req.params.id).trim();

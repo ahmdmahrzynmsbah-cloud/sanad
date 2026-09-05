@@ -13,6 +13,7 @@ import {
   Link2
 } from 'lucide-react';
 import { RelatedSite } from '../types';
+import { useSync } from '../utils/sync';
 
 interface RelatedSitesViewProps {
   onBackToHome: () => void;
@@ -48,6 +49,10 @@ export const RelatedSitesView: React.FC<RelatedSitesViewProps> = ({
   useEffect(() => {
     fetchSites();
   }, []);
+
+  useSync(['related_sites'], () => {
+    fetchSites();
+  });
 
   const categories = Array.from(
     new Set(sites.map((s) => s.category).filter(Boolean))

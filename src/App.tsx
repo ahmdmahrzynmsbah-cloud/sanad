@@ -92,6 +92,31 @@ export default function App() {
     }
   };
 
+  const fetchCurrentUser = async () => {
+    if (!currentUser) return;
+    try {
+      const res = await fetch(`/api/users/by-username/${encodeURIComponent(currentUser.username)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.user) {
+          setCurrentUser(data.user);
+          localStorage.setItem('pal_tax_user', JSON.stringify(data.user));
+          
+          // Redirect pending users to chat if they just got approved
+          if (activeView === 'auth' && data.user.status === 'approved') {
+            setActiveView('chat');
+          }
+          // Redirect active users out of chat if they got frozen or rejected
+          if (activeView === 'chat' && data.user.status !== 'approved') {
+            setActiveView('auth');
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to sync current user', e);
+    }
+  };
+
   useEffect(() => {
     const cleanupSync = initGlobalSync();
     fetchLawsCount();
@@ -99,6 +124,10 @@ export default function App() {
     fetchPlatformAbout();
     return () => cleanupSync();
   }, []);
+
+  useSync(['users'], () => {
+    fetchCurrentUser();
+  });
 
   useSync(['laws', 'system_settings'], () => {
     fetchLawsCount();
@@ -316,7 +345,7 @@ export default function App() {
                     onClick={async () => {
                       // Quick re-check status in case admin just approved/unfroze
                       try {
-                        const res = await fetch(`/api/user/status?username=${encodeURIComponent(currentUser.username)}`);
+                        const res = await fetch(`/api/users/by-username/${encodeURIComponent(currentUser.username)}`);
                         if (res.ok) {
                           const data = await res.json();
                           if (data.user) {

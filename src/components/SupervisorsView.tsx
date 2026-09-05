@@ -15,6 +15,7 @@ import {
   Scale
 } from 'lucide-react';
 import { Supervisor } from '../types';
+import { useSync } from '../utils/sync';
 
 interface SupervisorsViewProps {
   onBackToHome: () => void;
@@ -52,6 +53,10 @@ export const SupervisorsView: React.FC<SupervisorsViewProps> = ({
   useEffect(() => {
     fetchSupervisors();
   }, []);
+
+  useSync(['supervisors'], () => {
+    fetchSupervisors();
+  });
 
   // Filter departments
   const departments = Array.from(
