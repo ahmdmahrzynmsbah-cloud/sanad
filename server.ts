@@ -2673,7 +2673,14 @@ async function startServer() {
     });
   }
 
-  if (!process.env.VERCEL) {
+  const isServerless = Boolean(
+    process.env.VERCEL || 
+    process.env.AWS_LAMBDA_FUNCTION_NAME || 
+    process.env.NETLIFY ||
+    process.env.FUNCTION_NAME
+  );
+
+  if (!isServerless && process.env.NODE_ENV !== 'test') {
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`⚡ Server listening on port ${PORT} (immediate readiness)`);
       // Non-blocking background sync with Firestore Cloud Database
