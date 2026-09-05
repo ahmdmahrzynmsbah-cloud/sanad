@@ -806,6 +806,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </form>
             )}
           </div>
+
+          {/* Footer: Clean Minimal Admin Portal Transition */}
+          <div className="mt-8 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            <span className="text-[11px]">هل تمتلك صلاحيات الإشراف والتدقيق؟</span>
+            <button
+              id="auth-switch-to-admin-btn"
+              type="button"
+              onClick={onGoToAdminLogin}
+              className="font-bold text-[#0f2a24] hover:text-emerald-800 flex items-center gap-1 transition-colors"
+            >
+              دخول بوابة المسؤولين
+              <ArrowLeft className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
     </div>

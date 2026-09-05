@@ -121,35 +121,37 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2.5">
         <div className="flex items-center justify-between gap-2 relative">
           {/* Logo & Official Branding */}
-          <div
-            onClick={() => handleNav('home')}
-            className="flex items-center gap-2.5 sm:gap-3 cursor-pointer group min-w-0 z-10"
-            title={systemName}
-          >
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#163a30] to-[#0d2620] border border-[#235748] flex items-center justify-center shadow-inner overflow-hidden shrink-0 group-hover:border-[#d4af37]/60 transition-colors">
-              {renderIcon()}
-            </div>
-            <div className="min-w-0 truncate">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <h1 className="text-sm sm:text-base font-bold tracking-tight text-white flex items-center gap-1.5 group-hover:text-emerald-300 transition-colors truncate">
-                  <span className="truncate">{systemName}</span>
-                  {systemBadge && (
-                    <span className="text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 px-1.5 py-0.2 rounded border border-emerald-500/25 shrink-0">
-                      {systemBadge}
-                    </span>
-                  )}
-                </h1>
+          <div className="flex-1 flex items-center justify-start min-w-0 z-10">
+            <div
+              onClick={() => handleNav('home')}
+              className="flex items-center gap-2.5 sm:gap-3 cursor-pointer group min-w-0"
+              title={systemName}
+            >
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#163a30] to-[#0d2620] border border-[#235748] flex items-center justify-center shadow-inner overflow-hidden shrink-0 group-hover:border-[#d4af37]/60 transition-colors">
+                {renderIcon()}
               </div>
-              {systemSubtitle && (
-                <p className="text-[10px] sm:text-[11px] text-slate-300/80 font-light truncate max-w-[200px] sm:max-w-md hidden xs:block">
-                  {systemSubtitle}
-                </p>
-              )}
+              <div className="min-w-0 truncate">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <h1 className="text-sm sm:text-base font-bold tracking-tight text-white flex items-center gap-1.5 group-hover:text-emerald-300 transition-colors truncate">
+                    <span className="truncate">{systemName}</span>
+                    {systemBadge && (
+                      <span className="text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 px-1.5 py-0.2 rounded border border-emerald-500/25 shrink-0">
+                        {systemBadge}
+                      </span>
+                    )}
+                  </h1>
+                </div>
+                {systemSubtitle && (
+                  <p className="text-[10px] sm:text-[11px] text-slate-300/80 font-light truncate max-w-[200px] sm:max-w-md hidden xs:block">
+                    {systemSubtitle}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
 
           {/* Center Navigation Controls (الرئيسية + المشرفين + مواقع ذات صلة + الرؤية) */}
-          <div className="hidden lg:flex items-center justify-center gap-2 absolute left-1/2 -translate-x-1/2 w-max z-0">
+          <div className="hidden lg:flex flex-shrink-0 items-center justify-center gap-2 z-0">
             <button
               id="header-nav-home-btn"
               onClick={() => handleNav('home')}
@@ -205,8 +207,9 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* Right Controls (دخول المسؤول + بيانات المستخدم) */}
-          <div className="hidden md:flex items-center gap-2 z-10">
-            {currentAdmin && (
+          <div className="flex-1 flex items-center justify-end gap-2 z-10">
+            <div className="hidden md:flex items-center gap-2">
+              {currentAdmin ? (
               <button
                 id="header-nav-admin-portal-btn"
                 onClick={() => handleNav('admin-portal')}
@@ -218,6 +221,20 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <Shield className="w-3.5 h-3.5 text-amber-300" />
                 <span>لوحة التحكم</span>
+              </button>
+            ) : (
+              <button
+                id="header-nav-admin-login-btn"
+                onClick={() => handleNav('admin-login')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  activeView === 'admin-login'
+                    ? 'bg-amber-950/70 text-amber-200 border border-amber-500/40'
+                    : 'text-slate-300 hover:text-white hover:bg-white/5 border border-transparent'
+                }`}
+                title="بوابة دخول المسؤول"
+              >
+                <Lock className="w-3.5 h-3.5 text-[#d4af37]" />
+                <span>المسؤول</span>
               </button>
             )}
 
@@ -302,19 +319,20 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               </div>
             )}
-          </div>
+            </div>
 
-          {/* Mobile Right Controls: Hamburger Menu */}
-          <div className="flex items-center gap-1.5 md:hidden">
-            <button
-              id="mobile-menu-toggle-btn"
-              type="button"
-              onClick={() => setIsMobileMenuOpen((prev) => !prev)}
-              aria-label="القائمة الرئيسية"
-              className="p-2 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/10 transition-colors flex items-center justify-center cursor-pointer min-w-[40px] min-h-[40px]"
-            >
-              {isMobileMenuOpen ? <X className="w-5 h-5 text-emerald-300" /> : <Menu className="w-5 h-5 text-white" />}
-            </button>
+            {/* Mobile Right Controls: Hamburger Menu */}
+            <div className="flex items-center gap-1.5 md:hidden">
+              <button
+                id="mobile-menu-toggle-btn"
+                type="button"
+                onClick={() => setIsMobileMenuOpen((prev) => !prev)}
+                aria-label="القائمة الرئيسية"
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/10 transition-colors flex items-center justify-center cursor-pointer min-w-[40px] min-h-[40px]"
+              >
+                {isMobileMenuOpen ? <X className="w-5 h-5 text-emerald-300" /> : <Menu className="w-5 h-5 text-white" />}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -449,7 +467,7 @@ export const Header: React.FC<HeaderProps> = ({
               <ChevronLeft className="w-4 h-4 text-[#d4af37]" />
             </button>
 
-            {currentAdmin && (
+            {currentAdmin ? (
               <button
                 onClick={() => handleNav('admin-portal')}
                 className={`w-full p-3 rounded-xl text-xs font-bold flex items-center justify-between transition-all text-right cursor-pointer ${
@@ -463,6 +481,21 @@ export const Header: React.FC<HeaderProps> = ({
                   <span>لوحة تحكم المسؤول المعتمد</span>
                 </span>
                 <ChevronLeft className="w-4 h-4 text-amber-300" />
+              </button>
+            ) : (
+              <button
+                onClick={() => handleNav('admin-login')}
+                className={`w-full p-3 rounded-xl text-xs font-bold flex items-center justify-between transition-all text-right cursor-pointer ${
+                  activeView === 'admin-login'
+                    ? 'bg-amber-950/80 text-amber-200 border border-amber-500/50'
+                    : 'bg-white/5 hover:bg-white/10 text-slate-300'
+                }`}
+              >
+                <span className="flex items-center gap-2.5">
+                  <Lock className="w-4 h-4 text-[#d4af37]" />
+                  <span>دخول المسؤول المعتمد</span>
+                </span>
+                <ChevronLeft className="w-4 h-4 text-slate-400" />
               </button>
             )}
 
