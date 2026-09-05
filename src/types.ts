@@ -1,4 +1,6 @@
-export type UserStatus = 'pending' | 'approved' | 'rejected';
+export type UserStatus = 'pending' | 'approved' | 'rejected' | 'frozen';
+
+export type SubscriptionStatus = 'trial' | 'active' | 'frozen';
 
 export interface User {
   id: string;
@@ -9,6 +11,20 @@ export interface User {
   status: UserStatus;
   createdAt: string;
   reviewedAt?: string;
+
+  // Trial & Subscription Management
+  subscriptionStatus?: SubscriptionStatus;
+  trialDays?: number;
+  trialStartedAt?: string;
+  trialEndsAt?: string;
+  isSubscribed?: boolean;
+  subscriptionPlan?: string;
+  subscribedAt?: string;
+  isFrozen?: boolean;
+  frozenAt?: string;
+  freezeReason?: string;
+  remainingTrialDays?: number;
+  remainingTrialHours?: number;
 }
 
 export type LawCategory = string;
@@ -39,3 +55,85 @@ export interface ChatMessage {
   timestamp: string;
   sources?: string[];
 }
+
+export interface Conversation {
+  id: string;
+  userId: string;
+  title: string;
+  messages: ChatMessage[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FounderInfo {
+  name: string;
+  title: string;
+  bio: string;
+  photoUrl: string;
+  quote?: string;
+  siteOverview: string;
+}
+
+export interface Supervisor {
+  id: string;
+  name: string;
+  title: string;
+  bio: string;
+  photoUrl?: string;
+  email?: string;
+  phone?: string;
+  department?: string;
+  order?: number;
+  createdAt: string;
+}
+
+export interface RelatedSite {
+  id: string;
+  title: string;
+  description: string;
+  url: string;
+  category: string;
+  iconType?: string;
+  isOfficial?: boolean;
+  order?: number;
+  createdAt: string;
+}
+
+export interface AboutSectionCard {
+  id: string;
+  title: string;
+  content: string;
+  icon?: string;
+  order?: number;
+  isActive?: boolean;
+  createdAt?: string;
+}
+
+export interface PlatformAboutData {
+  overviewTitle?: string;
+  overviewContent: string;
+  visionTitle?: string;
+  visionContent: string;
+  missionTitle?: string;
+  missionContent: string;
+  customSections?: AboutSectionCard[];
+  updatedAt?: string;
+}
+
+export interface SystemBranding {
+  systemName: string;
+  systemSubtitle?: string;
+  systemBadge?: string;
+  logoType: 'preset' | 'url' | 'upload';
+  logoPreset: string;
+  logoUrl?: string;
+  logoAccentColor?: string;
+  founder?: FounderInfo;
+  founderName?: string;
+  founderTitle?: string;
+  founderBio?: string;
+  founderPhotoUrl?: string;
+  founderQuote?: string;
+  siteOverview?: string;
+}
+

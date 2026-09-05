@@ -29,29 +29,97 @@ import {
   Tag,
   FolderPlus,
   AlertTriangle,
-  Sparkles
+  Sparkles,
+  Calendar,
+  Crown,
+  Snowflake,
+  ShieldBan,
+  Lock,
+  Landmark,
+  Palette,
+  Image as ImageIcon,
+  RotateCcw,
+  Eye,
+  Globe,
+  Shield,
+  Target,
+  Link2
 } from 'lucide-react';
-import { User, Law, LawCategory, LegalCategory } from '../types';
+import { User, Law, LawCategory, LegalCategory, SystemBranding, PlatformAboutData } from '../types';
 import { extractTextFromPDF, formatBytes, PDFProgress } from '../utils/pdfParser';
+import { SupervisorsAdminTab } from './admin/SupervisorsAdminTab';
+import { RelatedSitesAdminTab } from './admin/RelatedSitesAdminTab';
+import { AboutPlatformAdminTab } from './admin/AboutPlatformAdminTab';
 
 interface AdminPortalProps {
   onLawsUpdated?: () => void;
+  onBrandingUpdated?: (branding: SystemBranding) => void;
+  onAboutUpdated?: (about: PlatformAboutData) => void;
 }
 
-export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated }) => {
-  const [activeTab, setActiveTab] = useState<'requests' | 'laws'>('requests');
+export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrandingUpdated, onAboutUpdated }) => {
+  const [activeTab, setActiveTab] = useState<'requests' | 'laws' | 'supervisors' | 'related-sites' | 'about' | 'settings'>('requests');
 
   // Users state
   const [users, setUsers] = useState<User[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
-  const [usersFilter, setUsersFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
+  const [usersFilter, setUsersFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'frozen'>('pending');
   const [userActionMessage, setUserActionMessage] = useState<string | null>(null);
   const [processingUserId, setProcessingUserId] = useState<string | null>(null);
+
+  // Trial & Subscription Settings & State
+  const [defaultTrialDays, setDefaultTrialDays] = useState<number>(7);
+  const [editingTrialDays, setEditingTrialDays] = useState<number>(7);
+  const [savingTrialSettings, setSavingTrialSettings] = useState(false);
+  const [trialSettingsFeedback, setTrialSettingsFeedback] = useState<string | null>(null);
+
+  // Custom User Trial Modal
+  const [trialModalUser, setTrialModalUser] = useState<User | null>(null);
+  const [extendDaysInput, setExtendDaysInput] = useState<number>(7);
+  const [updatingUserTrial, setUpdatingUserTrial] = useState(false);
 
   // Auto Approval State
   const [autoApproveEnabled, setAutoApproveEnabled] = useState(true);
   const [autoApproveLoading, setAutoApproveLoading] = useState(false);
   const [bulkApproving, setBulkApproving] = useState(false);
+
+  // System Branding & Settings state
+  const [brandingLoading, setBrandingLoading] = useState(false);
+  const [systemNameInput, setSystemNameInput] = useState('مساعد الجمارك والضرائب');
+  const [systemBadgeInput, setSystemBadgeInput] = useState('فلسطين');
+  const [systemSubtitleInput, setSystemSubtitleInput] = useState(
+    'دولة فلسطين • وزارة المالية • الإدارة العامة للجمارك وضريبة الدخل'
+  );
+  const [logoTypeInput, setLogoTypeInput] = useState<'preset' | 'url' | 'upload'>('preset');
+  const [logoPresetInput, setLogoPresetInput] = useState<string>('scale');
+  const [logoUrlInput, setLogoUrlInput] = useState<string>('');
+  const [logoAccentColorInput, setLogoAccentColorInput] = useState<string>('#d4af37');
+  const [uploadedLogoPreview, setUploadedLogoPreview] = useState<string | null>(null);
+  const [savingBranding, setSavingBranding] = useState(false);
+  const [brandingFeedback, setBrandingFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [resettingBranding, setResettingBranding] = useState(false);
+  const logoFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Founder Info & Site Overview state
+  const [founderNameInput, setFounderNameInput] = useState('أ. صلاح الدين عابد');
+  const [founderTitleInput, setFounderTitleInput] = useState(
+    'مؤسس المنظومة • خبير استشاري في التشريعات الجمركية والضريبية الفلسطينية'
+  );
+  const [founderBioInput, setFounderBioInput] = useState(
+    'مستشار وخبير قانوني متخصص في السياسات المالية، القوانين الجمركية، وضريبة الدخل والمكوس في فلسطين. عمل على جمع وأرشفة وتيسير التشريعات والقرارات بقانون الصادرة رسمياً لتكون مرجعاً ذكياً رقمياً يخدم المواطنين والتجار والمحاسبين ورجال الأعمال.'
+  );
+  const [founderPhotoUrlInput, setFounderPhotoUrlInput] = useState(
+    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80'
+  );
+  const [founderPhotoSource, setFounderPhotoSource] = useState<'upload' | 'url'>('url');
+  const [isDraggingFounderPhoto, setIsDraggingFounderPhoto] = useState(false);
+  const founderPhotoFileInputRef = useRef<HTMLInputElement>(null);
+  const [founderQuoteInput, setFounderQuoteInput] = useState(
+    '«سعينا لبناء هذا النظام ليكون دليلاً قانونياً ذكياً موثوقاً لكل مواطن وتاجر، يربط التقنية الحديثة بنصوص التشريعات الفلسطينية بدقة ونزاهة تامة.»'
+  );
+  const [siteOverviewInput, setSiteOverviewInput] = useState(
+    'المنظومة الرقمية الفلسطينية المتكاملة للاستعلام والاستشارات في القوانين الجمركية، ضريبة الدخل، ضريبة القيمة المضافة، والمكوس. توفر المنظومة محرك ذكاء اصطناعي مدعوماً بنصوص القوانين والقرارات بقانون المعتمدة رسمياً في دولة فلسطين للإجابة الفورية، واستخراج النصوص الأصلية مع أرقام المواد، واحتساب الرسوم والضرائب بالشيكل بدقة متناهية.'
+  );
 
   // Laws state
   const [laws, setLaws] = useState<Law[]>([]);
@@ -185,17 +253,71 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated }) => {
     }
   };
 
-  // Fetch Settings (Auto-approval)
+  // Fetch Settings (Auto-approval & Trial duration & Branding)
   const fetchSettings = async () => {
     try {
       const res = await fetch('/api/admin/settings');
       const data = await res.json();
-      if (res.ok && typeof data.autoApprove === 'boolean') {
-        setAutoApproveEnabled(data.autoApprove);
+      if (res.ok) {
+        if (typeof data.autoApprove === 'boolean') {
+          setAutoApproveEnabled(data.autoApprove);
+        }
+        if (typeof data.defaultTrialDays === 'number') {
+          setDefaultTrialDays(data.defaultTrialDays);
+          setEditingTrialDays(data.defaultTrialDays);
+        }
+        if (data.branding) {
+          applyBrandingState(data.branding);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch settings:', err);
     }
+  };
+
+  const fetchBranding = async () => {
+    try {
+      setBrandingLoading(true);
+      const res = await fetch('/api/system/branding');
+      if (res.ok) {
+        const data = await res.json();
+        applyBrandingState(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch branding:', err);
+    } finally {
+      setBrandingLoading(false);
+    }
+  };
+
+  const applyBrandingState = (b: SystemBranding) => {
+    if (!b) return;
+    setSystemNameInput(b.systemName || 'مساعد الجمارك والضرائب');
+    setSystemBadgeInput(b.systemBadge ?? 'فلسطين');
+    setSystemSubtitleInput(
+      b.systemSubtitle ?? 'دولة فلسطين • وزارة المالية • الإدارة العامة للجمارك وضريبة الدخل'
+    );
+    setLogoTypeInput(b.logoType || 'preset');
+    setLogoPresetInput(b.logoPreset || 'scale');
+    setLogoUrlInput(b.logoUrl || '');
+    setLogoAccentColorInput(b.logoAccentColor || '#d4af37');
+    if ((b.logoType === 'upload' || b.logoType === 'url') && b.logoUrl) {
+      setUploadedLogoPreview(b.logoUrl);
+    }
+    if (b.founderName || b.founder?.name) setFounderNameInput(b.founderName || b.founder?.name || '');
+    if (b.founderTitle || b.founder?.title) setFounderTitleInput(b.founderTitle || b.founder?.title || '');
+    if (b.founderBio || b.founder?.bio) setFounderBioInput(b.founderBio || b.founder?.bio || '');
+    if (b.founderPhotoUrl || b.founder?.photoUrl) {
+      const pUrl = b.founderPhotoUrl || b.founder?.photoUrl || '';
+      setFounderPhotoUrlInput(pUrl);
+      if (pUrl.startsWith('data:')) {
+        setFounderPhotoSource('upload');
+      } else if (pUrl.startsWith('http')) {
+        setFounderPhotoSource('url');
+      }
+    }
+    if (b.founderQuote || b.founder?.quote) setFounderQuoteInput(b.founderQuote || b.founder?.quote || '');
+    if (b.siteOverview || b.founder?.siteOverview) setSiteOverviewInput(b.siteOverview || b.founder?.siteOverview || '');
   };
 
   // Ultra-fast consolidated initial data load (Single round-trip)
@@ -224,6 +346,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated }) => {
         if (typeof data.autoApprove === 'boolean') {
           setAutoApproveEnabled(data.autoApprove);
         }
+        if (typeof data.defaultTrialDays === 'number') {
+          setDefaultTrialDays(data.defaultTrialDays);
+          setEditingTrialDays(data.defaultTrialDays);
+        }
+        if (data.branding) {
+          applyBrandingState(data.branding);
+        }
         if (data.systemStatus) {
           setSystemStatus(data.systemStatus);
         }
@@ -235,6 +364,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated }) => {
           fetchCategories(),
           fetchSystemStatus(),
           fetchSettings(),
+          fetchBranding(),
         ]);
       }
     } catch (err) {
@@ -245,11 +375,185 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated }) => {
         fetchCategories(),
         fetchSystemStatus(),
         fetchSettings(),
+        fetchBranding(),
       ]);
     } finally {
       setUsersLoading(false);
       setLawsLoading(false);
       setCategoriesLoading(false);
+    }
+  };
+
+  // Handle Logo file upload (PNG, JPG, SVG, WebP)
+  const handleLogoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setBrandingFeedback({
+        type: 'error',
+        message: 'يرجى اختيار ملف صورة صالح (PNG, JPG, SVG, WebP).',
+      });
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      setBrandingFeedback({
+        type: 'error',
+        message: 'حجم ملف الصورة يتجاوز 2 ميغابايت. يرجى اختيار ملف أصغر حجماً.',
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      setUploadedLogoPreview(result);
+      setLogoUrlInput(result);
+      setLogoTypeInput('upload');
+      setBrandingFeedback({
+        type: 'success',
+        message: 'تم اختيار صورة الشعار بنجاح للمعاينة. اضغط "حفظ إعدادات السيستم" لتطبيقها رسمياً.',
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Helper for processing founder photo file upload
+  const processFounderPhotoFile = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setBrandingFeedback({
+        type: 'error',
+        message: 'يرجى اختيار ملف صورة صالح (PNG, JPG, SVG, WebP).',
+      });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setBrandingFeedback({
+        type: 'error',
+        message: 'حجم ملف الصورة يتجاوز 5 ميغابايت. يرجى اختيار ملف أصغر حجماً.',
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      setFounderPhotoUrlInput(result);
+      setFounderPhotoSource('upload');
+      setBrandingFeedback({
+        type: 'success',
+        message: 'تم اختيار صورة المؤسس من الجهاز بنجاح. اضغط "حفظ إعدادات السيستم" لتطبيقها.',
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleFounderPhotoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processFounderPhotoFile(file);
+    }
+  };
+
+  // Save branding changes to Firestore and server
+  const handleSaveBranding = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!systemNameInput.trim()) {
+      setBrandingFeedback({
+        type: 'error',
+        message: 'يرجى إدخال اسم النظام.',
+      });
+      return;
+    }
+
+    setSavingBranding(true);
+    setBrandingFeedback(null);
+
+    const targetUrl =
+      logoTypeInput === 'url'
+        ? logoUrlInput.trim()
+        : logoTypeInput === 'upload'
+        ? uploadedLogoPreview || logoUrlInput
+        : '';
+
+    const payload = {
+      systemName: systemNameInput.trim(),
+      systemBadge: systemBadgeInput.trim(),
+      systemSubtitle: systemSubtitleInput.trim(),
+      logoType: logoTypeInput,
+      logoPreset: logoPresetInput,
+      logoUrl: targetUrl,
+      logoAccentColor: logoAccentColorInput,
+      founderName: founderNameInput.trim(),
+      founderTitle: founderTitleInput.trim(),
+      founderBio: founderBioInput.trim(),
+      founderPhotoUrl: founderPhotoUrlInput.trim(),
+      founderQuote: founderQuoteInput.trim(),
+      siteOverview: siteOverviewInput.trim(),
+    };
+
+    try {
+      const res = await fetch('/api/admin/settings/branding', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setBrandingFeedback({
+          type: 'success',
+          message: 'تم حفظ وتطبيق لوجو واسم السيستم بنجاح وحفظها سحابياً في Google Cloud Firestore.',
+        });
+        if (onBrandingUpdated) {
+          onBrandingUpdated(data.branding);
+        }
+      } else {
+        setBrandingFeedback({
+          type: 'error',
+          message: data.error || 'حدث خطأ أثناء حفظ الإعدادات.',
+        });
+      }
+    } catch {
+      setBrandingFeedback({
+        type: 'error',
+        message: 'تعذر الاتصال بالخادم لحفظ إعدادات السيستم.',
+      });
+    } finally {
+      setSavingBranding(false);
+    }
+  };
+
+  // Reset branding to factory defaults
+  const handleResetBranding = async () => {
+    setResettingBranding(true);
+    setBrandingFeedback(null);
+    try {
+      const res = await fetch('/api/admin/settings/branding/reset', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        applyBrandingState(data.branding);
+        setBrandingFeedback({
+          type: 'success',
+          message: 'تمت استعادة الاسم والشعار الافتراضي للسيستم بنجاح.',
+        });
+        if (onBrandingUpdated) {
+          onBrandingUpdated(data.branding);
+        }
+      } else {
+        setBrandingFeedback({
+          type: 'error',
+          message: data.error || 'فشلت استعادة الإعدادات.',
+        });
+      }
+    } catch {
+      setBrandingFeedback({
+        type: 'error',
+        message: 'تعذر الاتصال بالخادم لاستعادة الإعدادات.',
+      });
+    } finally {
+      setResettingBranding(false);
     }
   };
 
@@ -429,6 +733,142 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated }) => {
       console.error('Status update failed:', err);
       setUserActionMessage('❌ تعذر الاتصال بالخادم، يرجى المحاولة ثانية.');
       fetchUsers();
+    } finally {
+      setProcessingUserId(null);
+    }
+  };
+
+  // Save default trial days
+  const handleSaveDefaultTrialDays = async (daysToSave?: number) => {
+    const days = daysToSave !== undefined ? daysToSave : Number(editingTrialDays);
+    if (isNaN(days) || days < 1) {
+      setTrialSettingsFeedback('❌ يرجى إدخال عدد أيام تجريبية صالح (يوم واحد على الأقل)');
+      return;
+    }
+
+    setSavingTrialSettings(true);
+    setTrialSettingsFeedback(null);
+    try {
+      const res = await fetch('/api/admin/settings/trial', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ defaultTrialDays: days }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setDefaultTrialDays(days);
+        setEditingTrialDays(days);
+        setTrialSettingsFeedback(`✅ تم حفظ وتطبيق مدة الفترة التجريبية الافتراضية (${days} يوم) بنجاح في قاعدة البيانات السحابية.`);
+        setTimeout(() => setTrialSettingsFeedback(null), 5000);
+      } else {
+        setTrialSettingsFeedback(`❌ حدث خطأ: ${data.error || 'تعذر حفظ الإعدادات'}`);
+      }
+    } catch (err) {
+      console.error('Save trial settings error:', err);
+      setTrialSettingsFeedback('❌ تعذر الاتصال بالخادم لحفظ إعدادات الفترة التجريبية.');
+    } finally {
+      setSavingTrialSettings(false);
+    }
+  };
+
+  // Toggle user subscription status
+  const handleToggleSubscription = async (user: User) => {
+    const newSubscriptionState = !user.isSubscribed;
+    setProcessingUserId(user.id);
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}/subscription`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isSubscribed: newSubscriptionState }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setUserActionMessage(
+          newSubscriptionState
+            ? `👑 تم تفعيل الاشتراك الدائم للمستخدم "${user.fullName || user.username}" بنجاح! حسابه نشط دائماً.`
+            : `⚠️ تم إلغاء اشتراك المستخدم "${user.fullName || user.username}".`
+        );
+        if (data.users) {
+          setUsers(data.users);
+        } else {
+          fetchUsers();
+        }
+        setTimeout(() => setUserActionMessage(null), 5000);
+      } else {
+        setUserActionMessage(`❌ حدث خطأ: ${data.error || 'تعذر تعديل الاشتراك'}`);
+      }
+    } catch (err) {
+      console.error('Toggle subscription error:', err);
+      setUserActionMessage('❌ تعذر الاتصال بالخادم لتحديث الاشتراك.');
+    } finally {
+      setProcessingUserId(null);
+    }
+  };
+
+  // Extend or update user trial
+  const handleExtendTrial = async (userId: string, daysToAdd: number) => {
+    setUpdatingUserTrial(true);
+    setProcessingUserId(userId);
+    try {
+      const res = await fetch(`/api/admin/users/${userId}/trial`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ extendDays: daysToAdd }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setUserActionMessage(`⏳ تم تمديد الفترة التجريبية للمستخدم بنجاح بمقدار (${daysToAdd} يوم)!`);
+        setTrialModalUser(null);
+        if (data.users) {
+          setUsers(data.users);
+        } else {
+          fetchUsers();
+        }
+        setTimeout(() => setUserActionMessage(null), 5000);
+      } else {
+        setUserActionMessage(`❌ ${data.error || 'تعذر تمديد التجربة'}`);
+      }
+    } catch (err) {
+      console.error('Extend trial error:', err);
+      setUserActionMessage('❌ تعذر الاتصال بالخادم لتمديد الفترة التجريبية.');
+    } finally {
+      setUpdatingUserTrial(false);
+      setProcessingUserId(null);
+    }
+  };
+
+  // Toggle Freeze User
+  const handleToggleFreeze = async (user: User) => {
+    const isCurrentlyFrozen = user.status === 'frozen' || user.subscriptionStatus === 'frozen';
+    setProcessingUserId(user.id);
+    try {
+      const endpoint = isCurrentlyFrozen
+        ? `/api/admin/users/${user.id}/unfreeze`
+        : `/api/admin/users/${user.id}/freeze`;
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ grantTrialDays: defaultTrialDays }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setUserActionMessage(
+          isCurrentlyFrozen
+            ? `🔓 تم إلغاء تجميد حساب "${user.fullName || user.username}" بنجاح ومنحه فترة تجريبية إضافية (${defaultTrialDays} يوم).`
+            : `❄️ تم تجميد حساب "${user.fullName || user.username}" بنجاح ولن يتمكن من استخدام الشات لحين الاشتراك.`
+        );
+        if (data.users) {
+          setUsers(data.users);
+        } else {
+          fetchUsers();
+        }
+        setTimeout(() => setUserActionMessage(null), 5000);
+      } else {
+        setUserActionMessage(`❌ ${data.error || 'تعذر تعديل حالة التجميد'}`);
+      }
+    } catch (err) {
+      console.error('Toggle freeze error:', err);
+      setUserActionMessage('❌ تعذر الاتصال بالخادم لتعديل التجميد.');
     } finally {
       setProcessingUserId(null);
     }
@@ -687,12 +1127,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated }) => {
   // Filtered Users
   const filteredUsers = users.filter((u) => {
     if (usersFilter === 'all') return true;
+    if (usersFilter === 'frozen') return u.status === 'frozen' || u.subscriptionStatus === 'frozen';
     return u.status === usersFilter;
   });
 
   const pendingCount = users.filter((u) => u.status === 'pending').length;
   const approvedCount = users.filter((u) => u.status === 'approved').length;
   const rejectedCount = users.filter((u) => u.status === 'rejected').length;
+  const frozenCount = users.filter((u) => u.status === 'frozen' || u.subscriptionStatus === 'frozen').length;
+  const subscribedCount = users.filter((u) => u.isSubscribed).length;
 
   // Category styling helper
   const getCategoryBadgeClass = (categoryName: string) => {
@@ -772,9 +1215,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated }) => {
                 نشطة وسريعة للغاية
               </span>
             </div>
-            <div className="text-emerald-700 text-[11px] mt-0.5">
-              معرّف المشروع: <span className="font-mono">{systemStatus?.projectId || 'pos1-d562e'}</span> | معرّف قاعدة البيانات: <span className="font-mono">{systemStatus?.databaseId || 'ai-studio-6d29bd6f'}</span>
-            </div>
           </div>
         </div>
         <button
@@ -792,11 +1232,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated }) => {
       </div>
 
       {/* Main Tabs Navigation */}
-      <div className="flex border-b border-gray-200 bg-white rounded-t-xl px-4 pt-3 shadow-xs">
+      <div className="flex overflow-x-auto whitespace-nowrap border-b border-gray-200 bg-white rounded-t-xl px-2 sm:px-4 pt-3 shadow-xs scrollbar-none">
         <button
           id="admin-tab-requests"
           onClick={() => setActiveTab('requests')}
-          className={`pb-3 px-5 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${
+          className={`pb-3 px-3.5 sm:px-5 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 transition-all shrink-0 cursor-pointer ${
             activeTab === 'requests'
               ? 'border-[#12281e] text-[#12281e]'
               : 'border-transparent text-gray-500 hover:text-gray-900'
@@ -805,7 +1245,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated }) => {
           <Users className="w-4 h-4" />
           طلبات المستخدمين
           {pendingCount > 0 && (
-            <span className="bg-amber-500 text-white text-[11px] px-2 py-0.5 rounded-full font-extrabold animate-pulse">
+            <span className="bg-amber-500 text-white text-[10px] sm:text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full font-extrabold animate-pulse">
               {pendingCount} جديد
             </span>
           )}
@@ -814,17 +1254,69 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated }) => {
         <button
           id="admin-tab-laws"
           onClick={() => setActiveTab('laws')}
-          className={`pb-3 px-5 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${
+          className={`pb-3 px-3.5 sm:px-5 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 transition-all shrink-0 cursor-pointer ${
             activeTab === 'laws'
               ? 'border-[#12281e] text-[#12281e]'
               : 'border-transparent text-gray-500 hover:text-gray-900'
           }`}
         >
           <BookOpen className="w-4 h-4" />
-          إدارة القوانين وقاعدة المعرفة
-          <span className="bg-[#e2e8f0] text-gray-700 text-[11px] px-2 py-0.5 rounded-full font-bold">
+          قاعدة المعرفة والقوانين
+          <span className="bg-[#e2e8f0] text-gray-700 text-[10px] sm:text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full font-bold">
             {laws.length}
           </span>
+        </button>
+
+        <button
+          id="admin-tab-supervisors"
+          onClick={() => setActiveTab('supervisors')}
+          className={`pb-3 px-3.5 sm:px-5 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 transition-all shrink-0 cursor-pointer ${
+            activeTab === 'supervisors'
+              ? 'border-[#12281e] text-[#12281e]'
+              : 'border-transparent text-gray-500 hover:text-gray-900'
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          هيئة المشرفين
+        </button>
+
+        <button
+          id="admin-tab-related-sites"
+          onClick={() => setActiveTab('related-sites')}
+          className={`pb-3 px-3.5 sm:px-5 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 transition-all shrink-0 cursor-pointer ${
+            activeTab === 'related-sites'
+              ? 'border-[#12281e] text-[#12281e]'
+              : 'border-transparent text-gray-500 hover:text-gray-900'
+          }`}
+        >
+          <Globe className="w-4 h-4" />
+          مواقع ذات صلة
+        </button>
+
+        <button
+          id="admin-tab-about"
+          onClick={() => setActiveTab('about')}
+          className={`pb-3 px-3.5 sm:px-5 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 transition-all shrink-0 cursor-pointer ${
+            activeTab === 'about'
+              ? 'border-[#12281e] text-[#12281e]'
+              : 'border-transparent text-gray-500 hover:text-gray-900'
+          }`}
+        >
+          <Target className="w-4 h-4 text-[#d4af37]" />
+          عن المنصة (الرؤية والرسالة)
+        </button>
+
+        <button
+          id="admin-tab-settings"
+          onClick={() => setActiveTab('settings')}
+          className={`pb-3 px-3.5 sm:px-5 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 transition-all shrink-0 cursor-pointer ${
+            activeTab === 'settings'
+              ? 'border-[#12281e] text-[#12281e]'
+              : 'border-transparent text-gray-500 hover:text-gray-900'
+          }`}
+        >
+          <Settings className="w-4 h-4" />
+          إعدادات المنظومة
         </button>
       </div>
 
@@ -930,6 +1422,78 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated }) => {
             </div>
           </div>
 
+          {/* ======================================================== */}
+          {/* TRIAL PERIOD & SUBSCRIPTION CONFIGURATION BAR            */}
+          {/* ======================================================== */}
+          <div className="bg-gradient-to-r from-amber-900/10 via-amber-800/5 to-transparent p-4 rounded-xl border border-amber-200 shadow-xs flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                <Calendar className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h4 className="text-sm font-bold text-gray-900">نظام الفترة التجريبية وتجميد الحسابات غير المشتركة</h4>
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                    المدة الافتراضية المحددة: {defaultTrialDays} يوم
+                  </span>
+                </div>
+                <p className="text-xs text-gray-600 mt-0.5 max-w-2xl leading-relaxed">
+                  يتم منح أي حساب جديد تلقائياً فترة تجريبية تحددها أنت بالأيام. وإذا لم يشترك المستخدم خلال هذه المدة، يتجمد حسابه تلقائياً ويُمنع من استخدام الشات لحين الاشتراك أو فك التجميد من قبلك.
+                </p>
+                {trialSettingsFeedback && (
+                  <p className="text-xs font-bold mt-1.5 text-emerald-700">{trialSettingsFeedback}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap w-full lg:w-auto justify-start lg:justify-end">
+              <span className="text-xs font-bold text-gray-700">تعديل مدة التجربة:</span>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {[3, 7, 14, 30].map((days) => (
+                  <button
+                    key={days}
+                    onClick={() => {
+                      setEditingTrialDays(days);
+                      handleSaveDefaultTrialDays(days);
+                    }}
+                    className={`px-2.5 py-1 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                      editingTrialDays === days
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                        : 'bg-white hover:bg-amber-50 text-amber-950 border-amber-200'
+                    }`}
+                  >
+                    {days} أيام
+                  </button>
+                ))}
+
+                <div className="flex items-center gap-1 bg-white border border-gray-300 rounded-lg px-2 py-0.5">
+                  <input
+                    type="number"
+                    min="1"
+                    max="365"
+                    value={editingTrialDays}
+                    onChange={(e) => setEditingTrialDays(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-14 text-xs text-center font-bold outline-none"
+                  />
+                  <span className="text-xs text-gray-500">يوم</span>
+                </div>
+
+                <button
+                  onClick={() => handleSaveDefaultTrialDays()}
+                  disabled={savingTrialSettings}
+                  className="px-3 py-1.5 bg-[#12281e] hover:bg-[#1a3a2d] active:scale-95 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  {savingTrialSettings ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Save className="w-3.5 h-3.5" />
+                  )}
+                  حفظ المدة
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Sub-Filters and Refresh */}
           <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2 flex-wrap">
@@ -955,6 +1519,17 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated }) => {
                 }`}
               >
                 المقبولة ({approvedCount})
+              </button>
+              <button
+                id="user-filter-frozen"
+                onClick={() => setUsersFilter('frozen')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                  usersFilter === 'frozen'
+                    ? 'bg-purple-100 text-purple-900 border border-purple-300'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                المجمدة (انتهت التجربة) ({frozenCount})
               </button>
               <button
                 id="user-filter-rejected"
@@ -1000,6 +1575,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated }) => {
                 <p className="text-xs text-gray-500 mt-1">
                   {usersFilter === 'pending'
                     ? 'تم فحص وقبول جميع طلبات المستخدمين، ولا توجد حسابات معلقة حالياً.'
+                    : usersFilter === 'frozen'
+                    ? 'لا توجد حسابات مجمدة حالياً، جميع الحسابات إما ضمن فترتها التجريبية أو مشتركة.'
                     : 'لا توجد سجلات تطابق الفلتر المحدد.'}
                 </p>
                 {usersFilter !== 'all' && users.length > 0 && (
@@ -1018,14 +1595,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated }) => {
                     <tr>
                       <th className="py-3 px-4">مقدم الطلب / الحساب</th>
                       <th className="py-3 px-4">رقم الجوال</th>
-                      <th className="py-3 px-4">تاريخ الطلب</th>
-                      <th className="py-3 px-4">الحالة الحالية</th>
-                      <th className="py-3 px-4 text-center">الإجراءات والقرار</th>
+                      <th className="py-3 px-4">تاريخ التسجيل</th>
+                      <th className="py-3 px-4">حالة الحساب</th>
+                      <th className="py-3 px-4">حالة الاشتراك والتجربة</th>
+                      <th className="py-3 px-4 text-center">إدارة الاشتراك والإجراءات</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {filteredUsers.map((user) => {
                       const isProcessing = processingUserId === user.id;
+                      const isUserFrozen = user.status === 'frozen' || user.subscriptionStatus === 'frozen';
                       return (
                         <tr key={user.id} className="hover:bg-gray-50/80 transition-colors">
                           <td className="py-3.5 px-4 font-bold text-gray-900">
@@ -1069,64 +1648,140 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated }) => {
                             {user.status === 'approved' && (
                               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                                 <CheckCircle2 className="w-3 h-3" />
-                                مقبول (مصرّح للشات)
+                                معتمد
                               </span>
                             )}
                             {user.status === 'rejected' && (
                               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-red-100 text-red-800 border border-red-200">
                                 <XCircle className="w-3 h-3" />
-                                مرفوض (ممنوع)
+                                مرفوض
+                              </span>
+                            )}
+                            {user.status === 'frozen' && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-100 text-purple-900 border border-purple-300">
+                                <Snowflake className="w-3 h-3 text-purple-600" />
+                                مجمد
                               </span>
                             )}
                           </td>
                           <td className="py-3.5 px-4">
-                            <div className="flex items-center justify-center gap-2">
-                              {/* Accept Button */}
+                            {user.isSubscribed ? (
+                              <div>
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
+                                  <Crown className="w-3 h-3 text-amber-500" />
+                                  مشترك دائم ✓
+                                </span>
+                                {user.subscribedAt && (
+                                  <div className="text-[10px] text-gray-500 mt-0.5">
+                                    مشترك منذ {new Date(user.subscribedAt).toLocaleDateString('ar-EG')}
+                                  </div>
+                                )}
+                              </div>
+                            ) : isUserFrozen ? (
+                              <div>
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-red-100 text-red-900 border border-red-300">
+                                  <Snowflake className="w-3 h-3 text-blue-600" />
+                                  مجمد (انتهت التجربة)
+                                </span>
+                                <div className="text-[10px] text-red-600 mt-0.5 font-medium">
+                                  يتطلب الاشتراك لفك التجميد
+                                </div>
+                              </div>
+                            ) : (
+                              <div>
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                  <Clock className="w-3 h-3 text-amber-700" />
+                                  فترة تجريبية ({user.remainingTrialDays ?? user.trialDays ?? defaultTrialDays} يوم)
+                                </span>
+                                {user.trialEndsAt && (
+                                  <div className="text-[10px] text-gray-500 mt-0.5">
+                                    تنتهي: {new Date(user.trialEndsAt).toLocaleDateString('ar-EG')}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                              {/* If pending: Show approve/reject */}
+                              {user.status === 'pending' && (
+                                <>
+                                  <button
+                                    id={`admin-approve-user-${user.id}`}
+                                    onClick={() => handleUpdateStatus(user.id, 'approved')}
+                                    disabled={isProcessing}
+                                    className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1 transition-all shadow-xs cursor-pointer"
+                                    title="قبول الحساب"
+                                  >
+                                    {isProcessing ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+                                    قبول
+                                  </button>
+                                  <button
+                                    id={`admin-reject-user-${user.id}`}
+                                    onClick={() => handleUpdateStatus(user.id, 'rejected')}
+                                    disabled={isProcessing}
+                                    className="px-2.5 py-1 rounded-lg text-xs font-bold bg-red-600 hover:bg-red-700 text-white flex items-center gap-1 transition-all shadow-xs cursor-pointer"
+                                    title="رفض الحساب"
+                                  >
+                                    <XCircle className="w-3 h-3" />
+                                    رفض
+                                  </button>
+                                </>
+                              )}
+
+                              {/* Toggle Subscription Button */}
                               <button
-                                id={`admin-approve-user-${user.id}`}
-                                onClick={() => handleUpdateStatus(user.id, 'approved')}
-                                disabled={isProcessing || user.status === 'approved'}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs ${
-                                  user.status === 'approved'
-                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default opacity-85'
-                                    : 'bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white cursor-pointer hover:shadow-md'
+                                id={`admin-sub-toggle-${user.id}`}
+                                onClick={() => handleToggleSubscription(user)}
+                                disabled={isProcessing}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-all shadow-xs cursor-pointer ${
+                                  user.isSubscribed
+                                    ? 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300'
+                                    : 'bg-emerald-700 hover:bg-emerald-800 text-white'
                                 }`}
-                                title={
-                                  user.status === 'approved'
-                                    ? 'الحساب مقبول ومصرّح حالياً'
-                                    : 'قبول الحساب وتصريحه لاستخدام الشات'
-                                }
+                                title={user.isSubscribed ? 'إلغاء الاشتراك الدائم' : 'تفعيل الاشتراك الدائم للمستخدم'}
                               >
                                 {isProcessing ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  <Loader2 className="w-3 h-3 animate-spin" />
                                 ) : (
-                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  <Crown className="w-3 h-3 text-amber-300" />
                                 )}
-                                {user.status === 'approved' ? 'مقبول ✓' : 'قبول'}
+                                {user.isSubscribed ? 'إلغاء الاشتراك' : 'تفعيل اشتراك'}
                               </button>
 
-                              {/* Reject Button */}
+                              {/* Extend Trial Button */}
                               <button
-                                id={`admin-reject-user-${user.id}`}
-                                onClick={() => handleUpdateStatus(user.id, 'rejected')}
-                                disabled={isProcessing || user.status === 'rejected'}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs ${
-                                  user.status === 'rejected'
-                                    ? 'bg-red-50 text-red-700 border border-red-200 cursor-default opacity-85'
-                                    : 'bg-red-600 hover:bg-red-700 active:scale-95 text-white cursor-pointer hover:shadow-md'
-                                }`}
-                                title={
-                                  user.status === 'rejected'
-                                    ? 'الحساب مرفوض حالياً'
-                                    : 'رفض الحساب ومنعه من استخدام الشات'
-                                }
+                                id={`admin-extend-trial-${user.id}`}
+                                onClick={() => {
+                                  setTrialModalUser(user);
+                                  setExtendDaysInput(7);
+                                }}
+                                disabled={isProcessing}
+                                className="px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 flex items-center gap-1 transition-all cursor-pointer"
+                                title="تمديد أو تغيير أيام الفترة التجريبية"
                               >
-                                {isProcessing ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                <Calendar className="w-3 h-3 text-blue-600" />
+                                تمديد التجربة
+                              </button>
+
+                              {/* Freeze / Unfreeze Toggle Button */}
+                              <button
+                                id={`admin-freeze-toggle-${user.id}`}
+                                onClick={() => handleToggleFreeze(user)}
+                                disabled={isProcessing}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                                  isUserFrozen
+                                    ? 'bg-purple-700 hover:bg-purple-800 text-white'
+                                    : 'bg-gray-50 hover:bg-purple-50 text-purple-800 border border-purple-200'
+                                }`}
+                                title={isUserFrozen ? 'فك تجميد الحساب ومنحه فترة إضافية' : 'تجميد الحساب ومنعه من الشات'}
+                              >
+                                {isUserFrozen ? (
+                                  <CheckCircle2 className="w-3 h-3 text-purple-200" />
                                 ) : (
-                                  <XCircle className="w-3.5 h-3.5" />
+                                  <Snowflake className="w-3 h-3 text-purple-500" />
                                 )}
-                                {user.status === 'rejected' ? 'مرفوض ✗' : 'رفض'}
+                                {isUserFrozen ? 'فك التجميد' : 'تجميد'}
                               </button>
                             </div>
                           </td>
@@ -1720,6 +2375,795 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated }) => {
         </div>
       )}
 
+      {/* ======================================================== */}
+      {/* TAB 3: SYSTEM SETTINGS (إعدادات السيستم)                  */}
+      {/* ======================================================== */}
+      {activeTab === 'settings' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Header Banner & Quick Actions */}
+          <div className="bg-gradient-to-l from-[#193225] via-[#12281e] to-[#0a1813] text-white p-5 sm:p-6 rounded-2xl shadow-sm border border-[#235748] flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center text-amber-400 shrink-0 shadow-inner">
+                <Settings className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-base sm:text-lg font-bold">إعدادات السيستم وتخصيص الهوية</h3>
+                  <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    تزامن سحابي Firestore ✓
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                  تغيير اسم السيستم، وتخصيص اللوجو الرسمي وشعارات الوزارة المعروضة في الترويسة وبوابة الشات لجميع المستخدمين.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-stretch md:self-auto justify-end">
+              <button
+                type="button"
+                id="reset-branding-defaults-btn"
+                onClick={handleResetBranding}
+                disabled={resettingBranding || savingBranding}
+                className="px-3.5 py-2 rounded-xl text-xs font-bold text-gray-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                title="استعادة الاسم والشعار الافتراضي"
+              >
+                <RotateCcw className={`w-3.5 h-3.5 ${resettingBranding ? 'animate-spin' : ''}`} />
+                <span>استعادة الافتراضي</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Feedback banner if any */}
+          {brandingFeedback && (
+            <div
+              className={`p-4 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-between shadow-xs border animate-in fade-in duration-150 ${
+                brandingFeedback.type === 'success'
+                  ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
+                  : 'bg-red-50 text-red-900 border-red-300'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                {brandingFeedback.type === 'success' ? (
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertTriangle className="w-5 h-5 text-red-600 shrink-0" />
+                )}
+                <span>{brandingFeedback.message}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBrandingFeedback(null)}
+                className="text-gray-400 hover:text-gray-700 text-xs px-2 py-1 rounded"
+              >
+                إغلاق
+              </button>
+            </div>
+          )}
+
+          {/* Grid Layout: Settings Controls on Left/Right, Live Preview on Top or Side */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            {/* Form Section (8 cols) */}
+            <div className="lg:col-span-8 space-y-6">
+
+              {/* Card 1: System Name and Identity */}
+              <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-xs space-y-5">
+                <div className="flex items-center gap-2.5 pb-3 border-b border-gray-100">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-50 text-[#12281e] flex items-center justify-center font-bold text-xs">
+                    1
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-900">اسم وهوية السيستم</h4>
+                    <p className="text-[11px] text-gray-500">
+                      يظهر الاسم في أعلى الموقع والتبويب والرسائل الترحيبية
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {/* System Main Name */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                      اسم السيستم الرئيسي <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      id="input-system-name"
+                      value={systemNameInput}
+                      onChange={(e) => setSystemNameInput(e.target.value)}
+                      placeholder="مثال: مساعد الجمارك والضرائب"
+                      className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e] transition-all"
+                      required
+                    />
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      اسم المنظومة الظاهر في عنوان الصفحة (Header) وفي المحادثة الذكية لكافة المستخدمين.
+                    </p>
+                  </div>
+
+                  {/* System Badge & Subtitle */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                        الشارة الفرعية (Badge)
+                      </label>
+                      <input
+                        type="text"
+                        id="input-system-badge"
+                        value={systemBadgeInput}
+                        onChange={(e) => setSystemBadgeInput(e.target.value)}
+                        placeholder="مثال: فلسطين"
+                        className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e] transition-all"
+                      />
+                      <p className="text-[11px] text-gray-400 mt-1">
+                        وسم نصي صغير مميز بجانب اسم السيستم (مثل: فلسطين، الإدارة العامة).
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                        الجهة أو الوزارة (التوصيف الفرعي)
+                      </label>
+                      <input
+                        type="text"
+                        id="input-system-subtitle"
+                        value={systemSubtitleInput}
+                        onChange={(e) => setSystemSubtitleInput(e.target.value)}
+                        placeholder="مثال: دولة فلسطين • وزارة المالية"
+                        className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e] transition-all"
+                      />
+                      <p className="text-[11px] text-gray-400 mt-1">
+                        يظهر بخط أصغر تحت اسم المنظومة في الشريط العلوي.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 2: System Logo Customization */}
+              <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-xs space-y-5">
+                <div className="flex items-center gap-2.5 pb-3 border-b border-gray-100">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-50 text-[#12281e] flex items-center justify-center font-bold text-xs">
+                    2
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-900">شعار ولوجو السيستم</h4>
+                    <p className="text-[11px] text-gray-500">
+                      يمكنك اختيار أيقونة رسمية معتمدة أو رفع صورة الشعار الخاصة بوزارتك أو مؤسستك
+                    </p>
+                  </div>
+                </div>
+
+                {/* Logo Type Tabs */}
+                <div className="flex items-center gap-2 p-1.5 bg-gray-100 rounded-xl border border-gray-200 w-fit flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setLogoTypeInput('preset')}
+                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      logoTypeInput === 'preset'
+                        ? 'bg-white text-[#12281e] shadow-xs'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    <Scale className="w-3.5 h-3.5 text-amber-600" />
+                    <span>أيقونة رسمية معتمدة</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setLogoTypeInput('upload')}
+                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      logoTypeInput === 'upload'
+                        ? 'bg-white text-[#12281e] shadow-xs'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    <FileUp className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>رفع صورة من الجهاز</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setLogoTypeInput('url')}
+                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      logoTypeInput === 'url'
+                        ? 'bg-white text-[#12281e] shadow-xs'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    <Globe className="w-3.5 h-3.5 text-blue-600" />
+                    <span>رابط صورة مباشر (URL)</span>
+                  </button>
+                </div>
+
+                {/* MODE 1: Preset Icons */}
+                {logoTypeInput === 'preset' && (
+                  <div className="space-y-4 pt-1">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-800 mb-2">
+                        اختر أيقونة الشعار الرسمية:
+                      </label>
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                        {[
+                          { id: 'scale', name: 'ميزان العدالة والقانون', icon: Scale },
+                          { id: 'shield', name: 'درع الأمان والرقابة', icon: Shield },
+                          { id: 'landmark', name: 'صرح حكومي / وزارة', icon: Landmark },
+                          { id: 'scroll', name: 'وثيقة وتشريع', icon: FileText },
+                          { id: 'book', name: 'كتاب التشريعات', icon: BookOpen },
+                        ].map((item) => {
+                          const IconComp = item.icon;
+                          const isSelected = logoPresetInput === item.id;
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => setLogoPresetInput(item.id)}
+                              className={`p-3 rounded-xl border flex flex-col items-center text-center gap-2 transition-all cursor-pointer ${
+                                isSelected
+                                  ? 'border-[#12281e] bg-[#12281e]/5 ring-2 ring-[#12281e]/20 text-[#12281e]'
+                                  : 'border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-700'
+                              }`}
+                            >
+                              <div
+                                className="w-9 h-9 rounded-lg flex items-center justify-center shadow-xs"
+                                style={{
+                                  backgroundColor: isSelected ? '#12281e' : '#ffffff',
+                                  color: isSelected ? logoAccentColorInput : '#475569',
+                                }}
+                              >
+                                <IconComp className="w-5 h-5" />
+                              </div>
+                              <span className="text-[11px] font-bold leading-tight">{item.name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Color Accent Picker */}
+                    <div>
+                      <label className="block text-xs font-bold text-gray-800 mb-2">
+                        لون تمييز الأيقونة (Accent Color):
+                      </label>
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        {[
+                          { color: '#d4af37', label: 'ذهبي كلاسيكي' },
+                          { color: '#10b981', label: 'أخضر زمردي' },
+                          { color: '#3b82f6', label: 'أزرق ملكي' },
+                          { color: '#8b5cf6', label: 'بنفسجي ملكي' },
+                          { color: '#f59e0b', label: 'كهرماني' },
+                          { color: '#ef4444', label: 'أحمر قرمزي' },
+                          { color: '#ffffff', label: 'أبيض ناصع' },
+                        ].map((c) => (
+                          <button
+                            key={c.color}
+                            type="button"
+                            onClick={() => setLogoAccentColorInput(c.color)}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
+                              logoAccentColorInput === c.color
+                                ? 'border-gray-900 ring-2 ring-gray-900/30 shadow-xs'
+                                : 'border-gray-200 hover:border-gray-300'
+                            }`}
+                          >
+                            <span
+                              className="w-4 h-4 rounded-full border border-black/20 shrink-0"
+                              style={{ backgroundColor: c.color }}
+                            />
+                            <span>{c.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* MODE 2: Upload Image */}
+                {logoTypeInput === 'upload' && (
+                  <div className="space-y-4 pt-1">
+                    <input
+                      type="file"
+                      ref={logoFileInputRef}
+                      onChange={handleLogoFileUpload}
+                      accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                      className="hidden"
+                    />
+
+                    <div
+                      onClick={() => logoFileInputRef.current?.click()}
+                      className="border-2 border-dashed border-gray-300 hover:border-[#12281e] bg-gray-50/70 hover:bg-emerald-50/40 rounded-2xl p-6 text-center cursor-pointer transition-all"
+                    >
+                      {uploadedLogoPreview || logoUrlInput ? (
+                        <div className="space-y-3">
+                          <div className="w-20 h-20 mx-auto rounded-2xl bg-[#0b1f1a] border border-[#235748] p-2 flex items-center justify-center shadow-md">
+                            <img
+                              src={uploadedLogoPreview || logoUrlInput}
+                              alt="Logo Preview"
+                              className="max-h-full max-w-full object-contain"
+                            />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-gray-800">
+                              تم اختيار الصورة بنجاح
+                            </p>
+                            <p className="text-[11px] text-gray-500 mt-0.5">
+                              انقر هنا لتغيير الصورة أو اختيار ملف آخر من جهازك
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center mx-auto mb-2">
+                            <UploadCloud className="w-6 h-6" />
+                          </div>
+                          <p className="text-xs font-bold text-gray-800">
+                            انقر لاختيار ملف صورة الشعار من جهازك
+                          </p>
+                          <p className="text-[11px] text-gray-500">
+                            يدعم PNG (خلفية شفافة مفضلة)، JPG، SVG، WebP (الحد الأقصى: 2 ميغابايت)
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* MODE 3: Image URL */}
+                {logoTypeInput === 'url' && (
+                  <div className="space-y-3 pt-1">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                        رابط صورة الشعار المباشر (URL):
+                      </label>
+                      <input
+                        type="url"
+                        id="input-logo-url"
+                        value={logoUrlInput}
+                        onChange={(e) => setLogoUrlInput(e.target.value)}
+                        placeholder="https://example.com/logo.png"
+                        className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e] font-mono text-left transition-all"
+                        dir="ltr"
+                      />
+                      <p className="text-[11px] text-gray-400 mt-1">
+                        أدخل رابطاً مباشراً لصورة الشعار الرسمية المنشورة على الإنترنت.
+                      </p>
+                    </div>
+
+                    {logoUrlInput && (
+                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-200">
+                        <div className="w-12 h-12 rounded-xl bg-[#0b1f1a] border border-[#235748] p-1 flex items-center justify-center shrink-0">
+                          <img
+                            src={logoUrlInput}
+                            alt="Logo URL Preview"
+                            className="max-h-full max-w-full object-contain"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none';
+                            }}
+                          />
+                        </div>
+                        <div className="text-xs text-gray-600 min-w-0">
+                          <span className="font-bold text-gray-800 block">معاينة الرابط:</span>
+                          <span className="text-[11px] font-mono text-gray-500 break-all">{logoUrlInput}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Card 3: Founder Profile & Site Overview Customization */}
+              <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-xs space-y-5">
+                <div className="flex items-center gap-2.5 pb-3 border-b border-gray-100">
+                  <div className="w-8 h-8 rounded-lg bg-[#d4af37]/20 text-[#91751d] flex items-center justify-center font-bold text-xs">
+                    3
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-900">بيانات المؤسس ونبذة عن الموقع</h4>
+                    <p className="text-[11px] text-gray-500">
+                      تظهر هذه البيانات مباشرة في الواجهة الرئيسية للموقع لجميع الزوار قبل تسجيل الدخول
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                    اسم المؤسس:
+                  </label>
+                  <input
+                    type="text"
+                    value={founderNameInput}
+                    onChange={(e) => setFounderNameInput(e.target.value)}
+                    placeholder="مثال: أ. صلاح الدين عابد"
+                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]/20 focus:border-[#12281e] transition-all"
+                  />
+                </div>
+
+                {/* Founder Photo: Both Upload from device AND Enter URL available */}
+                <div className="space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-800">
+                        صورة المؤسس:
+                      </label>
+                      <p className="text-[11px] text-gray-500">
+                        يمكنك رفع صورة مباشرة من جهازك أو وضع رابط خارجي
+                      </p>
+                    </div>
+
+                    {/* Modern Switcher: Upload vs URL */}
+                    <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl border border-gray-200 self-start sm:self-auto">
+                      <button
+                        type="button"
+                        onClick={() => setFounderPhotoSource('upload')}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                          founderPhotoSource === 'upload'
+                            ? 'bg-[#12281e] text-white shadow-xs'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        <UploadCloud className="w-3.5 h-3.5" />
+                        <span>رفع من الجهاز</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFounderPhotoSource('url')}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                          founderPhotoSource === 'url'
+                            ? 'bg-[#12281e] text-white shadow-xs'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        <Link2 className="w-3.5 h-3.5" />
+                        <span>رابط صورة (URL)</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* OPTION 1: Upload directly from Device */}
+                  {founderPhotoSource === 'upload' && (
+                    <div className="space-y-3">
+                      <input
+                        type="file"
+                        ref={founderPhotoFileInputRef}
+                        onChange={handleFounderPhotoFileUpload}
+                        accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                        className="hidden"
+                      />
+
+                      <div
+                        onClick={() => founderPhotoFileInputRef.current?.click()}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          setIsDraggingFounderPhoto(true);
+                        }}
+                        onDragLeave={() => setIsDraggingFounderPhoto(false)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setIsDraggingFounderPhoto(false);
+                          const file = e.dataTransfer.files?.[0];
+                          if (file) processFounderPhotoFile(file);
+                        }}
+                        className={`border-2 border-dashed rounded-2xl p-5 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-2.5 ${
+                          isDraggingFounderPhoto
+                            ? 'border-emerald-600 bg-emerald-50/80 scale-[0.99]'
+                            : 'border-gray-300 hover:border-[#12281e] bg-gray-50/70 hover:bg-emerald-50/30'
+                        }`}
+                      >
+                        {founderPhotoUrlInput ? (
+                          <div className="flex items-center gap-4 w-full justify-center flex-wrap sm:flex-nowrap">
+                            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden bg-gray-900 border-2 border-[#d4af37] shadow-md shrink-0">
+                              <img
+                                src={founderPhotoUrlInput}
+                                alt="Founder Preview"
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLElement).style.display = 'none';
+                                }}
+                              />
+                            </div>
+                            <div className="text-right flex-1 min-w-[180px]">
+                              <div className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md mb-1">
+                                <Check className="w-3 h-3 text-emerald-700" />
+                                <span>تم تحديد الصورة بنجاح</span>
+                              </div>
+                              <p className="text-xs font-bold text-gray-800">
+                                {founderPhotoUrlInput.startsWith('data:') ? 'صورة مرفوعة من الجهاز' : 'صورة محددة للمؤسس'}
+                              </p>
+                              <p className="text-[11px] text-gray-500 mt-0.5">
+                                انقر هنا أو اسحب صورة جديدة لتغييرها في أي وقت (PNG, JPG, WebP)
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="w-12 h-12 rounded-2xl bg-emerald-100/80 border border-emerald-200 text-emerald-800 flex items-center justify-center shadow-xs">
+                              <UploadCloud className="w-6 h-6 text-emerald-700" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-gray-800">
+                                اضغط هنا لرفع صورة المؤسس من جهازك أو اسحب الملف وأفلته هنا
+                              </p>
+                              <p className="text-[11px] text-gray-500 mt-0.5">
+                                يدعم ملفات PNG و JPG و WebP و SVG (حتى 5 ميغابايت)
+                              </p>
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      {founderPhotoUrlInput && (
+                        <div className="flex items-center justify-between text-xs px-1">
+                          <button
+                            type="button"
+                            onClick={() => founderPhotoFileInputRef.current?.click()}
+                            className="text-emerald-800 hover:text-emerald-950 font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            <UploadCloud className="w-3.5 h-3.5" />
+                            <span>اختيار صورة أخرى من الجهاز</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setFounderPhotoUrlInput('')}
+                            className="text-red-600 hover:text-red-700 font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>إزالة الصورة</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* OPTION 2: Enter direct URL */}
+                  {founderPhotoSource === 'url' && (
+                    <div className="space-y-2.5">
+                      <div className="flex items-center gap-3">
+                        <div className="relative flex-1">
+                          <input
+                            type="url"
+                            value={founderPhotoUrlInput}
+                            onChange={(e) => setFounderPhotoUrlInput(e.target.value)}
+                            placeholder="https://... (رابط صورة المؤسس المباشر)"
+                            className="w-full pl-3.5 pr-9 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]/20 focus:border-[#12281e] transition-all font-mono"
+                            dir="ltr"
+                          />
+                          <Link2 className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2" />
+                        </div>
+
+                        {founderPhotoUrlInput && (
+                          <div className="w-11 h-11 rounded-xl overflow-hidden bg-gray-900 border-2 border-[#d4af37] shrink-0 shadow-xs">
+                            <img
+                              src={founderPhotoUrlInput}
+                              alt="Founder preview"
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = 'none';
+                              }}
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px] text-gray-500">
+                        <span>ضع رابطاً مباشراً للصورة من أي موقع أو استضافة خارجية (URL).</span>
+                        {founderPhotoUrlInput && (
+                          <button
+                            type="button"
+                            onClick={() => setFounderPhotoUrlInput('')}
+                            className="text-red-600 hover:text-red-700 font-bold cursor-pointer"
+                          >
+                            مسح الرابط
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                    كلمة / اقتباس المؤسس:
+                  </label>
+                  <input
+                    type="text"
+                    value={founderQuoteInput}
+                    onChange={(e) => setFounderQuoteInput(e.target.value)}
+                    placeholder="مثال: «سعينا لبناء هذا النظام ليكون دليلاً قانونياً ذكياً موثوقاً...»"
+                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]/20 focus:border-[#12281e] transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                    نبذة تعريفية عن المؤسس وخبراته:
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={founderBioInput}
+                    onChange={(e) => setFounderBioInput(e.target.value)}
+                    placeholder="اكتب نبذة عن مسيرة وخبرات المؤسس في القوانين الجمركية والضريبية..."
+                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]/20 focus:border-[#12281e] transition-all leading-relaxed"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                    نبذة شاملة عن الموقع والمنظومة (التي تظهر في الصفحة الرئيسية):
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={siteOverviewInput}
+                    onChange={(e) => setSiteOverviewInput(e.target.value)}
+                    placeholder="اكتب نبذة توضيحية عن المنظومة، الخدمات التي تقدمها، التشريعات التي تستند إليها، وميزاتها للمكلفين..."
+                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]/20 focus:border-[#12281e] transition-all leading-relaxed"
+                  />
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleResetBranding}
+                  disabled={resettingBranding || savingBranding}
+                  className="px-4 py-2.5 text-xs font-bold text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-xl transition-all cursor-pointer disabled:opacity-50"
+                >
+                  إلغاء التغييرات
+                </button>
+
+                <button
+                  type="button"
+                  id="save-branding-settings-btn"
+                  onClick={handleSaveBranding}
+                  disabled={savingBranding || !systemNameInput.trim()}
+                  className="px-6 py-2.5 text-xs sm:text-sm font-bold bg-[#12281e] hover:bg-[#1a3a2d] text-white rounded-xl shadow-md hover:shadow-lg flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {savingBranding ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                      <span>جاري الحفظ والتطبيق سحابياً...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 text-emerald-400" />
+                      <span>حفظ وتطبيق إعدادات السيستم سحابياً</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+            </div>
+
+            {/* Live Preview Section (4 cols) */}
+            <div className="lg:col-span-4 space-y-6">
+
+              {/* Interactive Live Header Preview Card */}
+              <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-xs sticky top-20 space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+                  <div className="flex items-center gap-2">
+                    <Eye className="w-4 h-4 text-[#12281e]" />
+                    <h4 className="text-xs font-bold text-gray-900">معاينة حية ومباشرة</h4>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                    مباشر (Live)
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  <p className="text-[11px] text-gray-500 leading-relaxed">
+                    هكذا سيظهر الشعار واسم النظام في الشريط العلوي (Header) لجميع زوار ومستخدمي النظام:
+                  </p>
+
+                  {/* Header Simulated Widget */}
+                  <div className="bg-[#0b1f1a] text-white p-4 rounded-xl border border-[#183d33] shadow-inner space-y-3">
+                    <div className="flex items-center gap-3">
+                      {/* Logo Icon / Image */}
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#163a30] to-[#0d2620] border border-[#235748] flex items-center justify-center shadow-inner overflow-hidden shrink-0">
+                        {((logoTypeInput === 'url' || logoTypeInput === 'upload') && (uploadedLogoPreview || logoUrlInput)) ? (
+                          <img
+                            src={uploadedLogoPreview || logoUrlInput}
+                            alt="Preview"
+                            className="w-full h-full object-contain p-1"
+                          />
+                        ) : logoPresetInput === 'shield' ? (
+                          <Shield className="w-5 h-5" style={{ color: logoAccentColorInput }} />
+                        ) : logoPresetInput === 'landmark' ? (
+                          <Landmark className="w-5 h-5" style={{ color: logoAccentColorInput }} />
+                        ) : logoPresetInput === 'scroll' ? (
+                          <FileText className="w-5 h-5" style={{ color: logoAccentColorInput }} />
+                        ) : logoPresetInput === 'book' ? (
+                          <BookOpen className="w-5 h-5" style={{ color: logoAccentColorInput }} />
+                        ) : (
+                          <Scale className="w-5 h-5" style={{ color: logoAccentColorInput }} />
+                        )}
+                      </div>
+
+                      {/* Name & Badge */}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-sm font-bold text-white tracking-tight truncate">
+                            {systemNameInput.trim() || 'اسم السيستم'}
+                          </span>
+                          {systemBadgeInput.trim() && (
+                            <span className="text-[9px] font-semibold bg-emerald-500/15 text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-500/25">
+                              {systemBadgeInput.trim()}
+                            </span>
+                          )}
+                        </div>
+                        {systemSubtitleInput.trim() && (
+                          <p className="text-[10px] text-slate-300/80 font-light truncate mt-0.5">
+                            {systemSubtitleInput.trim()}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bot Message Simulated Widget */}
+                  <div className="space-y-1 pt-2">
+                    <span className="text-[10px] font-bold text-gray-500">معاينة داخل رسائل الشات:</span>
+                    <div className="bg-gray-50 p-3 rounded-xl border border-gray-200 text-xs text-gray-700 flex items-start gap-2.5">
+                      <div className="w-7 h-7 rounded-lg bg-[#12281e] flex items-center justify-center shrink-0 text-white overflow-hidden">
+                        {((logoTypeInput === 'url' || logoTypeInput === 'upload') && (uploadedLogoPreview || logoUrlInput)) ? (
+                          <img
+                            src={uploadedLogoPreview || logoUrlInput}
+                            alt="Bot Avatar"
+                            className="w-full h-full object-contain p-0.5"
+                          />
+                        ) : (
+                          <Scale className="w-3.5 h-3.5" style={{ color: logoAccentColorInput }} />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[10px] font-bold text-[#1b5e3a] mb-1">
+                          {systemNameInput.trim() || 'اسم السيستم'} • إفادة نظامية
+                        </div>
+                        <p className="text-[11px] text-gray-600 leading-relaxed">
+                          مرحباً بك، يتم تطبيق هذا الاسم والشعار رسمياً لكافة المستفيدين.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Cloud Firestore Info */}
+                  <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl text-[11px] text-emerald-900 space-y-1">
+                    <div className="font-bold flex items-center gap-1.5">
+                      <Database className="w-3.5 h-3.5 text-emerald-700" />
+                      <span>حفظ دائم في Cloud Firestore</span>
+                    </div>
+                    <p className="text-gray-600 leading-relaxed">
+                      يتم حفظ الإعدادات في مجموعة <code className="bg-white px-1 py-0.5 rounded border border-emerald-200 font-mono text-[10px]">system_settings</code> مما يجعل التغيير مستمراً حتى بعد إعادة تحميل الصفحة أو تسجيل الدخول من جهاز آخر.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* TAB 4: SUPERVISORS MANAGEMENT (هيئة المشرفين)            */}
+      {/* ======================================================== */}
+      {activeTab === 'supervisors' && (
+        <SupervisorsAdminTab />
+      )}
+
+      {/* ======================================================== */}
+      {/* TAB 5: RELATED SITES MANAGEMENT (مواقع ذات صلة)          */}
+      {/* ======================================================== */}
+      {activeTab === 'related-sites' && (
+        <RelatedSitesAdminTab />
+      )}
+
+      {/* ======================================================== */}
+      {/* TAB 6: PLATFORM ABOUT & VISION (عن المنصة والرؤية والرسالة) */}
+      {/* ======================================================== */}
+      {activeTab === 'about' && (
+        <AboutPlatformAdminTab onAboutUpdated={onAboutUpdated} />
+      )}
+
       {/* Dynamic Category Management Modal (إدارة التصنيفات القانونية) */}
       {showCategoryModal && (
         <div
@@ -2072,6 +3516,131 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated }) => {
                   <>
                     <Trash2 className="w-4 h-4" />
                     <span>نعم، احذف القانون نهائياً</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* EXTEND / CUSTOMIZE TRIAL MODAL DIALOG                     */}
+      {/* ======================================================== */}
+      {trialModalUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-l from-[#193225] to-[#12281e] text-white px-5 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-400/30 flex items-center justify-center text-amber-300">
+                  <Calendar className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold">تمديد الفترة التجريبية للمستخدم</h3>
+                  <p className="text-[11px] text-[#93dfb3] font-mono">@{trialModalUser.username}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setTrialModalUser(null)}
+                className="text-gray-300 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-4 text-xs">
+              <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 space-y-1.5">
+                <div className="flex justify-between text-gray-700">
+                  <span className="text-gray-500">اسم المستخدم:</span>
+                  <span className="font-bold text-gray-900">{trialModalUser.fullName || trialModalUser.username}</span>
+                </div>
+                <div className="flex justify-between text-gray-700">
+                  <span className="text-gray-500">حالة الحساب الحالية:</span>
+                  <span className="font-bold text-amber-700">
+                    {trialModalUser.isSubscribed
+                      ? 'مشترك دائم'
+                      : trialModalUser.status === 'frozen'
+                      ? 'مجمد (انتهت التجربة)'
+                      : `تجريبي (متبقي ${trialModalUser.remainingTrialDays ?? trialModalUser.trialDays ?? defaultTrialDays} يوم)`}
+                  </span>
+                </div>
+                {trialModalUser.trialEndsAt && (
+                  <div className="flex justify-between text-gray-700">
+                    <span className="text-gray-500">تاريخ انتهاء التجربة:</span>
+                    <span className="font-mono text-[11px] font-bold">
+                      {new Date(trialModalUser.trialEndsAt).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' })}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-800 mb-2">
+                  اختر عدد الأيام الإضافية المراد تمديدها للحساب:
+                </label>
+                <div className="grid grid-cols-4 gap-2 mb-3">
+                  {[3, 7, 14, 30].map((days) => (
+                    <button
+                      key={days}
+                      type="button"
+                      onClick={() => setExtendDaysInput(days)}
+                      className={`py-2 px-1 text-xs font-bold rounded-xl border text-center transition-all cursor-pointer ${
+                        extendDaysInput === days
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                          : 'bg-white hover:bg-gray-50 text-gray-800 border-gray-300'
+                      }`}
+                    >
+                      +{days} أيام
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-2 bg-gray-50 p-2.5 rounded-xl border border-gray-200">
+                  <span className="text-xs font-medium text-gray-600">أو حدد عدداً مخصصاً:</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="365"
+                    value={extendDaysInput}
+                    onChange={(e) => setExtendDaysInput(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-20 px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-bold text-center outline-none"
+                  />
+                  <span className="text-xs text-gray-500">يوم إضافي</span>
+                </div>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 p-3 rounded-xl text-blue-900 text-[11px] leading-relaxed">
+                ℹ️ سيتم تمديد تاريخ انتهاء التجربة وتحديث حالة الحساب وحفظها مباشرة في قاعدة البيانات السحابية، وإذا كان الحساب مجمداً سيتم فك تجميده تلقائياً ليستطيع المستفيد الدخول للشات.
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-gray-50 border-t border-gray-200 px-5 py-3 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setTrialModalUser(null)}
+                className="px-3.5 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-200/80 rounded-xl transition-colors cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                id="confirm-extend-trial-btn"
+                onClick={() => handleExtendTrial(trialModalUser.id, extendDaysInput)}
+                disabled={updatingUserTrial}
+                className="px-4 py-2 text-xs font-bold bg-[#12281e] hover:bg-[#1a3a2d] text-white rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-50"
+              >
+                {updatingUserTrial ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>جاري التمديد...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>تأكيد التمديد (+{extendDaysInput} يوم)</span>
                   </>
                 )}
               </button>

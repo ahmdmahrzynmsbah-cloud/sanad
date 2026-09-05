@@ -4,7 +4,6 @@ import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
-import { PDFParse } from 'pdf-parse';
 import {
   initFirestore,
   fetchUsersFromFirestore,
@@ -19,6 +18,24 @@ import {
   saveCategoryToFirestore,
   deleteCategoryFromFirestore,
   seedFirestoreIfEmpty,
+  fetchSettingsFromFirestore,
+  saveSettingsToFirestore,
+  fetchSupervisorsFromFirestore,
+  saveSupervisorToFirestore,
+  deleteSupervisorFromFirestore,
+  fetchRelatedSitesFromFirestore,
+  saveRelatedSiteToFirestore,
+  deleteRelatedSiteFromFirestore,
+  fetchPlatformAboutFromFirestore,
+  savePlatformAboutToFirestore,
+  StoredAboutCard,
+  StoredPlatformAbout,
+  DEFAULT_PLATFORM_ABOUT,
+  fetchConversationsFromFirestore,
+  saveConversationToFirestore,
+  deleteConversationFromFirestore,
+  clearUserConversationsFromFirestore,
+  StoredConversation,
 } from './server/firestore';
 
 dotenv.config();
@@ -52,9 +69,22 @@ interface StoredUser {
   phone?: string;
   recoveryCode?: string;
   role: 'user' | 'admin';
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'frozen';
   createdAt: string;
   reviewedAt?: string;
+
+  // Subscription & Trial policy
+  subscriptionStatus?: 'trial' | 'active' | 'frozen';
+  trialDays?: number;
+  trialStartedAt?: string;
+  trialEndsAt?: string;
+  isSubscribed?: boolean;
+  subscriptionPlan?: string;
+  subscribedAt?: string;
+  frozenAt?: string;
+  freezeReason?: string;
+  remainingTrialDays?: number;
+  remainingTrialHours?: number;
 }
 
 interface StoredCategory {
@@ -85,13 +115,180 @@ interface StoredLaw {
 
 interface DBSettings {
   autoApproveNewUsers: boolean;
+  defaultTrialDays: number;
+  trialPolicyEnabled?: boolean;
+  systemName?: string;
+  systemSubtitle?: string;
+  systemBadge?: string;
+  logoType?: 'preset' | 'url' | 'upload';
+  logoPreset?: string;
+  logoUrl?: string;
+  logoAccentColor?: string;
+
+  // Founder Info & Site Overview
+  founderName?: string;
+  founderTitle?: string;
+  founderBio?: string;
+  founderPhotoUrl?: string;
+  founderQuote?: string;
+  siteOverview?: string;
 }
+
+const DEFAULT_FOUNDER = {
+  founderName: 'المستشار القانوني أ. محمد ناصر خليل',
+  founderTitle: 'مستشار السياسات الجمركية والتشريعات الضريبية',
+  founderBio: 'خبير ومستشار قانوني وتشريعي متخصص في النظم الجمركية والضريبية الفلسطينية وقوانين تشجيع الاستثمار. أسهم في صياغة ومراجعة العديد من مشاريع القرارات بقوانين واللوائح التنفيذية ومذكرات الاستئناف لدى المحاكم الجمركية والضريبية. بادر بتأسيس وتطوير هذه المنصة الرقمية الذكية لتكون مرجعاً موثقاً وحصناً قانونياً يُمكّن التجار والمكلفين والمستوردين والمواطنين من الإلمام بحقوقهم والتزاماتهم وحوافزهم التشريعية بوضوح وشفافية ودقة متناهية.',
+  founderPhotoUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&auto=format&fit=crop&q=80',
+  founderQuote: '«الوعي بالقانون والتشريع الضريبي والجمركي هو أولى ركائز العدالة الاقتصادية وبناء دولة المؤسسات وسيادة القانون.»',
+  siteOverview: 'منصة المساعد الجمركي والضريبي هي أول منظومة وطنية ذكية متخصصة تعتمد على الذكاء الاصطناعي المعزز بالنصوص القانونية والقرارات بقانون المعمول بها في دولة فلسطين (مثل قانون الجمارك والمكوس رقم (1) لسنة 1962م وتعديلاته، وقرار بقانون رقم (8) لسنة 2011م بشأن ضريبة الدخل وتعديلاته، وقانون ضريبة القيمة المضافة)، لتقديم إجابات قانونية واستشارات موثقة ودقيقة للمكلفين، التجار، المستوردين، والمواطنين على مدار الساعة.',
+};
+
+const DEFAULT_BRANDING = {
+  systemName: 'مساعد الجمارك والضرائب',
+  systemSubtitle: 'دولة فلسطين • وزارة المالية • الإدارة العامة للجمارك وضريبة الدخل',
+  systemBadge: 'فلسطين',
+  logoType: 'preset' as const,
+  logoPreset: 'scale',
+  logoUrl: '',
+  logoAccentColor: '#d4af37',
+  ...DEFAULT_FOUNDER,
+};
+
+export interface StoredSupervisor {
+  id: string;
+  name: string;
+  title: string;
+  bio: string;
+  photoUrl?: string;
+  email?: string;
+  phone?: string;
+  department?: string;
+  order?: number;
+  createdAt: string;
+}
+
+export const DEFAULT_SUPERVISORS: StoredSupervisor[] = [
+  {
+    id: 'sup-1',
+    name: 'د. خليل إبراهيم شحادة',
+    title: 'رئيس هيئة الإشراف القانوني والضريبي',
+    bio: 'دكتوراه في القانون المالي والتشريعات الضريبية المقارنة. أستاذ جامعي ومستشار قانوني معتمد، متخصص في صياغة اللوائح الضريبية والطعون الاستئنافية والسياسات المالية العامة.',
+    photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80',
+    email: 'k.shehada@pal-tax.ps',
+    phone: '+970 59 911 2233',
+    department: 'الهيئة التشريعية والسياسات المالية',
+    order: 1,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'sup-2',
+    name: 'أ. سمر كمال التميمي',
+    title: 'مشرفة المنازعات الجمركية والتعريفة الموحدة',
+    bio: 'ماجستير في قانون التجارة الدولية. متخصصة في جداول التعريفة الجمركية المنسقة، قواعد المنشأ، إجراءات التخليص الجمركي، وحل منازعات التقييم في الموانئ والمعابر.',
+    photoUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=500&auto=format&fit=crop&q=80',
+    email: 's.tamimi@pal-tax.ps',
+    phone: '+970 59 922 3344',
+    department: 'إدارة الرقابة والتعريفة الجمركية',
+    order: 2,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'sup-3',
+    name: 'أ. رمزي عبد الهادي عساف',
+    title: 'مشرف الامتثال الضريبي والضريبة المضافة',
+    bio: 'محاسب قانوني ومستشار ضرائب معتمد. خبير في الفحص والتدقيق الميداني، إعداد الدفاتر المحاسبية القانونية، وإقرارات المقاصة وضريبة القيمة المضافة وخصم المصدر.',
+    photoUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80',
+    email: 'r.assaf@pal-tax.ps',
+    phone: '+970 59 933 4455',
+    department: 'لجنة الفحص والامتثال الضريبي',
+    order: 3,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+];
+
+export interface StoredRelatedSite {
+  id: string;
+  title: string;
+  description: string;
+  url: string;
+  category: string;
+  iconType?: string;
+  isOfficial?: boolean;
+  createdAt: string;
+}
+
+export const DEFAULT_RELATED_SITES: StoredRelatedSite[] = [
+  {
+    id: 'site-1',
+    title: 'وزارة المالية الفلسطينية',
+    description: 'البوابة الرسمية لوزارة المالية لمتابعة الموازنة العامة، القرارات الوزارية، النشرات المالية، وإصدارات السياسات الضريبية.',
+    url: 'https://www.pmof.ps',
+    category: 'وزارات ومؤسسات حكومية',
+    iconType: 'landmark',
+    isOfficial: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'site-2',
+    title: 'الإدارة العامة للجمارك وضريبة القيمة المضافة',
+    description: 'المنصة الرسمية للإدارة العامة للجمارك والمكوس وضريبة القيمة المضافة - متابعة الإجراءات الجمركية ونماذج المقاصة والبيانات الجمركية.',
+    url: 'https://customs.pmof.ps',
+    category: 'جمارك واستيراد',
+    iconType: 'scale',
+    isOfficial: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'site-3',
+    title: 'ديوان الفتوى والتشريع (الجريدة الرسمية - الوقائع الفلسطينية)',
+    description: 'المرجع الدستوري والتشريعي المعتمد لكافة القوانين، والقرارات بقانون، والمراسيم الرئاسية، واللوائح التنفيذية الصادرة في فلسطين.',
+    url: 'http://www.diwan.ps',
+    category: 'تشريعات وقوانين',
+    iconType: 'file-text',
+    isOfficial: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'site-4',
+    title: 'مجلس القضاء الأعلى والمحاكم الفلسطينية',
+    description: 'الموقع الرسمي للمحاكم الفلسطينية للاطلاع على قرارات محكمة استئناف قضايا الجمارك والطعون الضريبية وأحكام محكمة النقض.',
+    url: 'https://courts.gov.ps',
+    category: 'قضاء وعدالة',
+    iconType: 'shield',
+    isOfficial: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'site-5',
+    title: 'سلطة النقد الفلسطينية',
+    description: 'البنك المركزي والمشرف على استقرار الجهاز المصرفي الفلسطيني، نشرات أسعار صرف العملات، وتعليمات فتح الاعتمادات المستندية للتجارة.',
+    url: 'https://www.pma.ps',
+    category: 'خدمات مالية ومصرفية',
+    iconType: 'landmark',
+    isOfficial: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'site-6',
+    title: 'هيئة تشجيع الاستثمار والمدن الصناعية (IPIPA)',
+    description: 'بوابة الحوافز الاستثمارية والإعفاءات الضريبية والجمركية المنصوص عليها بموجب قانون تشجيع الاستثمار للمشاريع الريادية والمصانع.',
+    url: 'https://www.pipa.ps',
+    category: 'استثمار وتنمية',
+    iconType: 'globe',
+    isOfficial: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+];
 
 interface DBData {
   users: StoredUser[];
   laws: StoredLaw[];
   categories?: StoredCategory[];
   settings?: DBSettings;
+  supervisors?: StoredSupervisor[];
+  relatedSites?: StoredRelatedSite[];
+  platformAbout?: StoredPlatformAbout;
+  conversations?: StoredConversation[];
 }
 
 const INITIAL_LAWS: StoredLaw[] = [
@@ -158,10 +355,39 @@ function initDB(): DBData {
       const content = fs.readFileSync(DB_FILE, 'utf-8');
       const data = JSON.parse(content) as DBData;
       if (!data.settings) {
-        data.settings = { autoApproveNewUsers: true };
+        data.settings = { autoApproveNewUsers: true, defaultTrialDays: 7, trialPolicyEnabled: true, ...DEFAULT_BRANDING };
+      } else {
+        if (typeof data.settings.defaultTrialDays !== 'number' || data.settings.defaultTrialDays < 1) {
+          data.settings.defaultTrialDays = 7;
+        }
+        if (typeof data.settings.trialPolicyEnabled !== 'boolean') {
+          data.settings.trialPolicyEnabled = true;
+        }
+        if (!data.settings.systemName) data.settings.systemName = DEFAULT_BRANDING.systemName;
+        if (!data.settings.systemSubtitle) data.settings.systemSubtitle = DEFAULT_BRANDING.systemSubtitle;
+        if (!data.settings.systemBadge) data.settings.systemBadge = DEFAULT_BRANDING.systemBadge;
+        if (!data.settings.logoType) data.settings.logoType = DEFAULT_BRANDING.logoType;
+        if (!data.settings.logoPreset) data.settings.logoPreset = DEFAULT_BRANDING.logoPreset;
+        if (!data.settings.logoAccentColor) data.settings.logoAccentColor = DEFAULT_BRANDING.logoAccentColor;
+
+        if (!data.settings.founderName) data.settings.founderName = DEFAULT_FOUNDER.founderName;
+        if (!data.settings.founderTitle) data.settings.founderTitle = DEFAULT_FOUNDER.founderTitle;
+        if (!data.settings.founderBio) data.settings.founderBio = DEFAULT_FOUNDER.founderBio;
+        if (!data.settings.founderPhotoUrl) data.settings.founderPhotoUrl = DEFAULT_FOUNDER.founderPhotoUrl;
+        if (!data.settings.founderQuote) data.settings.founderQuote = DEFAULT_FOUNDER.founderQuote;
+        if (!data.settings.siteOverview) data.settings.siteOverview = DEFAULT_FOUNDER.siteOverview;
       }
       if (!data.categories || data.categories.length === 0) {
         data.categories = [...DEFAULT_CATEGORIES];
+      }
+      if (!data.supervisors || data.supervisors.length === 0) {
+        data.supervisors = [...DEFAULT_SUPERVISORS];
+      }
+      if (!data.relatedSites || data.relatedSites.length === 0) {
+        data.relatedSites = [...DEFAULT_RELATED_SITES];
+      }
+      if (!data.platformAbout) {
+        data.platformAbout = { ...DEFAULT_PLATFORM_ABOUT };
       }
       return data;
     } catch {
@@ -172,23 +398,43 @@ function initDB(): DBData {
   const initialData: DBData = {
     settings: {
       autoApproveNewUsers: true,
+      defaultTrialDays: 7,
+      trialPolicyEnabled: true,
+      ...DEFAULT_BRANDING,
     },
     categories: [...DEFAULT_CATEGORIES],
+    supervisors: [...DEFAULT_SUPERVISORS],
+    relatedSites: [...DEFAULT_RELATED_SITES],
+    platformAbout: { ...DEFAULT_PLATFORM_ABOUT },
     users: [
       {
         id: 'user-demo-pending',
         username: 'ahmad_khalil',
+        fullName: 'أحمد خليل المصري',
+        phone: '0599123456',
         password: 'password123',
         role: 'user',
         status: 'pending',
+        subscriptionStatus: 'trial',
+        trialDays: 7,
+        trialStartedAt: new Date(Date.now() - 3600000 * 2).toISOString(),
+        trialEndsAt: new Date(Date.now() + 3600000 * 24 * 7 - 3600000 * 2).toISOString(),
+        isSubscribed: false,
         createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
       },
       {
         id: 'user-demo-approved',
         username: 'tariq_pal',
+        fullName: 'طارق صلاح الدين',
+        phone: '0598765432',
         password: 'password123',
         role: 'user',
         status: 'approved',
+        subscriptionStatus: 'trial',
+        trialDays: 7,
+        trialStartedAt: new Date(Date.now() - 3600000 * 24).toISOString(),
+        trialEndsAt: new Date(Date.now() + 3600000 * 24 * 6).toISOString(),
+        isSubscribed: false,
         createdAt: new Date(Date.now() - 3600000 * 24).toISOString(),
         reviewedAt: new Date(Date.now() - 3600000 * 20).toISOString(),
       },
@@ -210,6 +456,144 @@ function saveDB() {
   }
 }
 
+/**
+ * Checks and updates trial expiration and freeze status for a user.
+ * If trial has expired and user is not subscribed, account is automatically frozen.
+ */
+function checkAndUpdateUserTrialStatus(user: StoredUser, persist = true): {
+  isFrozen: boolean;
+  subscriptionStatus: 'trial' | 'active' | 'frozen';
+  remainingDays: number;
+  remainingHours: number;
+  trialEndsAt?: string;
+  message: string;
+} {
+  // Admin accounts are never restricted
+  if (user.role === 'admin') {
+    return {
+      isFrozen: false,
+      subscriptionStatus: 'active',
+      remainingDays: 999,
+      remainingHours: 999,
+      message: 'حساب مسؤول النظام',
+    };
+  }
+
+  // Pending and rejected accounts keep their state
+  if (user.status === 'pending' || user.status === 'rejected') {
+    return {
+      isFrozen: false,
+      subscriptionStatus: user.subscriptionStatus || 'trial',
+      remainingDays: 0,
+      remainingHours: 0,
+      trialEndsAt: user.trialEndsAt,
+      message: user.status === 'pending' ? 'الحساب قيد المراجعة الإدارية' : 'الحساب مرفوض',
+    };
+  }
+
+  // Actively subscribed user
+  if (user.isSubscribed) {
+    user.subscriptionStatus = 'active';
+    user.status = 'approved';
+    return {
+      isFrozen: false,
+      subscriptionStatus: 'active',
+      remainingDays: 999,
+      remainingHours: 999,
+      message: 'اشتراك معتمد ونشط',
+    };
+  }
+
+  // If already explicitly marked as frozen
+  if (user.status === 'frozen' || user.subscriptionStatus === 'frozen') {
+    return {
+      isFrozen: true,
+      subscriptionStatus: 'frozen',
+      remainingDays: 0,
+      remainingHours: 0,
+      trialEndsAt: user.trialEndsAt,
+      message: user.freezeReason || 'الحساب مجمد لانتهاء الفترة التجريبية المحددة دون اشتراك',
+    };
+  }
+
+  // Ensure user has a valid trialEndsAt
+  const defaultDays = db.settings?.defaultTrialDays || 7;
+  if (!user.trialEndsAt) {
+    const createdTime = user.createdAt ? new Date(user.createdAt).getTime() : Date.now();
+    const trialDays = typeof user.trialDays === 'number' && user.trialDays > 0 ? user.trialDays : defaultDays;
+    user.trialDays = trialDays;
+    user.trialStartedAt = user.createdAt || new Date().toISOString();
+    user.trialEndsAt = new Date(createdTime + trialDays * 24 * 60 * 60 * 1000).toISOString();
+  }
+
+  const now = Date.now();
+  const trialEndTime = new Date(user.trialEndsAt).getTime();
+
+  if (now >= trialEndTime) {
+    // Trial expired! Freeze account automatically
+    user.status = 'frozen';
+    user.subscriptionStatus = 'frozen';
+    user.frozenAt = user.frozenAt || new Date().toISOString();
+    user.freezeReason = 'انتهت الفترة التجريبية المحددة للحساب دون تفعيل الاشتراك';
+
+    if (persist) {
+      saveDB();
+      updateUserInFirestore(user.id, {
+        status: 'frozen',
+        subscriptionStatus: 'frozen',
+        frozenAt: user.frozenAt,
+        freezeReason: user.freezeReason,
+      }).catch((e) => console.error(`Failed to sync auto-freeze to Firestore for ${user.id}:`, e));
+    }
+
+    return {
+      isFrozen: true,
+      subscriptionStatus: 'frozen',
+      remainingDays: 0,
+      remainingHours: 0,
+      trialEndsAt: user.trialEndsAt,
+      message: 'انتهت الفترة التجريبية لحسابك. تم تجميد الحساب لحين الاشتراك.',
+    };
+  }
+
+  // Active trial calculation
+  const diffMs = trialEndTime - now;
+  const remainingDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+  const remainingHours = Math.floor((diffMs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+
+  user.subscriptionStatus = 'trial';
+  user.status = 'approved';
+  user.remainingTrialDays = remainingDays;
+  user.remainingTrialHours = remainingHours;
+
+  return {
+    isFrozen: false,
+    subscriptionStatus: 'trial',
+    remainingDays,
+    remainingHours,
+    trialEndsAt: user.trialEndsAt,
+    message: `فترة تجريبية سارية: متبقي ${remainingDays} يوم و ${remainingHours} ساعة`,
+  };
+}
+
+/**
+ * Returns user object stripped of sensitive fields with real-time trial calculation
+ */
+function toSafeUser(user: StoredUser) {
+  const trialInfo = checkAndUpdateUserTrialStatus(user, false);
+  const { password, recoveryCode, ...rest } = user;
+  return {
+    ...rest,
+    status: user.status,
+    subscriptionStatus: trialInfo.subscriptionStatus,
+    remainingTrialDays: trialInfo.remainingDays,
+    remainingTrialHours: trialInfo.remainingHours,
+    isFrozen: trialInfo.isFrozen,
+    trialEndsAt: user.trialEndsAt,
+    isSubscribed: Boolean(user.isSubscribed),
+  };
+}
+
 async function syncWithFirestore() {
   try {
     console.log('🔄 Initializing Cloud Firestore sync in background...');
@@ -217,21 +601,92 @@ async function syncWithFirestore() {
     if (!db.categories || db.categories.length === 0) {
       db.categories = [...DEFAULT_CATEGORIES];
     }
-    await seedFirestoreIfEmpty(db.users, db.laws, db.categories);
+    if (!db.supervisors || db.supervisors.length === 0) {
+      db.supervisors = [...DEFAULT_SUPERVISORS];
+    }
+    if (!db.relatedSites || db.relatedSites.length === 0) {
+      db.relatedSites = [...DEFAULT_RELATED_SITES];
+    }
+    await seedFirestoreIfEmpty(db.users, db.laws, db.categories, db.supervisors, db.relatedSites);
 
-    // Fetch users, laws, and categories concurrently in parallel
-    const [cloudUsers, cloudLaws, cloudCategories] = await Promise.all([
+    // Fetch users, laws, categories, settings, supervisors, related sites, and platform about concurrently in parallel
+    const [cloudUsers, cloudLaws, cloudCategories, cloudSettings, cloudSupervisors, cloudRelatedSites, cloudAbout] = await Promise.all([
       fetchUsersFromFirestore(),
       fetchLawsFromFirestore(),
       fetchCategoriesFromFirestore(),
+      fetchSettingsFromFirestore(),
+      fetchSupervisorsFromFirestore(),
+      fetchRelatedSitesFromFirestore(),
+      fetchPlatformAboutFromFirestore(),
     ]);
 
     let changed = false;
+
+    if (cloudAbout) {
+      if (cloudAbout.customSections) {
+        cloudAbout.customSections = cloudAbout.customSections.filter(
+          (sec) => sec.id !== 'sec-goals' && sec.id !== 'sec-values'
+        );
+      }
+      db.platformAbout = cloudAbout;
+      changed = true;
+      console.log('✅ Loaded platform about content from Cloud Firestore.');
+    } else if (db.platformAbout) {
+      savePlatformAboutToFirestore(db.platformAbout).catch((e) => console.error('Error saving initial platform about to Firestore:', e));
+    }
+
+    if (cloudSettings) {
+      db.settings = {
+        autoApproveNewUsers: cloudSettings.autoApproveNewUsers !== false,
+        defaultTrialDays: typeof cloudSettings.defaultTrialDays === 'number' ? cloudSettings.defaultTrialDays : 7,
+        trialPolicyEnabled: cloudSettings.trialPolicyEnabled !== false,
+        systemName: cloudSettings.systemName || db.settings?.systemName || DEFAULT_BRANDING.systemName,
+        systemSubtitle: cloudSettings.systemSubtitle || db.settings?.systemSubtitle || DEFAULT_BRANDING.systemSubtitle,
+        systemBadge: cloudSettings.systemBadge || db.settings?.systemBadge || DEFAULT_BRANDING.systemBadge,
+        logoType: cloudSettings.logoType || db.settings?.logoType || DEFAULT_BRANDING.logoType,
+        logoPreset: cloudSettings.logoPreset || db.settings?.logoPreset || DEFAULT_BRANDING.logoPreset,
+        logoUrl: cloudSettings.logoUrl !== undefined ? cloudSettings.logoUrl : (db.settings?.logoUrl || ''),
+        logoAccentColor: cloudSettings.logoAccentColor || db.settings?.logoAccentColor || DEFAULT_BRANDING.logoAccentColor,
+
+        founderName: cloudSettings.founderName || db.settings?.founderName || DEFAULT_FOUNDER.founderName,
+        founderTitle: cloudSettings.founderTitle || db.settings?.founderTitle || DEFAULT_FOUNDER.founderTitle,
+        founderBio: cloudSettings.founderBio || db.settings?.founderBio || DEFAULT_FOUNDER.founderBio,
+        founderPhotoUrl: cloudSettings.founderPhotoUrl !== undefined ? cloudSettings.founderPhotoUrl : (db.settings?.founderPhotoUrl || DEFAULT_FOUNDER.founderPhotoUrl),
+        founderQuote: cloudSettings.founderQuote || db.settings?.founderQuote || DEFAULT_FOUNDER.founderQuote,
+        siteOverview: cloudSettings.siteOverview || db.settings?.siteOverview || DEFAULT_FOUNDER.siteOverview,
+      };
+      changed = true;
+      console.log(`✅ Loaded settings from Cloud Firestore (Default trial: ${db.settings.defaultTrialDays} days, System: "${db.settings.systemName}").`);
+    } else if (db.settings) {
+      saveSettingsToFirestore({
+        autoApproveNewUsers: db.settings.autoApproveNewUsers !== false,
+        defaultTrialDays: db.settings.defaultTrialDays || 7,
+        trialPolicyEnabled: true,
+        systemName: db.settings.systemName || DEFAULT_BRANDING.systemName,
+        systemSubtitle: db.settings.systemSubtitle || DEFAULT_BRANDING.systemSubtitle,
+        systemBadge: db.settings.systemBadge || DEFAULT_BRANDING.systemBadge,
+        logoType: db.settings.logoType || DEFAULT_BRANDING.logoType,
+        logoPreset: db.settings.logoPreset || DEFAULT_BRANDING.logoPreset,
+        logoUrl: db.settings.logoUrl || '',
+        logoAccentColor: db.settings.logoAccentColor || DEFAULT_BRANDING.logoAccentColor,
+        founderName: db.settings.founderName || DEFAULT_FOUNDER.founderName,
+        founderTitle: db.settings.founderTitle || DEFAULT_FOUNDER.founderTitle,
+        founderBio: db.settings.founderBio || DEFAULT_FOUNDER.founderBio,
+        founderPhotoUrl: db.settings.founderPhotoUrl || DEFAULT_FOUNDER.founderPhotoUrl,
+        founderQuote: db.settings.founderQuote || DEFAULT_FOUNDER.founderQuote,
+        siteOverview: db.settings.siteOverview || DEFAULT_FOUNDER.siteOverview,
+      }).catch((e) => console.error('Error saving initial settings to Firestore:', e));
+    }
 
     if (cloudUsers && cloudUsers.length > 0) {
       db.users = cloudUsers;
       changed = true;
       console.log(`✅ Loaded ${cloudUsers.length} users from Cloud Firestore.`);
+    }
+
+    // Run trial expiration checks on all users
+    for (const u of db.users) {
+      checkAndUpdateUserTrialStatus(u, false);
     }
 
     if (cloudLaws && cloudLaws.length > 0) {
@@ -244,6 +699,18 @@ async function syncWithFirestore() {
       db.categories = cloudCategories;
       changed = true;
       console.log(`✅ Loaded ${cloudCategories.length} categories from Cloud Firestore.`);
+    }
+
+    if (cloudSupervisors && cloudSupervisors.length > 0) {
+      db.supervisors = cloudSupervisors;
+      changed = true;
+      console.log(`✅ Loaded ${cloudSupervisors.length} supervisors from Cloud Firestore.`);
+    }
+
+    if (cloudRelatedSites && cloudRelatedSites.length > 0) {
+      db.relatedSites = cloudRelatedSites;
+      changed = true;
+      console.log(`✅ Loaded ${cloudRelatedSites.length} related sites from Cloud Firestore.`);
     }
 
     if (changed) {
@@ -326,6 +793,11 @@ app.post('/api/auth/register', async (req, res) => {
     }
   }
 
+  const defaultTrialDays = typeof db.settings?.defaultTrialDays === 'number' ? db.settings.defaultTrialDays : 7;
+  const now = new Date();
+  const trialStartedAt = now.toISOString();
+  const trialEndsAt = new Date(now.getTime() + defaultTrialDays * 24 * 60 * 60 * 1000).toISOString();
+
   const isAutoApprove = db.settings?.autoApproveNewUsers !== false;
   const newUser: StoredUser = {
     id: 'user-' + Date.now(),
@@ -336,8 +808,15 @@ app.post('/api/auth/register', async (req, res) => {
     password: String(password),
     role: 'user',
     status: isAutoApprove ? 'approved' : 'pending',
-    createdAt: new Date().toISOString(),
-    ...(isAutoApprove ? { reviewedAt: new Date().toISOString() } : {}),
+    createdAt: now.toISOString(),
+    ...(isAutoApprove ? { reviewedAt: now.toISOString() } : {}),
+
+    // Trial and Subscription policy
+    subscriptionStatus: 'trial',
+    trialDays: defaultTrialDays,
+    trialStartedAt,
+    trialEndsAt,
+    isSubscribed: false,
   };
 
   db.users.push(newUser);
@@ -346,21 +825,16 @@ app.post('/api/auth/register', async (req, res) => {
 
   return res.status(201).json({
     message: isAutoApprove
-      ? 'تم إنشاء الحساب واعتماده تلقائياً بنجاح! يمكنك الآن تسجيل الدخول مباشرة واستخدام الشات.'
-      : 'تم إنشاء الحساب بنجاح، وهو الآن قيد المراجعة بانتظار موافقة المسؤول.',
+      ? `تم إنشاء الحساب واعتماده بنجاح! تم منحك فترة تجريبية مجانية لمدة ${defaultTrialDays} أيام لاستخدام مساعد الجمارك والضرائب.`
+      : `تم تقديم طلب الحساب بنجاح، وهو قيد المراجعة الإدارية. تم تخصيص فترة تجريبية مدتها ${defaultTrialDays} أيام تبدأ فور الاعتماد.`,
     isAutoApproved: isAutoApprove,
-    user: {
-      id: newUser.id,
-      username: newUser.username,
-      fullName: newUser.fullName,
-      phone: newUser.phone,
-      status: newUser.status,
-      role: newUser.role,
-    },
+    defaultTrialDays,
+    trialEndsAt,
+    user: toSafeUser(newUser),
   });
 });
 
-// User Login: Checks credentials and approval status (supports login by username or phone)
+// User Login: Checks credentials, approval status, and trial expiration
 app.post('/api/auth/login', (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) {
@@ -379,33 +853,45 @@ app.post('/api/auth/login', (req, res) => {
     return res.status(401).json({ error: 'بيانات الدخول أو كلمة المرور غير صحيحة' });
   }
 
-  // Check user status
+  // 1. Check pending status
   if (user.status === 'pending') {
     return res.status(403).json({
-      error: 'حسابك قيد المراجعة حالياً، ولا يمكنك استخدام البوت إلا بعد موافقة المسؤول.',
+      error: 'حسابك قيد المراجعة الإدارية حالياً، ولا يمكنك استخدام البوت إلا بعد موافقة المسؤول.',
       status: 'pending',
       username: user.username,
+      fullName: user.fullName,
     });
   }
 
+  // 2. Check rejected status
   if (user.status === 'rejected') {
     return res.status(403).json({
       error: 'تم رفض طلب حسابك من قِبل إدارة النظام. يتعذر تسجيل الدخول.',
       status: 'rejected',
       username: user.username,
+      fullName: user.fullName,
+    });
+  }
+
+  // 3. Real-time trial expiration & freeze check
+  const trialCheck = checkAndUpdateUserTrialStatus(user, true);
+  if (trialCheck.isFrozen) {
+    return res.status(403).json({
+      error: 'تم تجميد حسابك لانتهاء الفترة التجريبية المحددة دون اشتراك. يرجى الاشتراك لتفعيل الحساب ومتابعة الاستخدام.',
+      status: 'frozen',
+      isFrozen: true,
+      subscriptionStatus: 'frozen',
+      trialEndsAt: user.trialEndsAt,
+      username: user.username,
+      fullName: user.fullName,
+      freezeReason: user.freezeReason || 'انتهاء الفترة التجريبية',
+      user: toSafeUser(user),
     });
   }
 
   return res.json({
     message: 'تم تسجيل الدخول بنجاح',
-    user: {
-      id: user.id,
-      username: user.username,
-      fullName: user.fullName,
-      phone: user.phone,
-      status: user.status,
-      role: user.role,
-    },
+    user: toSafeUser(user),
   });
 });
 
@@ -471,14 +957,66 @@ app.post('/api/admin/login', (req, res) => {
   return res.status(401).json({ error: 'بيانات اعتماد المسؤول غير صحيحة' });
 });
 
+// Public System Branding & Founder Endpoint
+app.get('/api/system/branding', (req, res) => {
+  res.json({
+    systemName: db.settings?.systemName || DEFAULT_BRANDING.systemName,
+    systemSubtitle: db.settings?.systemSubtitle || DEFAULT_BRANDING.systemSubtitle,
+    systemBadge: db.settings?.systemBadge || DEFAULT_BRANDING.systemBadge,
+    logoType: db.settings?.logoType || DEFAULT_BRANDING.logoType,
+    logoPreset: db.settings?.logoPreset || DEFAULT_BRANDING.logoPreset,
+    logoUrl: db.settings?.logoUrl || '',
+    logoAccentColor: db.settings?.logoAccentColor || DEFAULT_BRANDING.logoAccentColor,
+
+    founderName: db.settings?.founderName || DEFAULT_FOUNDER.founderName,
+    founderTitle: db.settings?.founderTitle || DEFAULT_FOUNDER.founderTitle,
+    founderBio: db.settings?.founderBio || DEFAULT_FOUNDER.founderBio,
+    founderPhotoUrl: db.settings?.founderPhotoUrl || DEFAULT_FOUNDER.founderPhotoUrl,
+    founderQuote: db.settings?.founderQuote || DEFAULT_FOUNDER.founderQuote,
+    siteOverview: db.settings?.siteOverview || DEFAULT_FOUNDER.siteOverview,
+  });
+});
+
+// Public Platform About & Vision/Mission Endpoint
+app.get('/api/system/about', (req, res) => {
+  const about = db.platformAbout || DEFAULT_PLATFORM_ABOUT;
+  if (about && about.customSections) {
+    about.customSections = about.customSections.filter(
+      (sec) => sec.id !== 'sec-goals' && sec.id !== 'sec-values'
+    );
+  }
+  res.json(about);
+});
+
 // Fast Consolidated Admin Initial Data (Single roundtrip for ultra-fast portal load)
 app.get('/api/admin/init', (req, res) => {
-  const safeUsers = db.users.map(({ password, recoveryCode, ...rest }) => rest);
+  const safeUsers = db.users.map(toSafeUser);
   res.json({
     users: safeUsers,
     laws: db.laws,
     categories: db.categories || [],
+    supervisors: (db.supervisors || []).sort((a, b) => (a.order || 0) - (b.order || 0)),
+    relatedSites: db.relatedSites || [],
+    platformAbout: db.platformAbout || DEFAULT_PLATFORM_ABOUT,
     autoApprove: db.settings?.autoApproveNewUsers !== false,
+    defaultTrialDays: db.settings?.defaultTrialDays || 7,
+    trialPolicyEnabled: db.settings?.trialPolicyEnabled !== false,
+    branding: {
+      systemName: db.settings?.systemName || DEFAULT_BRANDING.systemName,
+      systemSubtitle: db.settings?.systemSubtitle || DEFAULT_BRANDING.systemSubtitle,
+      systemBadge: db.settings?.systemBadge || DEFAULT_BRANDING.systemBadge,
+      logoType: db.settings?.logoType || DEFAULT_BRANDING.logoType,
+      logoPreset: db.settings?.logoPreset || DEFAULT_BRANDING.logoPreset,
+      logoUrl: db.settings?.logoUrl || '',
+      logoAccentColor: db.settings?.logoAccentColor || DEFAULT_BRANDING.logoAccentColor,
+
+      founderName: db.settings?.founderName || DEFAULT_FOUNDER.founderName,
+      founderTitle: db.settings?.founderTitle || DEFAULT_FOUNDER.founderTitle,
+      founderBio: db.settings?.founderBio || DEFAULT_FOUNDER.founderBio,
+      founderPhotoUrl: db.settings?.founderPhotoUrl || DEFAULT_FOUNDER.founderPhotoUrl,
+      founderQuote: db.settings?.founderQuote || DEFAULT_FOUNDER.founderQuote,
+      siteOverview: db.settings?.siteOverview || DEFAULT_FOUNDER.siteOverview,
+    },
     systemStatus: {
       status: 'online',
       database: 'Google Cloud Firestore (Enterprise NoSQL)',
@@ -488,6 +1026,8 @@ app.get('/api/admin/init', (req, res) => {
       usersCount: db.users.length,
       lawsCount: db.laws.length,
       categoriesCount: (db.categories || []).length,
+      supervisorsCount: (db.supervisors || []).length,
+      relatedSitesCount: (db.relatedSites || []).length,
       timestamp: new Date().toISOString(),
     },
   });
@@ -495,10 +1035,448 @@ app.get('/api/admin/init', (req, res) => {
 
 // --- Admin Endpoints ---
 
-// Get admin settings (Auto-approval status)
+// Get admin settings (Auto-approval status, Trial period & Branding & About)
 app.get('/api/admin/settings', (req, res) => {
   res.json({
     autoApprove: db.settings?.autoApproveNewUsers !== false,
+    defaultTrialDays: db.settings?.defaultTrialDays || 7,
+    trialPolicyEnabled: db.settings?.trialPolicyEnabled !== false,
+    platformAbout: db.platformAbout || DEFAULT_PLATFORM_ABOUT,
+    branding: {
+      systemName: db.settings?.systemName || DEFAULT_BRANDING.systemName,
+      systemSubtitle: db.settings?.systemSubtitle || DEFAULT_BRANDING.systemSubtitle,
+      systemBadge: db.settings?.systemBadge || DEFAULT_BRANDING.systemBadge,
+      logoType: db.settings?.logoType || DEFAULT_BRANDING.logoType,
+      logoPreset: db.settings?.logoPreset || DEFAULT_BRANDING.logoPreset,
+      logoUrl: db.settings?.logoUrl || '',
+      logoAccentColor: db.settings?.logoAccentColor || DEFAULT_BRANDING.logoAccentColor,
+
+      founderName: db.settings?.founderName || DEFAULT_FOUNDER.founderName,
+      founderTitle: db.settings?.founderTitle || DEFAULT_FOUNDER.founderTitle,
+      founderBio: db.settings?.founderBio || DEFAULT_FOUNDER.founderBio,
+      founderPhotoUrl: db.settings?.founderPhotoUrl || DEFAULT_FOUNDER.founderPhotoUrl,
+      founderQuote: db.settings?.founderQuote || DEFAULT_FOUNDER.founderQuote,
+      siteOverview: db.settings?.siteOverview || DEFAULT_FOUNDER.siteOverview,
+    },
+  });
+});
+
+// Update System Branding & Founder Profile
+app.post('/api/admin/settings/branding', async (req, res) => {
+  const {
+    systemName,
+    systemSubtitle,
+    systemBadge,
+    logoType,
+    logoPreset,
+    logoUrl,
+    logoAccentColor,
+    founderName,
+    founderTitle,
+    founderBio,
+    founderPhotoUrl,
+    founderQuote,
+    siteOverview,
+  } = req.body;
+
+  if (!systemName || !String(systemName).trim()) {
+    return res.status(400).json({ error: 'يرجى إدخال اسم صحيح للنظام' });
+  }
+
+  if (!db.settings) {
+    db.settings = {
+      autoApproveNewUsers: true,
+      defaultTrialDays: 7,
+      trialPolicyEnabled: true,
+      ...DEFAULT_BRANDING,
+    };
+  }
+
+  db.settings.systemName = String(systemName).trim();
+  if (systemSubtitle !== undefined) {
+    db.settings.systemSubtitle = String(systemSubtitle).trim();
+  }
+  if (systemBadge !== undefined) {
+    db.settings.systemBadge = String(systemBadge).trim();
+  }
+  db.settings.logoType = logoType === 'url' || logoType === 'upload' ? logoType : 'preset';
+  if (logoPreset) {
+    db.settings.logoPreset = String(logoPreset).trim();
+  }
+  if (logoUrl !== undefined) {
+    db.settings.logoUrl = String(logoUrl);
+  }
+  if (logoAccentColor) {
+    db.settings.logoAccentColor = String(logoAccentColor).trim();
+  }
+
+  if (founderName !== undefined) db.settings.founderName = String(founderName).trim();
+  if (founderTitle !== undefined) db.settings.founderTitle = String(founderTitle).trim();
+  if (founderBio !== undefined) db.settings.founderBio = String(founderBio).trim();
+  if (founderPhotoUrl !== undefined) db.settings.founderPhotoUrl = String(founderPhotoUrl);
+  if (founderQuote !== undefined) db.settings.founderQuote = String(founderQuote).trim();
+  if (siteOverview !== undefined) db.settings.siteOverview = String(siteOverview).trim();
+
+  saveDB();
+
+  await saveSettingsToFirestore({
+    autoApproveNewUsers: db.settings.autoApproveNewUsers !== false,
+    defaultTrialDays: db.settings.defaultTrialDays || 7,
+    trialPolicyEnabled: true,
+    systemName: db.settings.systemName,
+    systemSubtitle: db.settings.systemSubtitle,
+    systemBadge: db.settings.systemBadge,
+    logoType: db.settings.logoType,
+    logoPreset: db.settings.logoPreset,
+    logoUrl: db.settings.logoUrl,
+    logoAccentColor: db.settings.logoAccentColor,
+
+    founderName: db.settings.founderName,
+    founderTitle: db.settings.founderTitle,
+    founderBio: db.settings.founderBio,
+    founderPhotoUrl: db.settings.founderPhotoUrl,
+    founderQuote: db.settings.founderQuote,
+    siteOverview: db.settings.siteOverview,
+  });
+
+  res.json({
+    success: true,
+    message: 'تم حفظ وتطبيق إعدادات السيستم وبيانات المؤسس بنجاح وحفظها سحابياً.',
+    branding: {
+      systemName: db.settings.systemName,
+      systemSubtitle: db.settings.systemSubtitle,
+      systemBadge: db.settings.systemBadge,
+      logoType: db.settings.logoType,
+      logoPreset: db.settings.logoPreset,
+      logoUrl: db.settings.logoUrl,
+      logoAccentColor: db.settings.logoAccentColor,
+
+      founderName: db.settings.founderName,
+      founderTitle: db.settings.founderTitle,
+      founderBio: db.settings.founderBio,
+      founderPhotoUrl: db.settings.founderPhotoUrl,
+      founderQuote: db.settings.founderQuote,
+      siteOverview: db.settings.siteOverview,
+    },
+  });
+});
+
+// ----------------------------------------------------
+// Supervisors Endpoints (المشرفين)
+// ----------------------------------------------------
+app.get('/api/supervisors', (req, res) => {
+  if (!db.supervisors) {
+    db.supervisors = [...DEFAULT_SUPERVISORS];
+  }
+  const sorted = [...db.supervisors].sort((a, b) => (a.order || 0) - (b.order || 0));
+  res.json({ supervisors: sorted });
+});
+
+app.post('/api/admin/supervisors', async (req, res) => {
+  const { name, title, bio, photoUrl, email, phone, department, order } = req.body;
+  if (!name || !String(name).trim() || !title || !String(title).trim()) {
+    return res.status(400).json({ error: 'اسم المشرف وصفته الرسمية مطلوبان' });
+  }
+
+  if (!db.supervisors) {
+    db.supervisors = [...DEFAULT_SUPERVISORS];
+  }
+
+  const newSupervisor: StoredSupervisor = {
+    id: `sup-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+    name: String(name).trim(),
+    title: String(title).trim(),
+    bio: String(bio || '').trim(),
+    photoUrl: String(photoUrl || '').trim(),
+    email: String(email || '').trim(),
+    phone: String(phone || '').trim(),
+    department: String(department || '').trim(),
+    order: Number(order) || (db.supervisors.length + 1),
+    createdAt: new Date().toISOString(),
+  };
+
+  db.supervisors.push(newSupervisor);
+  saveDB();
+  await saveSupervisorToFirestore(newSupervisor);
+
+  res.status(201).json({
+    success: true,
+    message: `تمت إضافة المشرف "${newSupervisor.name}" بنجاح`,
+    supervisor: newSupervisor,
+    supervisors: db.supervisors.sort((a, b) => (a.order || 0) - (b.order || 0)),
+  });
+});
+
+app.put('/api/admin/supervisors/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, title, bio, photoUrl, email, phone, department, order } = req.body;
+
+  if (!db.supervisors) {
+    db.supervisors = [...DEFAULT_SUPERVISORS];
+  }
+
+  const index = db.supervisors.findIndex((s) => s.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'المشرف غير موجود' });
+  }
+
+  const existing = db.supervisors[index];
+  const updated: StoredSupervisor = {
+    ...existing,
+    name: name !== undefined ? String(name).trim() : existing.name,
+    title: title !== undefined ? String(title).trim() : existing.title,
+    bio: bio !== undefined ? String(bio).trim() : existing.bio,
+    photoUrl: photoUrl !== undefined ? String(photoUrl).trim() : existing.photoUrl,
+    email: email !== undefined ? String(email).trim() : existing.email,
+    phone: phone !== undefined ? String(phone).trim() : existing.phone,
+    department: department !== undefined ? String(department).trim() : existing.department,
+    order: order !== undefined ? Number(order) : existing.order,
+  };
+
+  db.supervisors[index] = updated;
+  saveDB();
+  await saveSupervisorToFirestore(updated);
+
+  res.json({
+    success: true,
+    message: `تم تحديث بيانات المشرف "${updated.name}" بنجاح`,
+    supervisor: updated,
+    supervisors: db.supervisors.sort((a, b) => (a.order || 0) - (b.order || 0)),
+  });
+});
+
+app.delete('/api/admin/supervisors/:id', async (req, res) => {
+  const { id } = req.params;
+  if (!db.supervisors) {
+    db.supervisors = [...DEFAULT_SUPERVISORS];
+  }
+
+  const index = db.supervisors.findIndex((s) => s.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'المشرف المطلوب حذفه غير موجود' });
+  }
+
+  const removed = db.supervisors[index];
+  db.supervisors.splice(index, 1);
+  saveDB();
+  await deleteSupervisorFromFirestore(id);
+
+  res.json({
+    success: true,
+    message: `تم حذف المشرف "${removed.name}" بنجاح`,
+    deletedId: id,
+    supervisors: db.supervisors.sort((a, b) => (a.order || 0) - (b.order || 0)),
+  });
+});
+
+// ----------------------------------------------------
+// Related Sites Endpoints (مواقع ذات صلة)
+// ----------------------------------------------------
+app.get('/api/related-sites', (req, res) => {
+  if (!db.relatedSites) {
+    db.relatedSites = [...DEFAULT_RELATED_SITES];
+  }
+  res.json({ relatedSites: db.relatedSites });
+});
+
+app.post('/api/admin/related-sites', async (req, res) => {
+  const { title, description, url, category, iconType, isOfficial } = req.body;
+  if (!title || !String(title).trim() || !url || !String(url).trim()) {
+    return res.status(400).json({ error: 'اسم الموقع ورابطه مطلوبان' });
+  }
+
+  if (!db.relatedSites) {
+    db.relatedSites = [...DEFAULT_RELATED_SITES];
+  }
+
+  const newSite: StoredRelatedSite = {
+    id: `site-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+    title: String(title).trim(),
+    description: String(description || '').trim(),
+    url: String(url).trim(),
+    category: String(category || 'خدمات حكومية').trim(),
+    iconType: String(iconType || 'globe').trim(),
+    isOfficial: isOfficial !== false,
+    createdAt: new Date().toISOString(),
+  };
+
+  db.relatedSites.push(newSite);
+  saveDB();
+  await saveRelatedSiteToFirestore(newSite);
+
+  res.status(201).json({
+    success: true,
+    message: `تمت إضافة الموقع "${newSite.title}" بنجاح`,
+    site: newSite,
+    relatedSites: db.relatedSites,
+  });
+});
+
+app.put('/api/admin/related-sites/:id', async (req, res) => {
+  const { id } = req.params;
+  const { title, description, url, category, iconType, isOfficial } = req.body;
+
+  if (!db.relatedSites) {
+    db.relatedSites = [...DEFAULT_RELATED_SITES];
+  }
+
+  const index = db.relatedSites.findIndex((s) => s.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'الموقع غير موجود' });
+  }
+
+  const existing = db.relatedSites[index];
+  const updated: StoredRelatedSite = {
+    ...existing,
+    title: title !== undefined ? String(title).trim() : existing.title,
+    description: description !== undefined ? String(description).trim() : existing.description,
+    url: url !== undefined ? String(url).trim() : existing.url,
+    category: category !== undefined ? String(category).trim() : existing.category,
+    iconType: iconType !== undefined ? String(iconType).trim() : existing.iconType,
+    isOfficial: isOfficial !== undefined ? Boolean(isOfficial) : existing.isOfficial,
+  };
+
+  db.relatedSites[index] = updated;
+  saveDB();
+  await saveRelatedSiteToFirestore(updated);
+
+  res.json({
+    success: true,
+    message: `تم تحديث بيانات الموقع "${updated.title}" بنجاح`,
+    site: updated,
+    relatedSites: db.relatedSites,
+  });
+});
+
+app.delete('/api/admin/related-sites/:id', async (req, res) => {
+  const { id } = req.params;
+  if (!db.relatedSites) {
+    db.relatedSites = [...DEFAULT_RELATED_SITES];
+  }
+
+  const index = db.relatedSites.findIndex((s) => s.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'الموقع المطلوب حذفه غير موجود' });
+  }
+
+  const removed = db.relatedSites[index];
+  db.relatedSites.splice(index, 1);
+  saveDB();
+  await deleteRelatedSiteFromFirestore(id);
+
+  res.json({
+    success: true,
+    message: `تم حذف الموقع "${removed.title}" بنجاح`,
+    deletedId: id,
+    relatedSites: db.relatedSites,
+  });
+});
+
+// Reset Branding to Default
+app.post('/api/admin/settings/branding/reset', async (req, res) => {
+  if (!db.settings) {
+    db.settings = {
+      autoApproveNewUsers: true,
+      defaultTrialDays: 7,
+      trialPolicyEnabled: true,
+      ...DEFAULT_BRANDING,
+    };
+  }
+
+  Object.assign(db.settings, DEFAULT_BRANDING);
+  saveDB();
+
+  await saveSettingsToFirestore({
+    autoApproveNewUsers: db.settings.autoApproveNewUsers !== false,
+    defaultTrialDays: db.settings.defaultTrialDays || 7,
+    trialPolicyEnabled: true,
+    ...DEFAULT_BRANDING,
+  });
+
+  res.json({
+    success: true,
+    message: 'تم استعادة الاسم والشعار الافتراضي للسيستم بنجاح.',
+    branding: DEFAULT_BRANDING,
+  });
+});
+
+// Update Platform About Content (Overview, Vision, Mission, Custom Sections)
+app.post('/api/admin/settings/about', async (req, res) => {
+  const {
+    overviewTitle,
+    overviewContent,
+    visionTitle,
+    visionContent,
+    missionTitle,
+    missionContent,
+    customSections,
+  } = req.body;
+
+  if (!overviewContent || !String(overviewContent).trim()) {
+    return res.status(400).json({ error: 'يرجى إدخال نبذة تعريفية صحيحة عن المنصة' });
+  }
+
+  const updatedAbout: StoredPlatformAbout = {
+    overviewTitle: (overviewTitle && String(overviewTitle).trim()) || DEFAULT_PLATFORM_ABOUT.overviewTitle,
+    overviewContent: String(overviewContent).trim(),
+    visionTitle: (visionTitle && String(visionTitle).trim()) || DEFAULT_PLATFORM_ABOUT.visionTitle,
+    visionContent: (visionContent && String(visionContent).trim()) || DEFAULT_PLATFORM_ABOUT.visionContent,
+    missionTitle: (missionTitle && String(missionTitle).trim()) || DEFAULT_PLATFORM_ABOUT.missionTitle,
+    missionContent: (missionContent && String(missionContent).trim()) || DEFAULT_PLATFORM_ABOUT.missionContent,
+    customSections: Array.isArray(customSections) ? customSections : (db.platformAbout?.customSections || []),
+    updatedAt: new Date().toISOString(),
+  };
+
+  db.platformAbout = updatedAbout;
+  saveDB();
+
+  await savePlatformAboutToFirestore(updatedAbout);
+
+  res.json({
+    success: true,
+    message: 'تم حفظ وتحديث محتوى «عن المنصة والرؤية والرسالة» بنجاح في قاعدة البيانات السحابية.',
+    platformAbout: updatedAbout,
+  });
+});
+
+// Reset Platform About to Default
+app.post('/api/admin/settings/about/reset', async (req, res) => {
+  db.platformAbout = { ...DEFAULT_PLATFORM_ABOUT, updatedAt: new Date().toISOString() };
+  saveDB();
+
+  await savePlatformAboutToFirestore(db.platformAbout);
+
+  res.json({
+    success: true,
+    message: 'تم استعادة المحتوى الافتراضي لـ «عن المنصة والرؤية والرسالة» بنجاح.',
+    platformAbout: db.platformAbout,
+  });
+});
+
+// Update default trial days setting
+app.post('/api/admin/settings/trial', async (req, res) => {
+  const { defaultTrialDays } = req.body;
+  const days = parseInt(String(defaultTrialDays), 10);
+  if (isNaN(days) || days < 1) {
+    return res.status(400).json({ error: 'يرجى إدخال عدد أيام تجريبية صالح (يوم واحد على الأقل)' });
+  }
+
+  if (!db.settings) {
+    db.settings = { autoApproveNewUsers: true, defaultTrialDays: 7, trialPolicyEnabled: true };
+  }
+  db.settings.defaultTrialDays = days;
+  saveDB();
+
+  await saveSettingsToFirestore({
+    autoApproveNewUsers: db.settings.autoApproveNewUsers !== false,
+    defaultTrialDays: days,
+    trialPolicyEnabled: true,
+  });
+
+  res.json({
+    success: true,
+    defaultTrialDays: days,
+    message: `تم تحديد الفترة التجريبية الافتراضية للحسابات الجديدة إلى ${days} أيام بنجاح وحفظها سحابياً.`,
   });
 });
 
@@ -506,10 +1484,17 @@ app.get('/api/admin/settings', (req, res) => {
 app.post('/api/admin/settings/auto-approve', (req, res) => {
   const { enabled } = req.body;
   if (!db.settings) {
-    db.settings = { autoApproveNewUsers: true };
+    db.settings = { autoApproveNewUsers: true, defaultTrialDays: 7, trialPolicyEnabled: true };
   }
   db.settings.autoApproveNewUsers = Boolean(enabled);
   saveDB();
+
+  saveSettingsToFirestore({
+    autoApproveNewUsers: db.settings.autoApproveNewUsers,
+    defaultTrialDays: db.settings.defaultTrialDays || 7,
+    trialPolicyEnabled: true,
+  }).catch((e) => console.error('Error saving settings to Firestore:', e));
+
   res.json({
     success: true,
     autoApprove: db.settings.autoApproveNewUsers,
@@ -522,27 +1507,41 @@ app.post('/api/admin/settings/auto-approve', (req, res) => {
 // Auto-Approve ALL Pending Users at once
 app.post('/api/admin/users/auto-approve-all', async (req, res) => {
   const pendingUsers = db.users.filter((u) => u.status === 'pending');
-  const now = new Date().toISOString();
+  const now = new Date();
+  const defaultDays = db.settings?.defaultTrialDays || 7;
+
   for (const user of pendingUsers) {
     user.status = 'approved';
-    user.reviewedAt = now;
-    updateUserInFirestore(user.id, { status: 'approved', reviewedAt: now }).catch((err) => {
+    user.reviewedAt = now.toISOString();
+    user.subscriptionStatus = 'trial';
+    user.trialDays = defaultDays;
+    user.trialStartedAt = now.toISOString();
+    user.trialEndsAt = new Date(now.getTime() + defaultDays * 24 * 60 * 60 * 1000).toISOString();
+
+    updateUserInFirestore(user.id, {
+      status: 'approved',
+      reviewedAt: user.reviewedAt,
+      subscriptionStatus: 'trial',
+      trialDays: defaultDays,
+      trialStartedAt: user.trialStartedAt,
+      trialEndsAt: user.trialEndsAt,
+    }).catch((err) => {
       console.error('Firestore bulk update error:', err);
     });
   }
   saveDB();
-  const safeUsers = db.users.map(({ password, recoveryCode, ...rest }) => rest);
+  const safeUsers = db.users.map(toSafeUser);
   res.json({
     success: true,
     count: pendingUsers.length,
-    message: `تم قبول واعتماد جميع الطلبات المعلقة (${pendingUsers.length}) بنجاح وتصريحهم للشات!`,
+    message: `تم قبول واعتماد جميع الطلبات المعلقة (${pendingUsers.length}) بنجاح وتفعيل الفترة التجريبية (${defaultDays} أيام)!`,
     users: safeUsers,
   });
 });
 
-// Get all users
+// Get all users with real-time trial and subscription calculations
 app.get('/api/admin/users', (req, res) => {
-  const safeUsers = db.users.map(({ password, recoveryCode, ...rest }) => rest);
+  const safeUsers = db.users.map(toSafeUser);
   res.json({ users: safeUsers });
 });
 
@@ -562,31 +1561,239 @@ app.post('/api/admin/users/:id/status', async (req, res) => {
     return res.status(404).json({ error: 'المستخدم غير موجود' });
   }
 
+  const now = new Date();
   user.status = status;
-  user.reviewedAt = new Date().toISOString();
+  user.reviewedAt = now.toISOString();
+
+  // If approved and has no trial yet, allocate default trial
+  if (status === 'approved') {
+    if (!user.isSubscribed) {
+      user.subscriptionStatus = 'trial';
+      const days = user.trialDays || db.settings?.defaultTrialDays || 7;
+      user.trialDays = days;
+      user.trialStartedAt = user.trialStartedAt || now.toISOString();
+      if (!user.trialEndsAt || new Date(user.trialEndsAt).getTime() <= now.getTime()) {
+        user.trialEndsAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
+      }
+    }
+  }
+
   saveDB();
-  updateUserInFirestore(user.id, { status: user.status, reviewedAt: user.reviewedAt }).catch((err) => {
+  updateUserInFirestore(user.id, {
+    status: user.status,
+    reviewedAt: user.reviewedAt,
+    subscriptionStatus: user.subscriptionStatus,
+    trialDays: user.trialDays,
+    trialStartedAt: user.trialStartedAt,
+    trialEndsAt: user.trialEndsAt,
+  }).catch((err) => {
     console.error(`Firestore update error for ${user.id}:`, err);
   });
 
-  const safeUsers = db.users.map(({ password, recoveryCode, ...rest }) => rest);
+  const safeUsers = db.users.map(toSafeUser);
   res.json({
     message: `تم تحديث حالة المستخدم "${user.fullName || user.username}" إلى: ${
       status === 'approved'
-        ? 'مقبول (مصرّح للشات)'
+        ? 'مقبول ومصرّح لاستخدام البوت'
         : status === 'rejected'
-        ? 'مرفوض (ممنوع من الشات)'
+        ? 'مرفوض (ممنوع من الاستخدام)'
         : 'قيد المراجعة'
     }`,
-    user: {
-      id: user.id,
-      username: user.username,
-      fullName: user.fullName,
-      phone: user.phone,
-      status: user.status,
-      role: user.role,
-      reviewedAt: user.reviewedAt,
-    },
+    user: toSafeUser(user),
+    users: safeUsers,
+  });
+});
+
+// Set / Toggle User Subscription (Activate full subscription or deactivate)
+app.post('/api/admin/users/:id/subscription', async (req, res) => {
+  const id = String(req.params.id).trim();
+  const { isSubscribed, plan } = req.body;
+
+  const user = db.users.find(
+    (u) => u.id === id || u.username.toLowerCase() === id.toLowerCase()
+  );
+  if (!user) {
+    return res.status(404).json({ error: 'المستخدم غير موجود' });
+  }
+
+  const subscribeActive = Boolean(isSubscribed);
+  user.isSubscribed = subscribeActive;
+
+  if (subscribeActive) {
+    user.status = 'approved';
+    user.subscriptionStatus = 'active';
+    user.subscribedAt = new Date().toISOString();
+    user.subscriptionPlan = plan || 'اشتراك كامل معتمد';
+    user.frozenAt = undefined;
+    user.freezeReason = undefined;
+  } else {
+    // If deactivated, check if trial is still valid or freeze
+    user.subscribedAt = undefined;
+    user.subscriptionPlan = undefined;
+    const check = checkAndUpdateUserTrialStatus(user, false);
+    user.subscriptionStatus = check.subscriptionStatus;
+    user.status = check.isFrozen ? 'frozen' : 'approved';
+  }
+
+  saveDB();
+  await updateUserInFirestore(user.id, {
+    isSubscribed: user.isSubscribed,
+    subscriptionStatus: user.subscriptionStatus,
+    status: user.status,
+    subscribedAt: user.subscribedAt || '',
+    subscriptionPlan: user.subscriptionPlan || '',
+    frozenAt: user.frozenAt || '',
+    freezeReason: user.freezeReason || '',
+  });
+
+  const safeUsers = db.users.map(toSafeUser);
+  res.json({
+    success: true,
+    message: subscribeActive
+      ? `تم تفعيل الاشتراك الكامل للمستخدم "${user.fullName || user.username}" بنجاح وتصريحه بالكامل!`
+      : `تم إلغاء الاشتراك الكامل للمستخدم "${user.fullName || user.username}".`,
+    user: toSafeUser(user),
+    users: safeUsers,
+  });
+});
+
+// Customize or Extend Trial Period for a Specific User
+app.post('/api/admin/users/:id/trial', async (req, res) => {
+  const id = String(req.params.id).trim();
+  const { trialDays, extendDays, customEndDate } = req.body;
+
+  const user = db.users.find(
+    (u) => u.id === id || u.username.toLowerCase() === id.toLowerCase()
+  );
+  if (!user) {
+    return res.status(404).json({ error: 'المستخدم غير موجود' });
+  }
+
+  const now = Date.now();
+  let newEndDate: Date;
+
+  if (customEndDate) {
+    newEndDate = new Date(customEndDate);
+  } else if (extendDays && !isNaN(Number(extendDays))) {
+    const baseTime = user.trialEndsAt && new Date(user.trialEndsAt).getTime() > now
+      ? new Date(user.trialEndsAt).getTime()
+      : now;
+    newEndDate = new Date(baseTime + Number(extendDays) * 24 * 60 * 60 * 1000);
+  } else if (trialDays && !isNaN(Number(trialDays))) {
+    newEndDate = new Date(now + Number(trialDays) * 24 * 60 * 60 * 1000);
+  } else {
+    return res.status(400).json({ error: 'يرجى تحديد عدد الأيام أو تاريخ انتهاء الفترة التجريبية' });
+  }
+
+  user.trialEndsAt = newEndDate.toISOString();
+  user.trialDays = Math.max(1, Math.round((newEndDate.getTime() - now) / (24 * 60 * 60 * 1000)));
+  user.subscriptionStatus = 'trial';
+  user.status = 'approved';
+  user.frozenAt = undefined;
+  user.freezeReason = undefined;
+
+  saveDB();
+  await updateUserInFirestore(user.id, {
+    trialEndsAt: user.trialEndsAt,
+    trialDays: user.trialDays,
+    subscriptionStatus: 'trial',
+    status: 'approved',
+    frozenAt: '',
+    freezeReason: '',
+  });
+
+  const safeUsers = db.users.map(toSafeUser);
+  res.json({
+    success: true,
+    message: `تم تحديث وتمديد الفترة التجريبية للمستخدم "${user.fullName || user.username}" حتى ${newEndDate.toLocaleDateString('ar-EG')} وتنشيط حسابه بنجاح.`,
+    user: toSafeUser(user),
+    users: safeUsers,
+  });
+});
+
+// Freeze User Account Manually
+app.post('/api/admin/users/:id/freeze', async (req, res) => {
+  const id = String(req.params.id).trim();
+  const { reason } = req.body;
+
+  const user = db.users.find(
+    (u) => u.id === id || u.username.toLowerCase() === id.toLowerCase()
+  );
+  if (!user) {
+    return res.status(404).json({ error: 'المستخدم غير موجود' });
+  }
+
+  user.status = 'frozen';
+  user.subscriptionStatus = 'frozen';
+  user.frozenAt = new Date().toISOString();
+  user.freezeReason = reason || 'تم تجميد الحساب من قبل الإدارة المركزية لحين الاشتراك';
+
+  saveDB();
+  await updateUserInFirestore(user.id, {
+    status: 'frozen',
+    subscriptionStatus: 'frozen',
+    frozenAt: user.frozenAt,
+    freezeReason: user.freezeReason,
+  });
+
+  const safeUsers = db.users.map(toSafeUser);
+  res.json({
+    success: true,
+    message: `تم تجميد حساب المستخدم "${user.fullName || user.username}" بنجاح.`,
+    user: toSafeUser(user),
+    users: safeUsers,
+  });
+});
+
+// Unfreeze User Account
+app.post('/api/admin/users/:id/unfreeze', async (req, res) => {
+  const id = String(req.params.id).trim();
+  const { grantTrialDays, activateSubscription } = req.body;
+
+  const user = db.users.find(
+    (u) => u.id === id || u.username.toLowerCase() === id.toLowerCase()
+  );
+  if (!user) {
+    return res.status(404).json({ error: 'المستخدم غير موجود' });
+  }
+
+  if (activateSubscription) {
+    user.isSubscribed = true;
+    user.subscriptionStatus = 'active';
+    user.status = 'approved';
+    user.subscribedAt = new Date().toISOString();
+    user.subscriptionPlan = 'اشتراك معتمد';
+  } else {
+    const days = grantTrialDays && !isNaN(Number(grantTrialDays))
+      ? Number(grantTrialDays)
+      : (db.settings?.defaultTrialDays || 7);
+    user.trialDays = days;
+    user.trialStartedAt = new Date().toISOString();
+    user.trialEndsAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+    user.subscriptionStatus = 'trial';
+    user.status = 'approved';
+  }
+
+  user.frozenAt = undefined;
+  user.freezeReason = undefined;
+
+  saveDB();
+  await updateUserInFirestore(user.id, {
+    isSubscribed: Boolean(user.isSubscribed),
+    subscriptionStatus: user.subscriptionStatus,
+    status: user.status,
+    trialDays: user.trialDays,
+    trialStartedAt: user.trialStartedAt || '',
+    trialEndsAt: user.trialEndsAt || '',
+    frozenAt: '',
+    freezeReason: '',
+  });
+
+  const safeUsers = db.users.map(toSafeUser);
+  res.json({
+    success: true,
+    message: `تم فك تجميد حساب المستخدم "${user.fullName || user.username}" وتنشيطه بنجاح.`,
+    user: toSafeUser(user),
     users: safeUsers,
   });
 });
@@ -608,7 +1815,6 @@ app.delete('/api/admin/users/:id', async (req, res) => {
 
 // PDF Parsing & AI Legal Extraction endpoint powered directly by Gemini
 app.post('/api/admin/parse-pdf', async (req, res) => {
-  let parser: any = null;
   try {
     const { base64Data, fileName } = req.body;
     if (!base64Data) {
@@ -625,20 +1831,12 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
     let estimatedPages = 1;
     try {
       const buffer = Buffer.from(base64Data, 'base64');
-      parser = new PDFParse({ data: buffer });
-      const info = await parser.getText();
-      estimatedPages = info?.total || info?.pages?.length || 1;
-    } catch {
-      // Non-blocking if buffer parsing fails on scanned/corrupted PDFs
-    } finally {
-      if (parser && typeof parser.destroy === 'function') {
-        try {
-          await parser.destroy();
-        } catch {
-          // ignore
-        }
-        parser = null;
+      const matches = buffer.toString('binary').match(/\/Type\s*\/Page[^s]/g);
+      if (matches && matches.length > 0) {
+        estimatedPages = matches.length;
       }
+    } catch {
+      // Non-blocking if buffer parsing fails
     }
 
     // 1. Dedicated AI extraction via Gemini
@@ -747,34 +1945,34 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
       }
     }
 
-    // 2. Fallback to basic text parser if all Gemini models failed or had quota limits
+    // 2. Fallback to basic text stream extraction from buffer if Gemini models failed
     if (!extractedData || !extractedData.content) {
-      console.warn('[AI-PDF] Gemini models unavailable or quota exceeded, attempting local parser fallback...');
+      console.warn('[AI-PDF] Gemini models unavailable or quota exceeded, attempting text stream fallback...');
       try {
         const buffer = Buffer.from(base64Data, 'base64');
-        parser = new PDFParse({ data: buffer });
-        const parsedText = await parser.getText();
-        const rawText = parsedText?.text || '';
-        estimatedPages = parsedText?.total || parsedText?.pages?.length || estimatedPages;
-
-        if (rawText.trim()) {
+        const binaryStr = buffer.toString('latin1');
+        const textBlocks: string[] = [];
+        const textRegex = /BT\s*([\s\S]*?)\s*ET/g;
+        let m;
+        while ((m = textRegex.exec(binaryStr)) !== null) {
+          const rawBlock = m[1];
+          const strMatches = rawBlock.match(/\(([^)]+)\)/g);
+          if (strMatches) {
+            const cleanStr = strMatches.map((s) => s.slice(1, -1)).join(' ');
+            if (cleanStr.trim()) textBlocks.push(cleanStr);
+          }
+        }
+        if (textBlocks.length > 0) {
+          const rawText = textBlocks.join('\n');
           extractedData = {
             title: cleanTitle,
             category: 'جمارك',
-            content: rawText.trim(),
-            summary: 'تم استخراج النصوص بواسطة القارئ النصي البديل.',
+            content: rawText.slice(0, 50000).trim(),
+            summary: 'تم استخراج النصوص التشريعية المتاحة من الملف.',
           };
         }
       } catch (fallbackErr) {
-        console.error('[AI-PDF] Fallback parser error:', fallbackErr);
-      } finally {
-        if (parser && typeof parser.destroy === 'function') {
-          try {
-            await parser.destroy();
-          } catch {
-            // ignore
-          }
-        }
+        console.error('[AI-PDF] Fallback extractor error:', fallbackErr);
       }
     }
 
@@ -975,13 +2173,35 @@ app.post('/api/chat', async (req, res) => {
     return res.status(400).json({ error: 'نص السؤال مطلوب' });
   }
 
-  // Verify that the user is approved
+  // Verify that the user is approved and not frozen/expired
   if (username) {
     const user = db.users.find((u) => u.username.toLowerCase() === username.toLowerCase());
-    if (user && user.status !== 'approved') {
-      return res.status(403).json({
-        error: 'عذراً، استخدام البوت متاح فقط للمستخدمين المقبولين من قِبل الإدارة.',
-      });
+    if (user) {
+      if (user.status === 'pending') {
+        return res.status(403).json({
+          error: 'حسابك ما زال قيد المراجعة الإدارية. يرجى الانتظار لحين اعتماد حسابك.',
+          status: 'pending',
+        });
+      }
+      if (user.status === 'rejected') {
+        return res.status(403).json({
+          error: 'تم رفض طلب الحساب. لا يمكنك استخدام الشات.',
+          status: 'rejected',
+        });
+      }
+
+      // Check trial status in real-time
+      const trialCheck = checkAndUpdateUserTrialStatus(user, true);
+      if (trialCheck.isFrozen) {
+        return res.status(403).json({
+          error: 'عذراً، تم تجميد حسابك لانتهاء الفترة التجريبية المحددة دون اشتراك. يرجى الاشتراك لتفعيل الحساب ومتابعة الاستخدام.',
+          status: 'frozen',
+          isFrozen: true,
+          subscriptionStatus: 'frozen',
+          freezeReason: user.freezeReason,
+          trialEndsAt: user.trialEndsAt,
+        });
+      }
     }
   }
 
@@ -1053,6 +2273,162 @@ ${fullCatalog}`;
     const fallbackAnswer = generateKnowledgeFallback(message, db.laws);
     return res.json({ reply: fallbackAnswer, isFallback: true });
   }
+});
+
+// ----------------------------------------------------
+// Conversations History API Endpoints (سجل المحادثات)
+// ----------------------------------------------------
+
+// Get conversations for a user
+app.get('/api/conversations', async (req, res) => {
+  const userId = req.query.userId as string | undefined;
+
+  if (!db.conversations) {
+    db.conversations = [];
+  }
+
+  // Filter from memory/JSON DB first
+  let userConvs = db.conversations;
+  if (userId) {
+    userConvs = userConvs.filter((c) => c.userId === userId);
+  }
+
+  // Also check Firestore in parallel if needed
+  try {
+    const cloudConvs = await fetchConversationsFromFirestore(userId);
+    if (cloudConvs && cloudConvs.length > 0) {
+      // Merge with in-memory
+      const map = new Map<string, StoredConversation>();
+      for (const c of cloudConvs) {
+        map.set(c.id, c);
+      }
+      for (const c of userConvs) {
+        if (!map.has(c.id)) {
+          map.set(c.id, c);
+        }
+      }
+      userConvs = Array.from(map.values()).sort(
+        (a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime()
+      );
+    }
+  } catch (e) {
+    console.warn('Could not fetch cloud conversations, using local DB:', e);
+  }
+
+  res.json({ conversations: userConvs });
+});
+
+// Create or update a conversation
+app.post('/api/conversations', async (req, res) => {
+  const { id, userId, title, messages, createdAt, updatedAt } = req.body;
+
+  if (!id || !userId) {
+    return res.status(400).json({ error: 'معرف المحادثة ومعرف المستخدم مطلوبان' });
+  }
+
+  if (!db.conversations) {
+    db.conversations = [];
+  }
+
+  const existingIdx = db.conversations.findIndex((c) => c.id === id);
+  const convObj: StoredConversation = {
+    id,
+    userId,
+    title: title || 'محادثة جديدة',
+    messages: Array.isArray(messages) ? messages : [],
+    createdAt: createdAt || (existingIdx !== -1 ? db.conversations[existingIdx].createdAt : new Date().toISOString()),
+    updatedAt: updatedAt || new Date().toISOString(),
+  };
+
+  if (existingIdx !== -1) {
+    db.conversations[existingIdx] = convObj;
+  } else {
+    db.conversations.unshift(convObj);
+  }
+
+  saveDB();
+  // Async sync to Firestore
+  saveConversationToFirestore(convObj).catch((e) => console.error('Failed to save conversation to Firestore:', e));
+
+  res.status(200).json({ success: true, conversation: convObj });
+});
+
+// Rename conversation title
+app.put('/api/conversations/:id/title', async (req, res) => {
+  const { id } = req.params;
+  const { title } = req.body;
+
+  if (!title || typeof title !== 'string') {
+    return res.status(400).json({ error: 'العنوان الجديد مطلوب' });
+  }
+
+  if (!db.conversations) {
+    db.conversations = [];
+  }
+
+  const existing = db.conversations.find((c) => c.id === id);
+  if (existing) {
+    existing.title = title.trim();
+    existing.updatedAt = new Date().toISOString();
+    saveDB();
+    saveConversationToFirestore(existing).catch((e) => console.error('Failed to update title in Firestore:', e));
+    return res.json({ success: true, conversation: existing });
+  }
+
+  // If not found in memory, try updating Firestore
+  try {
+    const cloudConvs = await fetchConversationsFromFirestore();
+    const cloudConv = cloudConvs?.find((c) => c.id === id);
+    if (cloudConv) {
+      cloudConv.title = title.trim();
+      cloudConv.updatedAt = new Date().toISOString();
+      await saveConversationToFirestore(cloudConv);
+      db.conversations.unshift(cloudConv);
+      saveDB();
+      return res.json({ success: true, conversation: cloudConv });
+    }
+  } catch (e) {
+    console.error('Error updating cloud conversation:', e);
+  }
+
+  res.status(404).json({ error: 'المحادثة غير موجودة' });
+});
+
+// Delete single conversation
+app.delete('/api/conversations/:id', async (req, res) => {
+  const { id } = req.params;
+
+  if (!db.conversations) {
+    db.conversations = [];
+  }
+
+  const idx = db.conversations.findIndex((c) => c.id === id);
+  if (idx !== -1) {
+    db.conversations.splice(idx, 1);
+    saveDB();
+  }
+
+  // Delete from Firestore
+  deleteConversationFromFirestore(id).catch((e) => console.error('Failed to delete from Firestore:', e));
+
+  res.json({ success: true, deletedId: id });
+});
+
+// Clear all conversations for a user
+app.delete('/api/conversations', async (req, res) => {
+  const userId = req.query.userId as string;
+  if (!userId) {
+    return res.status(400).json({ error: 'معرف المستخدم مطلوب لحذف المحادثات' });
+  }
+
+  if (db.conversations) {
+    db.conversations = db.conversations.filter((c) => c.userId !== userId);
+    saveDB();
+  }
+
+  clearUserConversationsFromFirestore(userId).catch((e) => console.error('Failed to clear cloud conversations:', e));
+
+  res.json({ success: true, message: 'تم مسح سجل المحادثات بنجاح' });
 });
 
 // Helper to chunk legal texts into articles, clauses, and sections

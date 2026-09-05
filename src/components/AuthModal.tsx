@@ -29,10 +29,23 @@ import { User } from '../types';
 interface AuthModalProps {
   onLoginSuccess: (user: User) => void;
   onGoToAdminLogin: () => void;
+  initialMode?: 'login' | 'register';
+  onBackToHome?: () => void;
 }
 
-export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, onGoToAdminLogin }) => {
-  const [mode, setMode] = useState<'login' | 'register' | 'forgot'>('login');
+export const AuthModal: React.FC<AuthModalProps> = ({
+  onLoginSuccess,
+  onGoToAdminLogin,
+  initialMode = 'login',
+  onBackToHome,
+}) => {
+  const [mode, setMode] = useState<'login' | 'register' | 'forgot'>(initialMode);
+
+  React.useEffect(() => {
+    if (initialMode) {
+      setMode(initialMode);
+    }
+  }, [initialMode]);
 
   // Common fields
   const [username, setUsername] = useState('');
@@ -326,6 +339,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, onGoToAdmi
                         : 'سجل بياناتك لإرسالها للتدقيق والموافقة من الإدارة'}
                     </p>
                   </div>
+                  {onBackToHome && (
+                    <button
+                      type="button"
+                      onClick={onBackToHome}
+                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <ArrowRight className="w-3.5 h-3.5" />
+                      <span>الرئيسية</span>
+                    </button>
+                  )}
                 </div>
 
                 {/* Modern Pill / Segmented Control */}
@@ -782,61 +805,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onLoginSuccess, onGoToAdmi
                 </div>
               </form>
             )}
-
-            {/* Quick Demo Pre-filled Accounts */}
-            {mode !== 'forgot' && (
-              <div className="mt-6 pt-5 border-t border-slate-100">
-                <p className="text-[11px] text-slate-500 font-medium mb-2.5 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-[#b08d24]" />
-                  <span>حسابات نموذجية جاهزة للاختبار الفوري:</span>
-                </p>
-                <div className="flex flex-wrap gap-2 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setUsername('tariq_pal');
-                      setPassword('password123');
-                      setMode('login');
-                      resetStates();
-                    }}
-                    className="px-3 py-1.5 bg-emerald-50 text-emerald-900 border border-emerald-200/80 rounded-lg text-[11px] font-medium hover:bg-emerald-100/70 transition-colors flex items-center gap-1.5"
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                    حساب معتمد: <strong>tariq_pal</strong>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setUsername('ahmad_khalil');
-                      setPassword('password123');
-                      setMode('login');
-                      resetStates();
-                    }}
-                    className="px-3 py-1.5 bg-amber-50 text-amber-900 border border-amber-200/80 rounded-lg text-[11px] font-medium hover:bg-amber-100/70 transition-colors flex items-center gap-1.5"
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                    حساب معلق: <strong>ahmad_khalil</strong>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Footer: Clean Minimal Admin Portal Transition */}
-          <div className="mt-8 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-            <span className="text-[11px]">هل تمتلك صلاحيات الإشراف والتدقيق؟</span>
-            <button
-              id="auth-switch-to-admin-btn"
-              type="button"
-              onClick={onGoToAdminLogin}
-              className="font-bold text-[#0f2a24] hover:text-emerald-800 flex items-center gap-1 transition-colors"
-            >
-              دخول بوابة المسؤولين
-              <ArrowLeft className="w-3.5 h-3.5" />
-            </button>
           </div>
         </div>
-
       </div>
     </div>
   );

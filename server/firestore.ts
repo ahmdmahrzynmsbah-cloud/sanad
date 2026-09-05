@@ -20,9 +20,22 @@ export interface StoredUser {
   recoveryCode?: string;
   password: string;
   role: 'user' | 'admin';
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'frozen';
   createdAt: string;
   reviewedAt?: string;
+
+  // Subscription & Trial Policy
+  subscriptionStatus?: 'trial' | 'active' | 'frozen';
+  trialDays?: number;
+  trialStartedAt?: string;
+  trialEndsAt?: string;
+  isSubscribed?: boolean;
+  subscriptionPlan?: string;
+  subscribedAt?: string;
+  frozenAt?: string;
+  freezeReason?: string;
+  remainingTrialDays?: number;
+  remainingTrialHours?: number;
 }
 
 export interface StoredLaw {
@@ -117,10 +130,77 @@ export async function saveUserToFirestore(user: StoredUser): Promise<boolean> {
       status: user.status,
       createdAt: user.createdAt,
       reviewedAt: user.reviewedAt || '',
+      subscriptionStatus: user.subscriptionStatus || 'trial',
+      trialDays: typeof user.trialDays === 'number' ? user.trialDays : 7,
+      trialStartedAt: user.trialStartedAt || user.createdAt,
+      trialEndsAt: user.trialEndsAt || '',
+      isSubscribed: Boolean(user.isSubscribed),
+      subscriptionPlan: user.subscriptionPlan || '',
+      subscribedAt: user.subscribedAt || '',
+      frozenAt: user.frozenAt || '',
+      freezeReason: user.freezeReason || '',
     });
     return true;
   } catch (err) {
     console.error(`Error saving user ${user.id} to Firestore:`, err);
+    return false;
+  }
+}
+
+export interface StoredSettings {
+  autoApproveNewUsers: boolean;
+  defaultTrialDays: number;
+  trialPolicyEnabled?: boolean;
+  systemName?: string;
+  systemSubtitle?: string;
+  systemBadge?: string;
+  logoType?: 'preset' | 'url' | 'upload';
+  logoPreset?: string;
+  logoUrl?: string;
+  logoAccentColor?: string;
+
+  // Founder & Site Overview
+  founderName?: string;
+  founderTitle?: string;
+  founderBio?: string;
+  founderPhotoUrl?: string;
+  founderQuote?: string;
+  siteOverview?: string;
+}
+
+export async function fetchSettingsFromFirestore(): Promise<StoredSettings | null> {
+  const db = initFirestore();
+  if (!db) return null;
+
+  try {
+    const settingsCol = collection(db, 'system_settings');
+    const snapshot = await getDocs(settingsCol);
+    if (snapshot.empty) {
+      return null;
+    }
+    let found: StoredSettings | null = null;
+    snapshot.forEach((docSnap) => {
+      if (docSnap.id === 'general') {
+        found = docSnap.data() as StoredSettings;
+      }
+    });
+    return found;
+  } catch (err) {
+    console.error('Error fetching settings from Firestore:', err);
+    return null;
+  }
+}
+
+export async function saveSettingsToFirestore(settings: StoredSettings): Promise<boolean> {
+  const db = initFirestore();
+  if (!db) return false;
+
+  try {
+    const settingsRef = doc(db, 'system_settings', 'general');
+    await setDoc(settingsRef, settings, { merge: true });
+    return true;
+  } catch (err) {
+    console.error('Error saving settings to Firestore:', err);
     return false;
   }
 }
@@ -296,13 +376,356 @@ export async function deleteCategoryFromFirestore(categoryId: string): Promise<b
   }
 }
 
+// ----------------------------------------------------
+// Supervisors Management (إدارة المشرفين)
+// ----------------------------------------------------
+export interface StoredSupervisor {
+  id: string;
+  name: string;
+  title: string;
+  bio: string;
+  photoUrl?: string;
+  email?: string;
+  phone?: string;
+  department?: string;
+  order?: number;
+  createdAt: string;
+}
+
+export async function fetchSupervisorsFromFirestore(): Promise<StoredSupervisor[] | null> {
+  const db = initFirestore();
+  if (!db) return null;
+
+  try {
+    const col = collection(db, 'supervisors');
+    const snapshot = await getDocs(col);
+    if (snapshot.empty) {
+      return [];
+    }
+    const items: StoredSupervisor[] = [];
+    snapshot.forEach((docSnap) => {
+      items.push({
+        id: docSnap.id,
+        ...(docSnap.data() as StoredSupervisor),
+      });
+    });
+    // sort by order if present
+    items.sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
+    return items;
+  } catch (err) {
+    console.error('Error fetching supervisors from Firestore:', err);
+    return null;
+  }
+}
+
+export async function saveSupervisorToFirestore(supervisor: StoredSupervisor): Promise<boolean> {
+  const db = initFirestore();
+  if (!db) return false;
+
+  try {
+    const docRef = doc(db, 'supervisors', supervisor.id);
+    await setDoc(docRef, {
+      id: supervisor.id,
+      name: supervisor.name,
+      title: supervisor.title,
+      bio: supervisor.bio,
+      photoUrl: supervisor.photoUrl || '',
+      email: supervisor.email || '',
+      phone: supervisor.phone || '',
+      department: supervisor.department || '',
+      order: typeof supervisor.order === 'number' ? supervisor.order : 1,
+      createdAt: supervisor.createdAt || new Date().toISOString(),
+    });
+    return true;
+  } catch (err) {
+    console.error(`Error saving supervisor ${supervisor.id} to Firestore:`, err);
+    return false;
+  }
+}
+
+export async function deleteSupervisorFromFirestore(supervisorId: string): Promise<boolean> {
+  const db = initFirestore();
+  if (!db) return false;
+
+  try {
+    const docRef = doc(db, 'supervisors', supervisorId);
+    await deleteDoc(docRef);
+    return true;
+  } catch (err) {
+    console.error(`Error deleting supervisor ${supervisorId} from Firestore:`, err);
+    return false;
+  }
+}
+
+// ----------------------------------------------------
+// Related Sites Management (مواقع ذات صلة)
+// ----------------------------------------------------
+export interface StoredRelatedSite {
+  id: string;
+  title: string;
+  description: string;
+  url: string;
+  category: string;
+  iconType?: string;
+  isOfficial?: boolean;
+  createdAt: string;
+}
+
+export async function fetchRelatedSitesFromFirestore(): Promise<StoredRelatedSite[] | null> {
+  const db = initFirestore();
+  if (!db) return null;
+
+  try {
+    const col = collection(db, 'related_sites');
+    const snapshot = await getDocs(col);
+    if (snapshot.empty) {
+      return [];
+    }
+    const items: StoredRelatedSite[] = [];
+    snapshot.forEach((docSnap) => {
+      items.push({
+        id: docSnap.id,
+        ...(docSnap.data() as StoredRelatedSite),
+      });
+    });
+    return items;
+  } catch (err) {
+    console.error('Error fetching related sites from Firestore:', err);
+    return null;
+  }
+}
+
+export async function saveRelatedSiteToFirestore(site: StoredRelatedSite): Promise<boolean> {
+  const db = initFirestore();
+  if (!db) return false;
+
+  try {
+    const docRef = doc(db, 'related_sites', site.id);
+    await setDoc(docRef, {
+      id: site.id,
+      title: site.title,
+      description: site.description,
+      url: site.url,
+      category: site.category || 'مواقع رسمية',
+      iconType: site.iconType || 'landmark',
+      isOfficial: site.isOfficial ?? true,
+      createdAt: site.createdAt || new Date().toISOString(),
+    });
+    return true;
+  } catch (err) {
+    console.error(`Error saving related site ${site.id} to Firestore:`, err);
+    return false;
+  }
+}
+
+export async function deleteRelatedSiteFromFirestore(siteId: string): Promise<boolean> {
+  const db = initFirestore();
+  if (!db) return false;
+
+  try {
+    const docRef = doc(db, 'related_sites', siteId);
+    await deleteDoc(docRef);
+    return true;
+  } catch (err) {
+    console.error(`Error deleting related site ${siteId} from Firestore:`, err);
+    return false;
+  }
+}
+
+// ----------------------------------------------------
+// Platform About & Vision/Mission Management (عن المنصة والرؤية والرسالة)
+// ----------------------------------------------------
+export interface StoredAboutCard {
+  id: string;
+  title: string;
+  content: string;
+  icon?: string;
+  order?: number;
+  isActive?: boolean;
+  createdAt?: string;
+}
+
+export interface StoredPlatformAbout {
+  overviewTitle?: string;
+  overviewContent: string;
+  visionTitle?: string;
+  visionContent: string;
+  missionTitle?: string;
+  missionContent: string;
+  customSections?: StoredAboutCard[];
+  updatedAt?: string;
+}
+
+export const DEFAULT_PLATFORM_ABOUT: StoredPlatformAbout = {
+  overviewTitle: 'عن منصة «سَنَد»',
+  overviewContent:
+    '«سَنَد» هي منصتك القانونية والمالية الذكية الأولى في فلسطين، صُممت لتكون مرجعك الموثوق في الضرائب والقوانين والتشريعات والتحليل المالي والمساعدة في التدقيق. نحن نقدم أدوات ذكية وأنظمة متطورة لدعم المدققين والمحاسبين، وشركات التدقيق ومكاتب التدقيق والمحاسبة، والمدراء الماليين والمهتمين من القطاع الخاص، مع تحديثات مستمرة لتسهيل أعمالكم وتعزيز كفاءتكم التشغيلية.',
+  visionTitle: 'رؤيتنا (Vision)',
+  visionContent:
+    'أن نكون المنظومة الذكية الأولى والرائدة في فلسطين والمنطقة، التي تربط التشريعات والقوانين بالحلول المالية والمحاسبية المتقدمة، لتمكين قطاع الأعمال والمحاسبين من اتخاذ قرارات دقيقة بكل ثقة.',
+  missionTitle: 'رسالتنا (Mission)',
+  missionContent:
+    'تمكين المحاسبين، ومكاتب المحاسبة، والشركات، والقطاع الخاص من خلال توفير منصة ذكية تدمج قواعد المعرفة القانونية والضريبية بالذكاء الاصطناعي والأدوات المالية، لتوفير الوقت، وضمان الامتثال، وتبسيط أعقد الإجراءات الإدارية والقانونية بدقة متناهية ومصادر موثوقة.',
+  customSections: [],
+  updatedAt: new Date().toISOString(),
+};
+
+export async function fetchPlatformAboutFromFirestore(): Promise<StoredPlatformAbout | null> {
+  const db = initFirestore();
+  if (!db) return null;
+
+  try {
+    const docRef = doc(db, 'system_settings', 'platform_about');
+    const docSnap = await getDocs(collection(db, 'system_settings'));
+    let found: StoredPlatformAbout | null = null;
+    docSnap.forEach((snap) => {
+      if (snap.id === 'platform_about') {
+        found = snap.data() as StoredPlatformAbout;
+      }
+    });
+    return found;
+  } catch (err) {
+    console.error('Error fetching platform_about from Firestore:', err);
+    return null;
+  }
+}
+
+export async function savePlatformAboutToFirestore(data: StoredPlatformAbout): Promise<boolean> {
+  const db = initFirestore();
+  if (!db) return false;
+
+  try {
+    const docRef = doc(db, 'system_settings', 'platform_about');
+    await setDoc(docRef, {
+      overviewTitle: data.overviewTitle || DEFAULT_PLATFORM_ABOUT.overviewTitle,
+      overviewContent: data.overviewContent || DEFAULT_PLATFORM_ABOUT.overviewContent,
+      visionTitle: data.visionTitle || DEFAULT_PLATFORM_ABOUT.visionTitle,
+      visionContent: data.visionContent || DEFAULT_PLATFORM_ABOUT.visionContent,
+      missionTitle: data.missionTitle || DEFAULT_PLATFORM_ABOUT.missionTitle,
+      missionContent: data.missionContent || DEFAULT_PLATFORM_ABOUT.missionContent,
+      customSections: data.customSections || [],
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+    return true;
+  } catch (err) {
+    console.error('Error saving platform_about to Firestore:', err);
+    return false;
+  }
+}
+
+// ----------------------------------------------------
+// Conversations History Management (سجل المحادثات)
+// ----------------------------------------------------
+export interface StoredConversation {
+  id: string;
+  userId: string;
+  title: string;
+  messages: Array<{
+    id: string;
+    sender: 'user' | 'bot';
+    text: string;
+    timestamp: string;
+    sources?: string[];
+  }>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function fetchConversationsFromFirestore(userId?: string): Promise<StoredConversation[] | null> {
+  const db = initFirestore();
+  if (!db) return null;
+
+  try {
+    const col = collection(db, 'conversations');
+    const snapshot = await getDocs(col);
+    if (snapshot.empty) {
+      return [];
+    }
+    const items: StoredConversation[] = [];
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data() as StoredConversation;
+      if (!userId || data.userId === userId) {
+        items.push({
+          id: docSnap.id,
+          ...data,
+        });
+      }
+    });
+    // Sort descending by updatedAt
+    items.sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
+    return items;
+  } catch (err) {
+    console.error('Error fetching conversations from Firestore:', err);
+    return null;
+  }
+}
+
+export async function saveConversationToFirestore(conv: StoredConversation): Promise<boolean> {
+  const db = initFirestore();
+  if (!db) return false;
+
+  try {
+    const docRef = doc(db, 'conversations', conv.id);
+    await setDoc(docRef, {
+      id: conv.id,
+      userId: conv.userId,
+      title: conv.title,
+      messages: conv.messages || [],
+      createdAt: conv.createdAt || new Date().toISOString(),
+      updatedAt: conv.updatedAt || new Date().toISOString(),
+    });
+    return true;
+  } catch (err) {
+    console.error(`Error saving conversation ${conv.id} to Firestore:`, err);
+    return false;
+  }
+}
+
+export async function deleteConversationFromFirestore(convId: string): Promise<boolean> {
+  const db = initFirestore();
+  if (!db) return false;
+
+  try {
+    const docRef = doc(db, 'conversations', convId);
+    await deleteDoc(docRef);
+    return true;
+  } catch (err) {
+    console.error(`Error deleting conversation ${convId} from Firestore:`, err);
+    return false;
+  }
+}
+
+export async function clearUserConversationsFromFirestore(userId: string): Promise<boolean> {
+  const db = initFirestore();
+  if (!db) return false;
+
+  try {
+    const col = collection(db, 'conversations');
+    const snapshot = await getDocs(col);
+    const deleteTasks: Promise<void>[] = [];
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data() as StoredConversation;
+      if (data.userId === userId) {
+        deleteTasks.push(deleteDoc(docSnap.ref));
+      }
+    });
+    await Promise.all(deleteTasks);
+    return true;
+  } catch (err) {
+    console.error(`Error clearing conversations for user ${userId} from Firestore:`, err);
+    return false;
+  }
+}
+
 /**
- * Seed initial laws, users, and categories to Firestore if they do not already exist
+ * Seed initial laws, users, categories, supervisors, and related sites to Firestore if they do not already exist
  */
 export async function seedFirestoreIfEmpty(
   initialUsers: StoredUser[],
   initialLaws: StoredLaw[],
-  initialCategories: StoredCategory[]
+  initialCategories: StoredCategory[],
+  initialSupervisors?: StoredSupervisor[],
+  initialRelatedSites?: StoredRelatedSite[]
 ) {
   const db = initFirestore();
   if (!db) return;
@@ -311,15 +734,31 @@ export async function seedFirestoreIfEmpty(
     const lawsCol = collection(db, 'laws');
     const usersCol = collection(db, 'users');
     const catCol = collection(db, 'legal_categories');
+    const supCol = collection(db, 'supervisors');
+    const sitesCol = collection(db, 'related_sites');
+    const settingsCol = collection(db, 'system_settings');
 
     // Check all collections in parallel
-    const [lawSnap, userSnap, catSnap] = await Promise.all([
+    const [lawSnap, userSnap, catSnap, supSnap, siteSnap, settingsSnap] = await Promise.all([
       getDocs(lawsCol),
       getDocs(usersCol),
       getDocs(catCol),
+      getDocs(supCol),
+      getDocs(sitesCol),
+      getDocs(settingsCol),
     ]);
 
     const seedTasks: Promise<any>[] = [];
+
+    let hasAbout = false;
+    settingsSnap.forEach((docSnap) => {
+      if (docSnap.id === 'platform_about') hasAbout = true;
+    });
+
+    if (!hasAbout) {
+      console.log('Seeding default platform_about to Firestore...');
+      seedTasks.push(savePlatformAboutToFirestore(DEFAULT_PLATFORM_ABOUT));
+    }
 
     if (lawSnap.empty) {
       console.log('Seeding initial laws to Firestore cloud database in parallel...');
@@ -334,6 +773,16 @@ export async function seedFirestoreIfEmpty(
     if (catSnap.empty) {
       console.log('Seeding default legal categories to Firestore cloud database in parallel...');
       seedTasks.push(Promise.all(initialCategories.map((cat) => saveCategoryToFirestore(cat))));
+    }
+
+    if (supSnap.empty && initialSupervisors && initialSupervisors.length > 0) {
+      console.log('Seeding default supervisors to Firestore cloud database...');
+      seedTasks.push(Promise.all(initialSupervisors.map((s) => saveSupervisorToFirestore(s))));
+    }
+
+    if (siteSnap.empty && initialRelatedSites && initialRelatedSites.length > 0) {
+      console.log('Seeding default related sites to Firestore cloud database...');
+      seedTasks.push(Promise.all(initialRelatedSites.map((s) => saveRelatedSiteToFirestore(s))));
     }
 
     if (seedTasks.length > 0) {

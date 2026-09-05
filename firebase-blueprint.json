@@ -39,6 +39,69 @@
         "createdAt": { "type": "string", "description": "ISO timestamp of creation" }
       },
       "required": ["id", "name"]
+    },
+    "system_settings": {
+      "description": "Global system configurations, default trial period, branding logo, system name, and founder info",
+      "fields": {
+        "autoApproveNewUsers": { "type": "boolean", "description": "Auto-approve newly registered accounts" },
+        "defaultTrialDays": { "type": "number", "description": "Default trial period in days" },
+        "trialPolicyEnabled": { "type": "boolean", "description": "Whether the trial policy is enforced" },
+        "systemName": { "type": "string", "description": "Display title of the system" },
+        "systemSubtitle": { "type": "string", "description": "Subtitle or ministry description" },
+        "systemBadge": { "type": "string", "description": "State or country badge label" },
+        "logoType": { "type": "string", "enum": ["preset", "url", "upload"], "description": "Logo format" },
+        "logoPreset": { "type": "string", "description": "Preset icon name (e.g. scale, shield, landmark)" },
+        "logoUrl": { "type": "string", "description": "Custom image URL or base64 data URI" },
+        "logoAccentColor": { "type": "string", "description": "Hex color code for icon accent" },
+        "founderName": { "type": "string", "description": "Name of the system founder" },
+        "founderTitle": { "type": "string", "description": "Title/designation of the founder" },
+        "founderBio": { "type": "string", "description": "Biography/introduction of the founder" },
+        "founderPhotoUrl": { "type": "string", "description": "Photo URL of the founder" },
+        "founderQuote": { "type": "string", "description": "Inspiring quote or vision statement from founder" },
+        "siteOverview": { "type": "string", "description": "Detailed overview of the platform and mission" }
+      }
+    },
+    "supervisors": {
+      "description": "System supervisors, legal consultants, and administrative board members",
+      "fields": {
+        "id": { "type": "string", "description": "Unique supervisor document ID" },
+        "name": { "type": "string", "description": "Full name of the supervisor" },
+        "title": { "type": "string", "description": "Job title or legal specialization" },
+        "bio": { "type": "string", "description": "Professional background and brief bio" },
+        "photoUrl": { "type": "string", "description": "Profile picture URL or base64 data URI" },
+        "email": { "type": "string", "description": "Contact email address" },
+        "phone": { "type": "string", "description": "Contact phone number" },
+        "department": { "type": "string", "description": "Department or jurisdiction" },
+        "order": { "type": "number", "description": "Display sorting order" },
+        "createdAt": { "type": "string", "description": "ISO creation timestamp" }
+      },
+      "required": ["id", "name", "title", "bio", "createdAt"]
+    },
+    "related_sites": {
+      "description": "Directory of official related legal, governmental, and financial websites and portals",
+      "fields": {
+        "id": { "type": "string", "description": "Unique site link document ID" },
+        "title": { "type": "string", "description": "Name of the website / institution" },
+        "description": { "type": "string", "description": "Description of the site and services provided" },
+        "url": { "type": "string", "description": "Full valid HTTP/HTTPS link to the site" },
+        "category": { "type": "string", "description": "Category classification (e.g. وزارات, تشريعات, جمارك)" },
+        "iconType": { "type": "string", "description": "Preset icon type or branding style" },
+        "isOfficial": { "type": "boolean", "description": "Whether this is a verified official state portal" },
+        "createdAt": { "type": "string", "description": "ISO creation timestamp" }
+      },
+      "required": ["id", "title", "description", "url", "category", "createdAt"]
+    },
+    "conversations": {
+      "description": "User conversation sessions and chat history",
+      "fields": {
+        "id": { "type": "string", "description": "Unique conversation ID" },
+        "userId": { "type": "string", "description": "User ID owning this conversation" },
+        "title": { "type": "string", "description": "Conversation topic/title" },
+        "messages": { "type": "array", "description": "List of messages in this chat session" },
+        "createdAt": { "type": "string", "description": "ISO timestamp when conversation started" },
+        "updatedAt": { "type": "string", "description": "ISO timestamp when conversation was last updated" }
+      },
+      "required": ["id", "userId", "title", "createdAt", "updatedAt"]
     }
   }
 }
