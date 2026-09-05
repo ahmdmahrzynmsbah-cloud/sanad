@@ -50,6 +50,7 @@ import { extractTextFromPDF, formatBytes, PDFProgress } from '../utils/pdfParser
 import { SupervisorsAdminTab } from './admin/SupervisorsAdminTab';
 import { RelatedSitesAdminTab } from './admin/RelatedSitesAdminTab';
 import { AboutPlatformAdminTab } from './admin/AboutPlatformAdminTab';
+import { useSync } from '../utils/sync';
 
 interface AdminPortalProps {
   onLawsUpdated?: () => void;
@@ -560,6 +561,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
   useEffect(() => {
     loadAllAdminData();
   }, []);
+
+  useSync(['users', 'laws', 'categories', 'system_settings'], () => {
+    loadAllAdminData();
+  });
 
   // Add new dynamic category
   const handleAddCategory = async (e?: React.FormEvent) => {

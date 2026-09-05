@@ -36,6 +36,7 @@ import {
   deleteConversationFromFirestore,
   clearUserConversationsFromFirestore,
   StoredConversation,
+  onDatabaseChange,
 } from './server/firestore';
 
 dotenv.config();
@@ -54,6 +55,29 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
     });
   }
   next(err);
+});
+
+// SSE Sync Endpoint for Realtime Client Updates
+const syncClients = new Set<express.Response>();
+
+app.get('/api/sync', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+  
+  syncClients.add(res);
+  
+  req.on('close', () => {
+    syncClients.delete(res);
+  });
+});
+
+// Broadcast changes from Firestore to connected SSE clients
+onDatabaseChange((collectionName) => {
+  syncClients.forEach(client => {
+    client.write(`data: ${JSON.stringify({ type: 'update', collection: collectionName })}\n\n`);
+  });
 });
 
 // Path to JSON database

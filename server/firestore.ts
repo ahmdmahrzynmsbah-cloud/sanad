@@ -6,11 +6,41 @@ import {
   collection,
   getDocs,
   doc,
-  setDoc,
-  updateDoc,
-  deleteDoc,
+  setDoc as firebaseSetDoc,
+  updateDoc as firebaseUpdateDoc,
+  deleteDoc as firebaseDeleteDoc,
   Firestore,
+  DocumentReference,
 } from 'firebase/firestore';
+
+export type ChangeCallback = (collectionName: string) => void;
+const changeListeners: ChangeCallback[] = [];
+
+export function onDatabaseChange(callback: ChangeCallback) {
+  changeListeners.push(callback);
+}
+
+function notifyChange(collectionName: string) {
+  changeListeners.forEach(cb => cb(collectionName));
+}
+
+async function setDoc(docRef: DocumentReference<any, any>, data: any, options?: any) {
+  const result = options ? await firebaseSetDoc(docRef, data, options) : await firebaseSetDoc(docRef, data);
+  notifyChange(docRef.parent.id);
+  return result;
+}
+
+async function updateDoc(docRef: DocumentReference<any, any>, data: any) {
+  const result = await firebaseUpdateDoc(docRef, data);
+  notifyChange(docRef.parent.id);
+  return result;
+}
+
+async function deleteDoc(docRef: DocumentReference<any, any>) {
+  const result = await firebaseDeleteDoc(docRef);
+  notifyChange(docRef.parent.id);
+  return result;
+}
 
 export interface StoredUser {
   id: string;

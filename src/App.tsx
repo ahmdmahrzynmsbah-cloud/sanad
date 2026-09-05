@@ -10,6 +10,7 @@ import { RelatedSitesView } from './components/RelatedSitesView';
 import { AboutPlatformView } from './components/AboutPlatformView';
 import { User, SystemBranding, PlatformAboutData } from './types';
 import { Scale, ShieldAlert, Clock, LogOut, ArrowRight, BookOpen } from 'lucide-react';
+import { initGlobalSync, useSync } from './utils/sync';
 
 export default function App() {
   const [branding, setBranding] = useState<SystemBranding | undefined>(undefined);
@@ -92,10 +93,18 @@ export default function App() {
   };
 
   useEffect(() => {
+    const cleanupSync = initGlobalSync();
     fetchLawsCount();
     fetchBranding();
     fetchPlatformAbout();
+    return () => cleanupSync();
   }, []);
+
+  useSync(['laws', 'system_settings'], () => {
+    fetchLawsCount();
+    fetchBranding();
+    fetchPlatformAbout();
+  });
 
   const handleUserLoginSuccess = (user: User) => {
     setCurrentUser(user);

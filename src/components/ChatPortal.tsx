@@ -19,6 +19,7 @@ import {
 import Markdown from 'react-markdown';
 import { User, ChatMessage, Conversation, SystemBranding } from '../types';
 import { ChatSidebar } from './ChatSidebar';
+import { useSync } from '../utils/sync';
 
 interface ChatPortalProps {
   currentUser: User;
@@ -142,24 +143,28 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
   }, [messages, loading]);
 
   // Sync conversations from backend API upon mounting
-  useEffect(() => {
-    const fetchCloudConversations = async () => {
-      try {
-        const res = await fetch(`/api/conversations?userId=${encodeURIComponent(currentUser.id)}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.conversations && Array.isArray(data.conversations)) {
-            setConversations(data.conversations);
-            localStorage.setItem(storageKey, JSON.stringify(data.conversations));
-          }
+  const fetchCloudConversations = async () => {
+    try {
+      const res = await fetch(`/api/conversations?userId=${encodeURIComponent(currentUser.id)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.conversations && Array.isArray(data.conversations)) {
+          setConversations(data.conversations);
+          localStorage.setItem(storageKey, JSON.stringify(data.conversations));
         }
-      } catch (err) {
-        console.warn('Could not sync conversations from server:', err);
       }
-    };
+    } catch (err) {
+      console.warn('Could not sync conversations from server:', err);
+    }
+  };
 
+  useEffect(() => {
     fetchCloudConversations();
   }, [currentUser.id]);
+
+  useSync(['conversations'], () => {
+    fetchCloudConversations();
+  });
 
   // Helper to persist conversations locally and to API
   const persistConversation = (conv: Conversation) => {
