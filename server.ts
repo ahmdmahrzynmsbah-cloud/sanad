@@ -1,7 +1,7 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import { createServer as createViteServer } from 'vite';
+// Vite is dynamically imported in local dev mode
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
 import {
@@ -44,6 +44,35 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
+
+// --- Vercel & Firebase Sync Middleware ---
+let syncPromise = null;
+let lastSyncTime = 0;
+
+async function ensureDbSynced() {
+  const now = Date.now();
+  // Always sync on cold start. On Vercel, refresh if older than 5 seconds to prevent stale memory.
+  const isStale = process.env.VERCEL ? (now - lastSyncTime > 5000) : (lastSyncTime === 0);
+  
+  if (!syncPromise || isStale) {
+    syncPromise = syncWithFirestore().then(() => {
+      lastSyncTime = Date.now();
+    }).catch(err => {
+      console.error("Sync failed:", err);
+      syncPromise = null; 
+    });
+  }
+  await syncPromise;
+}
+
+app.use(async (req, res, next) => {
+  if (req.path.startsWith('/api/') && req.path !== '/api/admin/login') {
+    await ensureDbSynced();
+  }
+  next();
+});
+
+// ----------------------------------------
 app.use(express.json({ limit: '60mb' }));
 app.use(express.urlencoded({ extended: true, limit: '60mb' }));
 
@@ -81,7 +110,7 @@ onDatabaseChange((collectionName) => {
 });
 
 // Path to JSON database
-const DATA_DIR = path.join(process.cwd(), 'data');
+const DATA_DIR = (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) ? path.join('/tmp', 'data') : path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 
 // Interface for DB
@@ -370,8 +399,12 @@ const INITIAL_LAWS: StoredLaw[] = [
 ];
 
 function initDB(): DBData {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+  } catch (err) {
+    // Read-only filesystem in Vercel/Lambda
   }
 
   if (fs.existsSync(DB_FILE)) {
@@ -2626,6 +2659,7 @@ function generateKnowledgeFallback(query: string, laws: StoredLaw[]): string {
 // Vite middleware & Static serving
 async function startServer() {
   if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
@@ -2652,9 +2686,6 @@ async function startServer() {
 
 startServer();
 
-// Sync when exported (Vercel serverless environment)
-if (process.env.VERCEL) {
-  syncWithFirestore().catch(console.error);
-}
+
 
 export default app;

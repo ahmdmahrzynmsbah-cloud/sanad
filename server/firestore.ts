@@ -90,20 +90,31 @@ export interface StoredCategory {
 let firestoreDb: Firestore | null = null;
 let isInitialized = false;
 
+const DEFAULT_FIREBASE_CONFIG = {
+  projectId: "pos1-d562e",
+  appId: "1:607061495520:web:86e73b21063ba9c494ca85",
+  apiKey: "AIzaSyCmeCCutt5Q9NLuILm8i_XtM1QCSV4_aUo",
+  authDomain: "pos1-d562e.firebaseapp.com",
+  firestoreDatabaseId: "ai-studio-6d29bd6f-50fc-4475-8e3b-86e0db64d605",
+  storageBucket: "pos1-d562e.firebasestorage.app",
+  messagingSenderId: "607061495520",
+};
+
 export function initFirestore(): Firestore | null {
   if (firestoreDb) return firestoreDb;
 
   try {
-    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-    if (!fs.existsSync(configPath)) {
-      console.warn('⚠️ firebase-applet-config.json not found. Firestore will run in offline mode.');
-      return null;
-    }
-
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-    if (!config.apiKey || !config.projectId) {
-      console.warn('⚠️ Invalid Firebase config. Firestore disabled.');
-      return null;
+    let config = DEFAULT_FIREBASE_CONFIG;
+    try {
+      const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+      if (fs.existsSync(configPath)) {
+        const parsed = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        if (parsed && parsed.apiKey && parsed.projectId) {
+          config = parsed;
+        }
+      }
+    } catch {
+      // Ignore file error and fallback to DEFAULT_FIREBASE_CONFIG
     }
 
     const app = initializeApp(config);
