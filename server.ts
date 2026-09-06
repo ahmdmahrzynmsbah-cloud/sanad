@@ -463,39 +463,7 @@ function initDB(): DBData {
     supervisors: [...DEFAULT_SUPERVISORS],
     relatedSites: [...DEFAULT_RELATED_SITES],
     platformAbout: { ...DEFAULT_PLATFORM_ABOUT },
-    users: [
-      {
-        id: 'user-demo-pending',
-        username: 'ahmad_khalil',
-        fullName: 'أحمد خليل المصري',
-        phone: '0599123456',
-        password: 'password123',
-        role: 'user',
-        status: 'pending',
-        subscriptionStatus: 'trial',
-        trialDays: 7,
-        trialStartedAt: new Date(Date.now() - 3600000 * 2).toISOString(),
-        trialEndsAt: new Date(Date.now() + 3600000 * 24 * 7 - 3600000 * 2).toISOString(),
-        isSubscribed: false,
-        createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
-      },
-      {
-        id: 'user-demo-approved',
-        username: 'tariq_pal',
-        fullName: 'طارق صلاح الدين',
-        phone: '0598765432',
-        password: 'password123',
-        role: 'user',
-        status: 'approved',
-        subscriptionStatus: 'trial',
-        trialDays: 7,
-        trialStartedAt: new Date(Date.now() - 3600000 * 24).toISOString(),
-        trialEndsAt: new Date(Date.now() + 3600000 * 24 * 6).toISOString(),
-        isSubscribed: false,
-        createdAt: new Date(Date.now() - 3600000 * 24).toISOString(),
-        reviewedAt: new Date(Date.now() - 3600000 * 20).toISOString(),
-      },
-    ],
+    users: [],
     laws: INITIAL_LAWS,
   };
 
@@ -735,7 +703,7 @@ async function syncWithFirestore() {
       }).catch((e) => console.error('Error saving initial settings to Firestore:', e));
     }
 
-    if (cloudUsers && cloudUsers.length > 0) {
+    if (cloudUsers) {
       db.users = cloudUsers;
       changed = true;
       console.log(`✅ Loaded ${cloudUsers.length} users from Cloud Firestore.`);

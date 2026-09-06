@@ -806,10 +806,7 @@ export async function seedFirestoreIfEmpty(
       seedTasks.push(Promise.all(initialLaws.map((law) => saveLawToFirestore(law))));
     }
 
-    if (userSnap.empty) {
-      console.log('Seeding demo users to Firestore cloud database in parallel...');
-      seedTasks.push(Promise.all(initialUsers.map((user) => saveUserToFirestore(user))));
-    }
+    // Do not seed fake/demo users - only real users who register will be stored in Firestore
 
     if (catSnap.empty) {
       console.log('Seeding default legal categories to Firestore cloud database in parallel...');
