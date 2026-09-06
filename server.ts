@@ -850,10 +850,13 @@ const ADMIN_CREDENTIALS = {
 let geminiClient: GoogleGenAI | null = null;
 function getGemini(): GoogleGenAI {
   if (!geminiClient) {
-    const apiKey = process.env.GEMINI_API_KEY;
+    // Find the key even if there are spaces or case differences
+    const envKey = Object.keys(process.env).find(k => k.trim().toUpperCase() === 'GEMINI_API_KEY');
+    const apiKey = envKey ? process.env[envKey]?.trim() : undefined;
+    
     if (!apiKey) {
-      const availableKeys = Object.keys(process.env).filter(k => k.includes('GEMINI')).join(', ');
-      throw new Error(`مفتاح GEMINI_API_KEY غير متوفر في الخادم. (المتغيرات الموجودة حالياً التي تحتوي على كلمة GEMINI: ${availableKeys || 'لا يوجد شيء'}). يرجى حذفه من Vercel وإضافته من جديد.`);
+      const allKeys = Object.keys(process.env).filter(k => k.toUpperCase().includes('GEMINI')).map(k => `"${k}": "${process.env[k]}"`).join(', ');
+      throw new Error(`مفتاح GEMINI_API_KEY غير متوفر أو فارغ. (المتغيرات الموجودة حالياً: ${allKeys || 'لا يوجد شيء'}). يرجى التأكد من أنك قمت بعمل Redeploy بعد إضافة المفتاح في Vercel.`);
     }
     geminiClient = new GoogleGenAI({
       apiKey,
