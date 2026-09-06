@@ -1,24 +1,49 @@
+/// <reference types="vite/client" />
 import { useEffect } from 'react';
 
+let activeEventSource: EventSource | null = null;
+let reconnectTimer: any = null;
+
 export function initGlobalSync() {
-  const eventSource = new EventSource('/api/sync');
-  
-  eventSource.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      if (data.type === 'update' && data.collection) {
-        window.dispatchEvent(new CustomEvent('sync_update', { detail: { collection: data.collection } }));
+  if (activeEventSource) {
+    activeEventSource.close();
+  }
+
+  function connect() {
+    const appUrl = import.meta.env.VITE_APP_URL || '';
+    const url = `${appUrl.replace(/\/$/, '')}/api/sync`;
+    activeEventSource = new EventSource(url);
+    
+    activeEventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'update' && data.collection) {
+          window.dispatchEvent(new CustomEvent('sync_update', { detail: { collection: data.collection } }));
+        }
+      } catch (e) {
+        // Suppress parsing errors to avoid UI crashes
       }
-    } catch (e) {
-      console.error('Failed to parse sync event', e);
-    }
-  };
+    };
 
-  eventSource.onerror = (error) => {
-    // EventSource will auto-reconnect on most errors
-  };
+    activeEventSource.onerror = () => {
+      // EventSource auto-reconnects, but if it completely fails (e.g. server down),
+      // we close it and manually reconnect with backoff to prevent console spam
+      activeEventSource?.close();
+      if (!reconnectTimer) {
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null;
+          connect();
+        }, 5000);
+      }
+    };
+  }
 
-  return () => eventSource.close();
+  connect();
+
+  return () => {
+    if (activeEventSource) activeEventSource.close();
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+  };
 }
 
 export function useSync(collectionName: string | string[], onUpdate: () => void) {

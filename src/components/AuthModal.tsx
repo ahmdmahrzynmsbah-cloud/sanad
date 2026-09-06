@@ -101,13 +101,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         console.warn('Login non-JSON response:', res.status);
       }
 
-      if (!res.ok) {
+      if (!res.ok || !data) {
         if (data?.status === 'pending') {
           setPendingStatusUser({ username: data.username || username });
         } else if (data?.status === 'rejected') {
           setRejectedUser(data.username || username);
         } else {
-          setError(data?.error || `فشل تسجيل الدخول (${res.status}). يرجى التحقق من صحة البيانات أو المحاولة لاحقاً.`);
+          setError(data?.error || `فشل تسجيل الدخول (${res.status}). الخادم لم يرسل استجابة صحيحة.`);
         }
         return;
       }
@@ -115,7 +115,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       onLoginSuccess(data.user);
     } catch (err: any) {
       console.error('Login network error:', err);
-      setError(err?.message ? `تعذر الاتصال بالخادم: ${err.message}` : 'تعذر الاتصال بالخادم، يرجى المحاولة مرة أخرى.');
+      let errorMsg = 'تعذر الاتصال بالخادم، يرجى المحاولة مرة أخرى.';
+      if (err instanceof TypeError && err.message.includes('fetch')) {
+         errorMsg = 'تعذر الاتصال بالخادم: فشل في الشبكة.';
+      } else if (err?.message) {
+         errorMsg = `تعذر الاتصال بالخادم: ${err.message}`;
+      }
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -176,8 +182,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         console.warn('Register non-JSON response:', res.status);
       }
 
-      if (!res.ok) {
-        setError(data?.error || `فشل إنشاء الحساب (${res.status}). يرجى التحقق من البيانات أو المحاولة لاحقاً.`);
+      if (!res.ok || !data) {
+        setError(data?.error || `فشل إنشاء الحساب (${res.status}). الخادم لم يرسل استجابة صحيحة.`);
         return;
       }
 
@@ -198,7 +204,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
     } catch (err: any) {
       console.error('Register network error:', err);
-      setError(err?.message ? `تعذر الاتصال بالخادم: ${err.message}` : 'تعذر الاتصال بالخادم أثناء التسجيل.');
+      let errorMsg = 'تعذر الاتصال بالخادم أثناء التسجيل.';
+      if (err instanceof TypeError && err.message.includes('fetch')) {
+         errorMsg = 'تعذر الاتصال بالخادم: فشل في الشبكة.';
+      } else if (err?.message) {
+         errorMsg = `تعذر الاتصال بالخادم: ${err.message}`;
+      }
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }

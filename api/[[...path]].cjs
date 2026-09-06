@@ -1,10 +1,8 @@
-import type { Request, Response } from 'express';
-import app from '../server';
+const app = require('../dist/server.cjs').default || require('../dist/server.cjs');
 
-export default function handler(req: Request, res: Response) {
-  // Normalize incoming URL for Express router on Vercel
+module.exports = function handler(req, res) {
   const original = req.url || '';
-  const matchedPath = (req.headers['x-matched-path'] as string) || '';
+  const matchedPath = req.headers['x-matched-path'] || '';
 
   if (matchedPath && matchedPath.startsWith('/api') && (original === '/api' || original === '/' || original === '')) {
     req.url = matchedPath;
@@ -13,4 +11,4 @@ export default function handler(req: Request, res: Response) {
   }
 
   return app(req, res);
-}
+};
