@@ -7,6 +7,8 @@ export interface User {
   username: string;
   fullName?: string;
   phone?: string;
+  password?: string;
+  recoveryCode?: string;
   role: 'user' | 'admin';
   status: UserStatus;
   createdAt: string;
@@ -99,6 +101,19 @@ export interface RelatedSite {
   createdAt: string;
 }
 
+export interface Partner {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  partnershipType?: string;
+  logoUrl?: string;
+  websiteUrl?: string;
+  order?: number;
+  isActive?: boolean;
+  createdAt: string;
+}
+
 export interface AboutSectionCard {
   id: string;
   title: string;
@@ -135,5 +150,29 @@ export interface SystemBranding {
   founderPhotoUrl?: string;
   founderQuote?: string;
   siteOverview?: string;
+}
+
+export interface ContactWhatsappItem {
+  id: string;
+  name: string;
+  number: string;
+  description?: string;
+}
+
+export interface ContactPhoneItem {
+  id: string;
+  name: string;
+  number: string;
+}
+
+export interface ContactInfo {
+  whatsappNumbers: ContactWhatsappItem[];
+  email: string;
+  secondaryEmail?: string;
+  phoneNumbers?: ContactPhoneItem[];
+  workHours?: string;
+  address?: string;
+  notes?: string;
+  updatedAt?: string;
 }
 

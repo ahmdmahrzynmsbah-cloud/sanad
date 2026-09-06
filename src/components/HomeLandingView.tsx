@@ -5,6 +5,7 @@ import {
   UserPlus,
   Users,
   Globe,
+  Handshake,
   ArrowLeft,
   Sparkles,
   Quote,
@@ -16,7 +17,8 @@ import {
   CheckCircle2,
   Clock,
   Target,
-  Eye
+  Eye,
+  PhoneCall
 } from 'lucide-react';
 import { SystemBranding, User } from '../types';
 
@@ -26,7 +28,9 @@ interface HomeLandingViewProps {
   onNavigateToAuth: (mode: 'login' | 'register') => void;
   onNavigateToSupervisors: () => void;
   onNavigateToRelatedSites: () => void;
+  onNavigateToPartners?: () => void;
   onOpenAbout?: () => void;
+  onOpenContact?: () => void;
   onNavigateToChat: () => void;
   lawsCount: number;
 }
@@ -37,7 +41,9 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
   onNavigateToAuth,
   onNavigateToSupervisors,
   onNavigateToRelatedSites,
+  onNavigateToPartners,
   onOpenAbout,
+  onOpenContact,
   onNavigateToChat,
   lawsCount,
 }) => {
@@ -191,6 +197,19 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
                   <span>الرؤية</span>
                 </button>
               )}
+
+              {/* Navigation to Contact Us View */}
+              {onOpenContact && (
+                <button
+                  id="landing-hero-contact-btn"
+                  onClick={onOpenContact}
+                  className="px-4 py-3 bg-white/5 hover:bg-white/10 text-slate-200 hover:text-white border border-emerald-500/40 hover:border-emerald-500/80 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                  title="اتصل بنا وتواصل مباشر عبر واتساب"
+                >
+                  <PhoneCall className="w-4 h-4 text-emerald-400" />
+                  <span>اتصل بنا</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -238,12 +257,12 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
         </div>
       </section>
 
-      {/* BOTTOM NAVIGATION TILES: LINK TO SUPERVISORS & RELATED SITES */}
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* BOTTOM NAVIGATION TILES: LINK TO SUPERVISORS, RELATED SITES & PARTNERS */}
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Supervisors Tile */}
         <div
           onClick={onNavigateToSupervisors}
-          className="p-6 bg-white rounded-2xl border border-slate-200 hover:border-emerald-500/50 shadow-sm hover:shadow-md transition-all cursor-pointer group flex items-start justify-between gap-4"
+          className="p-6 bg-white rounded-2xl border border-slate-200 hover:border-emerald-500/50 shadow-xs hover:shadow-md transition-all cursor-pointer group flex items-start justify-between gap-4"
         >
           <div className="space-y-2 text-right">
             <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center justify-center font-bold group-hover:bg-emerald-600 group-hover:text-white transition-colors">
@@ -262,7 +281,7 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
         {/* Related Sites Tile */}
         <div
           onClick={onNavigateToRelatedSites}
-          className="p-6 bg-white rounded-2xl border border-slate-200 hover:border-blue-500/50 shadow-sm hover:shadow-md transition-all cursor-pointer group flex items-start justify-between gap-4"
+          className="p-6 bg-white rounded-2xl border border-slate-200 hover:border-blue-500/50 shadow-xs hover:shadow-md transition-all cursor-pointer group flex items-start justify-between gap-4"
         >
           <div className="space-y-2 text-right">
             <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-800 border border-blue-200 flex items-center justify-center font-bold group-hover:bg-blue-600 group-hover:text-white transition-colors">
@@ -276,6 +295,25 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
             </p>
           </div>
           <ArrowLeft className="w-5 h-5 text-slate-400 group-hover:text-blue-700 group-hover:-translate-x-1 transition-all shrink-0 mt-2" />
+        </div>
+
+        {/* Partners Tile */}
+        <div
+          onClick={onNavigateToPartners}
+          className="p-6 bg-white rounded-2xl border border-slate-200 hover:border-amber-500/50 shadow-xs hover:shadow-md transition-all cursor-pointer group flex items-start justify-between gap-4"
+        >
+          <div className="space-y-2 text-right">
+            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 flex items-center justify-center font-bold group-hover:bg-amber-600 group-hover:text-white transition-colors">
+              <Handshake className="w-5 h-5 text-[#d4af37] group-hover:text-white" />
+            </div>
+            <h4 className="text-base font-bold text-slate-900 group-hover:text-amber-800 transition-colors">
+              شركاؤنا والمؤسسات الشريكة
+            </h4>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              استعرض شبكة الهيئات والجامعات والمؤسسات والشركات الشريكة في نشر الثقافة والوعي القانوني.
+            </p>
+          </div>
+          <ArrowLeft className="w-5 h-5 text-slate-400 group-hover:text-amber-700 group-hover:-translate-x-1 transition-all shrink-0 mt-2" />
         </div>
       </section>
     </div>

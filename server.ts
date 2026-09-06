@@ -26,11 +26,22 @@ import {
   fetchRelatedSitesFromFirestore,
   saveRelatedSiteToFirestore,
   deleteRelatedSiteFromFirestore,
+  fetchPartnersFromFirestore,
+  savePartnerToFirestore,
+  deletePartnerFromFirestore,
+  StoredPartner,
+  DEFAULT_PARTNERS,
   fetchPlatformAboutFromFirestore,
   savePlatformAboutToFirestore,
   StoredAboutCard,
   StoredPlatformAbout,
   DEFAULT_PLATFORM_ABOUT,
+  fetchContactInfoFromFirestore,
+  saveContactInfoToFirestore,
+  StoredContactInfo,
+  StoredContactWhatsappItem,
+  StoredContactPhoneItem,
+  DEFAULT_CONTACT_INFO,
   fetchConversationsFromFirestore,
   saveConversationToFirestore,
   deleteConversationFromFirestore,
@@ -340,7 +351,9 @@ interface DBData {
   settings?: DBSettings;
   supervisors?: StoredSupervisor[];
   relatedSites?: StoredRelatedSite[];
+  partners?: StoredPartner[];
   platformAbout?: StoredPlatformAbout;
+  contactInfo?: StoredContactInfo;
   conversations?: StoredConversation[];
 }
 
@@ -446,6 +459,9 @@ function initDB(): DBData {
       if (!data.platformAbout) {
         data.platformAbout = { ...DEFAULT_PLATFORM_ABOUT };
       }
+      if (!data.contactInfo) {
+        data.contactInfo = { ...DEFAULT_CONTACT_INFO };
+      }
       return data;
     } catch {
       // Fallback
@@ -462,7 +478,9 @@ function initDB(): DBData {
     categories: [...DEFAULT_CATEGORIES],
     supervisors: [...DEFAULT_SUPERVISORS],
     relatedSites: [...DEFAULT_RELATED_SITES],
+    partners: [...DEFAULT_PARTNERS],
     platformAbout: { ...DEFAULT_PLATFORM_ABOUT },
+    contactInfo: { ...DEFAULT_CONTACT_INFO },
     users: [],
     laws: INITIAL_LAWS,
   };
@@ -602,6 +620,23 @@ function checkAndUpdateUserTrialStatus(user: StoredUser, persist = true): {
 }
 
 /**
+ * Returns full user object for admin view with credentials and real-time trial calculation
+ */
+function toAdminUser(user: StoredUser) {
+  const trialInfo = checkAndUpdateUserTrialStatus(user, false);
+  return {
+    ...user,
+    status: user.status,
+    subscriptionStatus: trialInfo.subscriptionStatus,
+    remainingTrialDays: trialInfo.remainingDays,
+    remainingTrialHours: trialInfo.remainingHours,
+    isFrozen: trialInfo.isFrozen,
+    trialEndsAt: user.trialEndsAt,
+    isSubscribed: Boolean(user.isSubscribed),
+  };
+}
+
+/**
  * Returns user object stripped of sensitive fields with real-time trial calculation
  */
 function toSafeUser(user: StoredUser) {
@@ -632,20 +667,33 @@ async function syncWithFirestore() {
     if (!db.relatedSites || db.relatedSites.length === 0) {
       db.relatedSites = [...DEFAULT_RELATED_SITES];
     }
-    await seedFirestoreIfEmpty(db.users, db.laws, db.categories, db.supervisors, db.relatedSites);
+    if (!db.partners || db.partners.length === 0) {
+      db.partners = [...DEFAULT_PARTNERS];
+    }
+    await seedFirestoreIfEmpty(db.users, db.laws, db.categories, db.supervisors, db.relatedSites, db.partners);
 
-    // Fetch users, laws, categories, settings, supervisors, related sites, and platform about concurrently in parallel
-    const [cloudUsers, cloudLaws, cloudCategories, cloudSettings, cloudSupervisors, cloudRelatedSites, cloudAbout] = await Promise.all([
+    // Fetch users, laws, categories, settings, supervisors, related sites, partners, platform about, and contact concurrently in parallel
+    const [cloudUsers, cloudLaws, cloudCategories, cloudSettings, cloudSupervisors, cloudRelatedSites, cloudPartners, cloudAbout, cloudContact] = await Promise.all([
       fetchUsersFromFirestore(),
       fetchLawsFromFirestore(),
       fetchCategoriesFromFirestore(),
       fetchSettingsFromFirestore(),
       fetchSupervisorsFromFirestore(),
       fetchRelatedSitesFromFirestore(),
+      fetchPartnersFromFirestore(),
       fetchPlatformAboutFromFirestore(),
+      fetchContactInfoFromFirestore(),
     ]);
 
     let changed = false;
+
+    if (cloudContact) {
+      db.contactInfo = cloudContact;
+      changed = true;
+      console.log('✅ Loaded contact info from Cloud Firestore.');
+    } else if (db.contactInfo) {
+      saveContactInfoToFirestore(db.contactInfo).catch((e) => console.error('Error saving initial contact info to Firestore:', e));
+    }
 
     if (cloudAbout) {
       if (cloudAbout.customSections) {
@@ -736,6 +784,12 @@ async function syncWithFirestore() {
       db.relatedSites = cloudRelatedSites;
       changed = true;
       console.log(`✅ Loaded ${cloudRelatedSites.length} related sites from Cloud Firestore.`);
+    }
+
+    if (cloudPartners && cloudPartners.length > 0) {
+      db.partners = cloudPartners;
+      changed = true;
+      console.log(`✅ Loaded ${cloudPartners.length} partners from Cloud Firestore.`);
     }
 
     if (changed) {
@@ -1013,6 +1067,11 @@ app.get('/api/system/about', (req, res) => {
   res.json(about);
 });
 
+// Public Contact Us Info Endpoint (أرقام الواتساب والبريد للتواصل)
+app.get('/api/system/contact', (req, res) => {
+  res.json({ contactInfo: db.contactInfo || DEFAULT_CONTACT_INFO });
+});
+
 // Fast Consolidated Admin Initial Data (Single roundtrip for ultra-fast portal load)
 app.get('/api/admin/init', (req, res) => {
   const safeUsers = db.users.map(toSafeUser);
@@ -1023,6 +1082,7 @@ app.get('/api/admin/init', (req, res) => {
     supervisors: (db.supervisors || []).sort((a, b) => (a.order || 0) - (b.order || 0)),
     relatedSites: db.relatedSites || [],
     platformAbout: db.platformAbout || DEFAULT_PLATFORM_ABOUT,
+    contactInfo: db.contactInfo || DEFAULT_CONTACT_INFO,
     autoApprove: db.settings?.autoApproveNewUsers !== false,
     defaultTrialDays: db.settings?.defaultTrialDays || 7,
     trialPolicyEnabled: db.settings?.trialPolicyEnabled !== false,
@@ -1060,13 +1120,14 @@ app.get('/api/admin/init', (req, res) => {
 
 // --- Admin Endpoints ---
 
-// Get admin settings (Auto-approval status, Trial period & Branding & About)
+// Get admin settings (Auto-approval status, Trial period & Branding & About & Contact)
 app.get('/api/admin/settings', (req, res) => {
   res.json({
     autoApprove: db.settings?.autoApproveNewUsers !== false,
     defaultTrialDays: db.settings?.defaultTrialDays || 7,
     trialPolicyEnabled: db.settings?.trialPolicyEnabled !== false,
     platformAbout: db.platformAbout || DEFAULT_PLATFORM_ABOUT,
+    contactInfo: db.contactInfo || DEFAULT_CONTACT_INFO,
     branding: {
       systemName: db.settings?.systemName || DEFAULT_BRANDING.systemName,
       systemSubtitle: db.settings?.systemSubtitle || DEFAULT_BRANDING.systemSubtitle,
@@ -1397,6 +1458,113 @@ app.delete('/api/admin/related-sites/:id', async (req, res) => {
   });
 });
 
+// ----------------------------------------------------
+// Partners Endpoints (شركاؤنا - المؤسسات الشريكة)
+// ----------------------------------------------------
+app.get('/api/partners', (req, res) => {
+  if (!db.partners) {
+    db.partners = [...DEFAULT_PARTNERS];
+  }
+  res.json({ partners: db.partners });
+});
+
+app.post('/api/admin/partners', async (req, res) => {
+  const { name, description, category, partnershipType, logoUrl, websiteUrl, order, isActive } = req.body;
+  if (!name || !String(name).trim()) {
+    return res.status(400).json({ error: 'اسم المؤسسة أو الشريك مطلوب' });
+  }
+
+  if (!db.partners) {
+    db.partners = [...DEFAULT_PARTNERS];
+  }
+
+  const newPartner: StoredPartner = {
+    id: `partner-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+    name: String(name).trim(),
+    description: String(description || '').trim(),
+    category: String(category || 'مؤسسات شريكة').trim(),
+    partnershipType: String(partnershipType || 'شريك استراتيجي').trim(),
+    logoUrl: String(logoUrl || '').trim(),
+    websiteUrl: String(websiteUrl || '').trim(),
+    order: typeof order === 'number' ? order : db.partners.length + 1,
+    isActive: isActive !== false,
+    createdAt: new Date().toISOString(),
+  };
+
+  db.partners.push(newPartner);
+  saveDB();
+  await savePartnerToFirestore(newPartner);
+
+  res.status(201).json({
+    success: true,
+    message: `تمت إضافة المؤسسة الشريكة "${newPartner.name}" بنجاح`,
+    partner: newPartner,
+    partners: db.partners,
+  });
+});
+
+app.put('/api/admin/partners/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, description, category, partnershipType, logoUrl, websiteUrl, order, isActive } = req.body;
+
+  if (!db.partners) {
+    db.partners = [...DEFAULT_PARTNERS];
+  }
+
+  const index = db.partners.findIndex((p) => p.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'المؤسسة الشريكة غير موجودة' });
+  }
+
+  const existing = db.partners[index];
+  const updated: StoredPartner = {
+    ...existing,
+    name: name !== undefined ? String(name).trim() : existing.name,
+    description: description !== undefined ? String(description).trim() : existing.description,
+    category: category !== undefined ? String(category).trim() : existing.category,
+    partnershipType: partnershipType !== undefined ? String(partnershipType).trim() : existing.partnershipType,
+    logoUrl: logoUrl !== undefined ? String(logoUrl).trim() : existing.logoUrl,
+    websiteUrl: websiteUrl !== undefined ? String(websiteUrl).trim() : existing.websiteUrl,
+    order: order !== undefined ? Number(order) : existing.order,
+    isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive,
+  };
+
+  db.partners[index] = updated;
+  saveDB();
+  await savePartnerToFirestore(updated);
+
+  res.json({
+    success: true,
+    message: `تم تحديث بيانات المؤسسة الشريكة "${updated.name}" بنجاح`,
+    partner: updated,
+    partners: db.partners,
+  });
+});
+
+app.delete('/api/admin/partners/:id', async (req, res) => {
+  const { id } = req.params;
+  if (!db.partners) {
+    db.partners = [...DEFAULT_PARTNERS];
+  }
+
+  const index = db.partners.findIndex((p) => p.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'المؤسسة الشريكة غير موجودة' });
+  }
+
+  const removed = db.partners[index];
+  db.partners.splice(index, 1);
+  saveDB();
+  await deletePartnerFromFirestore(id);
+
+  res.json({
+    success: true,
+    message: `تم حذف المؤسسة الشريكة "${removed.name}" بنجاح`,
+    deletedId: id,
+    partners: db.partners,
+  });
+});
+
 // Reset Branding to Default
 app.post('/api/admin/settings/branding/reset', async (req, res) => {
   if (!db.settings) {
@@ -1475,6 +1643,69 @@ app.post('/api/admin/settings/about/reset', async (req, res) => {
     success: true,
     message: 'تم استعادة المحتوى الافتراضي لـ «عن المنصة والرؤية والرسالة» بنجاح.',
     platformAbout: db.platformAbout,
+  });
+});
+
+// Update Contact Us Info (WhatsApp numbers, Email, Phone, Address, Hours)
+app.post('/api/admin/settings/contact', async (req, res) => {
+  const {
+    whatsappNumbers,
+    email,
+    secondaryEmail,
+    phoneNumbers,
+    workHours,
+    address,
+    notes,
+  } = req.body;
+
+  const current = db.contactInfo || DEFAULT_CONTACT_INFO;
+
+  const updatedContact: StoredContactInfo = {
+    whatsappNumbers: Array.isArray(whatsappNumbers)
+      ? whatsappNumbers.map((item: any, index: number) => ({
+          id: item.id || `wa-${Date.now()}-${index}`,
+          name: String(item.name || '').trim(),
+          number: String(item.number || '').trim(),
+          description: item.description ? String(item.description).trim() : '',
+        }))
+      : current.whatsappNumbers,
+    email: email !== undefined ? String(email).trim() : current.email,
+    secondaryEmail: secondaryEmail !== undefined ? String(secondaryEmail).trim() : (current.secondaryEmail || ''),
+    phoneNumbers: Array.isArray(phoneNumbers)
+      ? phoneNumbers.map((p: any, index: number) => ({
+          id: p.id || `ph-${Date.now()}-${index}`,
+          name: String(p.name || '').trim(),
+          number: String(p.number || '').trim(),
+        }))
+      : (current.phoneNumbers || []),
+    workHours: workHours !== undefined ? String(workHours).trim() : current.workHours,
+    address: address !== undefined ? String(address).trim() : current.address,
+    notes: notes !== undefined ? String(notes).trim() : current.notes,
+    updatedAt: new Date().toISOString(),
+  };
+
+  db.contactInfo = updatedContact;
+  saveDB();
+
+  await saveContactInfoToFirestore(updatedContact);
+
+  res.json({
+    success: true,
+    message: 'تم حفظ وتحديث بيانات التواصل وأرقام الواتساب بنجاح في قاعدة البيانات السحابية.',
+    contactInfo: updatedContact,
+  });
+});
+
+// Reset Contact Info to Default
+app.post('/api/admin/settings/contact/reset', async (req, res) => {
+  db.contactInfo = { ...DEFAULT_CONTACT_INFO, updatedAt: new Date().toISOString() };
+  saveDB();
+  await saveContactInfoToFirestore(db.contactInfo);
+
+  res.json({
+    success: true,
+    message: 'تمت استعادة بيانات التواصل الافتراضية بنجاح.',
+    contactInfo: db.contactInfo,
   });
 });
 
@@ -1564,10 +1795,10 @@ app.post('/api/admin/users/auto-approve-all', async (req, res) => {
   });
 });
 
-// Get all users with real-time trial and subscription calculations
+// Get all users with real-time trial and subscription calculations (Admin view with credentials)
 app.get('/api/admin/users', (req, res) => {
-  const safeUsers = db.users.map(toSafeUser);
-  res.json({ users: safeUsers });
+  const adminUsers = db.users.map(toAdminUser);
+  res.json({ users: adminUsers });
 });
 
 // Get a single user by username (for real-time sync of current user status)

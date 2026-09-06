@@ -14,11 +14,14 @@ import {
   FileText,
   Shield,
   PanelRight,
+  PanelLeft,
   Plus,
+  Layers,
 } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { User, ChatMessage, Conversation, SystemBranding } from '../types';
 import { ChatSidebar } from './ChatSidebar';
+import { SanadServicesSidebar } from './SanadServicesSidebar';
 import { useSync } from '../utils/sync';
 
 interface ChatPortalProps {
@@ -84,10 +87,13 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
   });
 
   // Responsive Sidebar States
-  // Mobile drawer open state
+  // Right Sidebar (Chat history): Mobile drawer open state & desktop collapse state
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
-  // Desktop collapse state (false = expanded by default)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+
+  // Left Sidebar (Sanad suite services): Mobile drawer open state & desktop collapse state
+  const [isMobileServicesOpen, setIsMobileServicesOpen] = useState<boolean>(false);
+  const [isServicesCollapsed, setIsServicesCollapsed] = useState<boolean>(false);
 
   // Local storage key for user's conversations
   const storageKey = `pal_tax_convs_${currentUser.id}`;
@@ -391,7 +397,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
 
   return (
     <div className="flex h-full w-full min-h-0 overflow-hidden bg-[#f8faf9] p-2 sm:p-3 gap-2.5 sm:gap-3">
-      {/* Floating Modern Persistent & Collapsible Sidebar */}
+      {/* 1. Floating Modern Persistent & Collapsible Sidebar (Right: Chat History) */}
       <ChatSidebar
         isOpen={isMobileSidebarOpen}
         isCollapsed={isSidebarCollapsed}
@@ -409,17 +415,17 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
         branding={branding}
       />
 
-      {/* Main Chat View Container */}
+      {/* 2. Main Chat View Container (Center) */}
       <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden max-w-5xl mx-auto w-full gap-2">
         {/* Top Status & Quick Bar */}
         <div className="bg-white border border-zinc-200/80 rounded-2xl px-3.5 py-2 shadow-2xs flex flex-wrap items-center justify-between gap-2 text-xs shrink-0">
           <div className="flex items-center gap-2 text-zinc-700 flex-wrap">
-            {/* Mobile Open Sidebar Button */}
+            {/* Mobile Open History Sidebar Button (Right) */}
             <button
               id="mobile-toggle-sidebar-btn"
               onClick={() => setIsMobileSidebarOpen(true)}
               className="lg:hidden p-1.5 rounded-xl border border-zinc-200 hover:bg-zinc-100 text-zinc-700 transition-colors flex items-center gap-1.5 cursor-pointer font-bold text-xs"
-              title="سجل المحادثات"
+              title="سجل الاستشارات"
             >
               <PanelRight className="w-4 h-4 text-emerald-800" />
               <span>السجل</span>
@@ -428,6 +434,17 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
                   {conversations.length}
                 </span>
               )}
+            </button>
+
+            {/* Mobile Open Sanad Suite Services Button (Left) */}
+            <button
+              id="mobile-toggle-sanad-services-btn"
+              onClick={() => setIsMobileServicesOpen(true)}
+              className="lg:hidden p-1.5 rounded-xl border border-[#d4af37]/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-900 transition-colors flex items-center gap-1.5 cursor-pointer font-bold text-xs"
+              title="منظومة سند المتكاملة"
+            >
+              <Layers className="w-4 h-4 text-[#d4af37]" />
+              <span>منظومة سند</span>
             </button>
 
             <div className="flex items-center gap-1.5">
@@ -661,6 +678,14 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
           </a>
         </div>
       </div>
+
+      {/* 3. Floating Modern Persistent & Collapsible Sidebar (Left: Sanad Suite Services) */}
+      <SanadServicesSidebar
+        isOpenMobile={isMobileServicesOpen}
+        onCloseMobile={() => setIsMobileServicesOpen(false)}
+        isCollapsed={isServicesCollapsed}
+        onToggleCollapse={() => setIsServicesCollapsed((prev) => !prev)}
+      />
     </div>
   );
 };

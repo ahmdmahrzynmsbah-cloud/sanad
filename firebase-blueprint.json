@@ -91,6 +91,22 @@
       },
       "required": ["id", "title", "description", "url", "category", "createdAt"]
     },
+    "partners": {
+      "description": "Partner institutions, strategic alliances, universities, and professional syndicates",
+      "fields": {
+        "id": { "type": "string", "description": "Unique partner document ID" },
+        "name": { "type": "string", "description": "Name of the partner institution or entity" },
+        "description": { "type": "string", "description": "Description of the partner and collaborative scope" },
+        "category": { "type": "string", "description": "Category (e.g. نقابات, جامعات, بنوك, غرف تجارية)" },
+        "partnershipType": { "type": "string", "description": "Type of partnership (e.g. شريك استراتيجي, تدريب واعتماد)" },
+        "logoUrl": { "type": "string", "description": "Logo URL or image link of the partner" },
+        "websiteUrl": { "type": "string", "description": "Official website URL of the partner" },
+        "order": { "type": "number", "description": "Sort order" },
+        "isActive": { "type": "boolean", "description": "Whether partner is active and displayed" },
+        "createdAt": { "type": "string", "description": "ISO creation timestamp" }
+      },
+      "required": ["id", "name", "description", "category", "createdAt"]
+    },
     "conversations": {
       "description": "User conversation sessions and chat history",
       "fields": {

@@ -574,6 +574,160 @@ export async function deleteRelatedSiteFromFirestore(siteId: string): Promise<bo
 }
 
 // ----------------------------------------------------
+// Partners Management (شركاؤنا - المؤسسات الشريكة)
+// ----------------------------------------------------
+export interface StoredPartner {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  partnershipType?: string;
+  logoUrl?: string;
+  websiteUrl?: string;
+  order?: number;
+  isActive?: boolean;
+  createdAt: string;
+}
+
+export const DEFAULT_PARTNERS: StoredPartner[] = [
+  {
+    id: 'partner-1',
+    name: 'نقابة مدققي الحسابات القانونيين الفلسطينية (PACPA)',
+    description: 'تعاون مهني ومعرفي لاعتماد المنظومة كمرجع ذكي موثوق لمدققي الحسابات والمحاسبين القانونيين في فلسطين في تدقيق الضرائب والبيانات المالية.',
+    category: 'نقابات وجمعيات مهنية',
+    partnershipType: 'شريك مهني وتدريبي',
+    logoUrl: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=300&auto=format&fit=crop&q=80',
+    websiteUrl: 'https://www.pacpa.ps',
+    order: 1,
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'partner-2',
+    name: 'اتحاد الغرف التجارية الصناعية الزراعية الفلسطينية',
+    description: 'شراكة استراتيجية لتمكين قطاع التجار والمستوردين وأصحاب الأعمال من فهم التعريفة الجمركية والامتثال الضريبي وتسهيل المعاملات التجارية.',
+    category: 'اتحادات وقطاع خاص',
+    partnershipType: 'شريك استراتيجي',
+    logoUrl: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=300&auto=format&fit=crop&q=80',
+    websiteUrl: 'https://www.pal-chambers.org',
+    order: 2,
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'partner-3',
+    name: 'جمعية البنوك في فلسطين (ABP)',
+    description: 'تنسيق وتكامل حول المعايير والسياسات الضريبية والائتمانية المنظمة للعمليات المصرفية والتحويلات المالية والتسهيلات البنكية.',
+    category: 'بنوك ومؤسسات مالية',
+    partnershipType: 'شريك مالي واستشاري',
+    logoUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=300&auto=format&fit=crop&q=80',
+    websiteUrl: 'https://www.abp.ps',
+    order: 3,
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'partner-4',
+    name: 'معهد أبحاث السياسات الاقتصادية الفلسطيني (ماس - MAS)',
+    description: 'تعاون بحثي وعلمي في مجال تحليل السياسات المالية العامة، والتشريعات الاقتصادية، ودراسة الآثار التنموية للضرائب والجمارك.',
+    category: 'مراكز أبحاث ودراسات',
+    partnershipType: 'شريك بحثي وأكاديمي',
+    logoUrl: 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=300&auto=format&fit=crop&q=80',
+    websiteUrl: 'https://www.mas.ps',
+    order: 4,
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'partner-5',
+    name: 'جامعة بيرزيت - كلية الأعمال والاقتصاد',
+    description: 'شراكة أكاديمية لتدريب طلبة المحاسبة والعلوم المالية وتأهيلهم على المنظومات الذكية للتشريعات الضريبية والجمركية وتطبيقاتها العملية.',
+    category: 'جامعات ومؤسسات أكاديمية',
+    partnershipType: 'اعتماد أكاديمي وتدريب',
+    logoUrl: 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=300&auto=format&fit=crop&q=80',
+    websiteUrl: 'https://www.birzeit.edu',
+    order: 5,
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'partner-6',
+    name: 'ملتقى رجال الأعمال الفلسطيني',
+    description: 'دعم وتمكين الشركات الوطنية والمستثمرين في الاستفادة من الحوافز الاستثمارية وقوانين تشجيع الاستثمار والامتثال للأنظمة الضريبية.',
+    category: 'اتحادات وقطاع خاص',
+    partnershipType: 'شريك قطاع الأعمال',
+    logoUrl: 'https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=300&auto=format&fit=crop&q=80',
+    websiteUrl: 'https://www.pbf.ps',
+    order: 6,
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+];
+
+export async function fetchPartnersFromFirestore(): Promise<StoredPartner[] | null> {
+  const db = initFirestore();
+  if (!db) return null;
+
+  try {
+    const col = collection(db, 'partners');
+    const snapshot = await getDocs(col);
+    if (snapshot.empty) {
+      return [];
+    }
+    const items: StoredPartner[] = [];
+    snapshot.forEach((docSnap) => {
+      items.push({
+        id: docSnap.id,
+        ...(docSnap.data() as StoredPartner),
+      });
+    });
+    return items;
+  } catch (err) {
+    console.error('Error fetching partners from Firestore:', err);
+    return null;
+  }
+}
+
+export async function savePartnerToFirestore(partner: StoredPartner): Promise<boolean> {
+  const db = initFirestore();
+  if (!db) return false;
+
+  try {
+    const docRef = doc(db, 'partners', partner.id);
+    await setDoc(docRef, {
+      id: partner.id,
+      name: partner.name,
+      description: partner.description,
+      category: partner.category || 'مؤسسات شريكة',
+      partnershipType: partner.partnershipType || 'شريك استراتيجي',
+      logoUrl: partner.logoUrl || '',
+      websiteUrl: partner.websiteUrl || '',
+      order: partner.order || 0,
+      isActive: partner.isActive !== false,
+      createdAt: partner.createdAt || new Date().toISOString(),
+    });
+    return true;
+  } catch (err) {
+    console.error(`Error saving partner ${partner.id} to Firestore:`, err);
+    return false;
+  }
+}
+
+export async function deletePartnerFromFirestore(partnerId: string): Promise<boolean> {
+  const db = initFirestore();
+  if (!db) return false;
+
+  try {
+    const docRef = doc(db, 'partners', partnerId);
+    await deleteDoc(docRef);
+    return true;
+  } catch (err) {
+    console.error(`Error deleting partner ${partnerId} from Firestore:`, err);
+    return false;
+  }
+}
+
+// ----------------------------------------------------
 // Platform About & Vision/Mission Management (عن المنصة والرؤية والرسالة)
 // ----------------------------------------------------
 export interface StoredAboutCard {
@@ -650,6 +804,105 @@ export async function savePlatformAboutToFirestore(data: StoredPlatformAbout): P
     return true;
   } catch (err) {
     console.error('Error saving platform_about to Firestore:', err);
+    return false;
+  }
+}
+
+// ----------------------------------------------------
+// Contact Us Info Management (بيانات التواصل واتساب وبريد إلكتروني)
+// ----------------------------------------------------
+export interface StoredContactWhatsappItem {
+  id: string;
+  name: string;
+  number: string;
+  description?: string;
+}
+
+export interface StoredContactPhoneItem {
+  id: string;
+  name: string;
+  number: string;
+}
+
+export interface StoredContactInfo {
+  whatsappNumbers: StoredContactWhatsappItem[];
+  email: string;
+  secondaryEmail?: string;
+  phoneNumbers?: StoredContactPhoneItem[];
+  workHours?: string;
+  address?: string;
+  notes?: string;
+  updatedAt?: string;
+}
+
+export const DEFAULT_CONTACT_INFO: StoredContactInfo = {
+  whatsappNumbers: [
+    {
+      id: 'wa-1',
+      name: 'الدعم الفني والاستفسارات العامة',
+      number: '0599123456',
+      description: 'متاح للرد على المشاكل التقنية واستفسارات المنظومة والمكلفين',
+    },
+    {
+      id: 'wa-2',
+      name: 'خدمة المشتركين والمراجعات الجمركية',
+      number: '0568987654',
+      description: 'لتفعيل وتجديد الاشتراكات الدائمة والمتابعات التشريعية',
+    },
+  ],
+  email: 'support@pal-customs.ps',
+  secondaryEmail: 'info@customs.pmof.ps',
+  phoneNumbers: [
+    {
+      id: 'ph-1',
+      name: 'هاتف الإدارة العامة (رام الله)',
+      number: '+970 2 297 8888',
+    },
+  ],
+  workHours: 'الأحد - الخميس: 8:00 صباحاً - 3:30 مساءً (الاستجابة عبر الواتساب على مدار الساعة)',
+  address: 'دولة فلسطين • رام الله والبيرة • مجمع الوزارات • وزارة المالية - الإدارة العامة للجمارك وضريبة القيمة المضافة',
+  notes: 'فريق العمل والمستشارون متاحون للتواصل الفوري عبر قنوات الواتساب المباشرة أو البريد الإلكتروني الرسمي.',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+};
+
+export async function fetchContactInfoFromFirestore(): Promise<StoredContactInfo | null> {
+  const db = initFirestore();
+  if (!db) return null;
+
+  try {
+    const docSnap = await getDocs(collection(db, 'system_settings'));
+    let found: StoredContactInfo | null = null;
+    docSnap.forEach((snap) => {
+      if (snap.id === 'contact_info') {
+        found = snap.data() as StoredContactInfo;
+      }
+    });
+    return found;
+  } catch (err) {
+    console.error('Error fetching contact_info from Firestore:', err);
+    return null;
+  }
+}
+
+export async function saveContactInfoToFirestore(data: StoredContactInfo): Promise<boolean> {
+  const db = initFirestore();
+  if (!db) return false;
+
+  try {
+    const docRef = doc(db, 'system_settings', 'contact_info');
+    await setDoc(docRef, {
+      whatsappNumbers: Array.isArray(data.whatsappNumbers) ? data.whatsappNumbers : DEFAULT_CONTACT_INFO.whatsappNumbers,
+      email: data.email || DEFAULT_CONTACT_INFO.email,
+      secondaryEmail: data.secondaryEmail || '',
+      phoneNumbers: Array.isArray(data.phoneNumbers) ? data.phoneNumbers : (DEFAULT_CONTACT_INFO.phoneNumbers || []),
+      workHours: data.workHours || DEFAULT_CONTACT_INFO.workHours,
+      address: data.address || DEFAULT_CONTACT_INFO.address,
+      notes: data.notes || DEFAULT_CONTACT_INFO.notes,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+    return true;
+  } catch (err) {
+    console.error('Error saving contact_info to Firestore:', err);
     return false;
   }
 }
@@ -766,7 +1019,8 @@ export async function seedFirestoreIfEmpty(
   initialLaws: StoredLaw[],
   initialCategories: StoredCategory[],
   initialSupervisors?: StoredSupervisor[],
-  initialRelatedSites?: StoredRelatedSite[]
+  initialRelatedSites?: StoredRelatedSite[],
+  initialPartners?: StoredPartner[]
 ) {
   const db = initFirestore();
   if (!db) return;
@@ -778,27 +1032,36 @@ export async function seedFirestoreIfEmpty(
     const supCol = collection(db, 'supervisors');
     const sitesCol = collection(db, 'related_sites');
     const settingsCol = collection(db, 'system_settings');
+    const partnersCol = collection(db, 'partners');
 
     // Check all collections in parallel
-    const [lawSnap, userSnap, catSnap, supSnap, siteSnap, settingsSnap] = await Promise.all([
+    const [lawSnap, userSnap, catSnap, supSnap, siteSnap, settingsSnap, partnersSnap] = await Promise.all([
       getDocs(lawsCol),
       getDocs(usersCol),
       getDocs(catCol),
       getDocs(supCol),
       getDocs(sitesCol),
       getDocs(settingsCol),
+      getDocs(partnersCol),
     ]);
 
     const seedTasks: Promise<any>[] = [];
 
     let hasAbout = false;
+    let hasContact = false;
     settingsSnap.forEach((docSnap) => {
       if (docSnap.id === 'platform_about') hasAbout = true;
+      if (docSnap.id === 'contact_info') hasContact = true;
     });
 
     if (!hasAbout) {
       console.log('Seeding default platform_about to Firestore...');
       seedTasks.push(savePlatformAboutToFirestore(DEFAULT_PLATFORM_ABOUT));
+    }
+
+    if (!hasContact) {
+      console.log('Seeding default contact_info to Firestore...');
+      seedTasks.push(saveContactInfoToFirestore(DEFAULT_CONTACT_INFO));
     }
 
     if (lawSnap.empty) {
@@ -821,6 +1084,11 @@ export async function seedFirestoreIfEmpty(
     if (siteSnap.empty && initialRelatedSites && initialRelatedSites.length > 0) {
       console.log('Seeding default related sites to Firestore cloud database...');
       seedTasks.push(Promise.all(initialRelatedSites.map((s) => saveRelatedSiteToFirestore(s))));
+    }
+
+    if (partnersSnap.empty && initialPartners && initialPartners.length > 0) {
+      console.log('Seeding default partners to Firestore cloud database...');
+      seedTasks.push(Promise.all(initialPartners.map((p) => savePartnerToFirestore(p))));
     }
 
     if (seedTasks.length > 0) {

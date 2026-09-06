@@ -14,6 +14,7 @@ import {
   BookOpen,
   Users,
   Globe,
+  Handshake,
   Home,
   Menu,
   X,
@@ -21,11 +22,12 @@ import {
   Sparkles,
   Settings,
   Target,
-  Eye
+  Eye,
+  PhoneCall
 } from 'lucide-react';
 import { User, SystemBranding } from '../types';
 
-export type ActiveView = 'home' | 'supervisors' | 'related-sites' | 'about' | 'chat' | 'auth' | 'admin-login' | 'admin-portal';
+export type ActiveView = 'home' | 'supervisors' | 'related-sites' | 'partners' | 'about' | 'contact' | 'chat' | 'auth' | 'admin-login' | 'admin-portal';
 
 interface HeaderProps {
   currentUser: User | null;
@@ -192,6 +194,19 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
 
             <button
+              id="header-nav-partners-btn"
+              onClick={() => handleNav('partners')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                activeView === 'partners'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-white/5 text-slate-200 hover:bg-white/10 hover:text-white border border-white/10'
+              }`}
+            >
+              <Handshake className="w-3.5 h-3.5 text-[#d4af37]" />
+              <span>شركاؤنا</span>
+            </button>
+
+            <button
               id="header-nav-about-btn"
               onClick={() => handleNav('about')}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
@@ -203,6 +218,20 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Eye className="w-3.5 h-3.5 text-[#d4af37]" />
               <span>الرؤية</span>
+            </button>
+
+            <button
+              id="header-nav-contact-btn"
+              onClick={() => handleNav('contact')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                activeView === 'contact'
+                  ? 'bg-emerald-700/80 text-white border border-emerald-500/40'
+                  : 'bg-white/5 text-slate-200 hover:bg-white/10 hover:text-white border border-emerald-500/30 hover:border-emerald-500/60'
+              }`}
+              title="اتصل بنا وتواصل مباشر"
+            >
+              <PhoneCall className="w-3.5 h-3.5 text-emerald-400" />
+              <span>اتصل بنا</span>
             </button>
           </div>
 
@@ -437,6 +466,7 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
 
             <button
+              id="header-nav-related-sites-mobile-btn"
               onClick={() => handleNav('related-sites')}
               className={`w-full p-3 rounded-xl text-xs font-bold flex items-center justify-between transition-all text-right cursor-pointer ${
                 activeView === 'related-sites'
@@ -447,6 +477,22 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="flex items-center gap-2.5">
                 <Globe className="w-4 h-4 text-emerald-300" />
                 <span>مواقع ذات صلة</span>
+              </span>
+              <ChevronLeft className="w-4 h-4 text-slate-400" />
+            </button>
+
+            <button
+              id="header-nav-partners-mobile-btn"
+              onClick={() => handleNav('partners')}
+              className={`w-full p-3 rounded-xl text-xs font-bold flex items-center justify-between transition-all text-right cursor-pointer ${
+                activeView === 'partners'
+                  ? 'bg-emerald-700/80 text-white border border-emerald-500/40'
+                  : 'bg-white/5 hover:bg-white/10 text-slate-200'
+              }`}
+            >
+              <span className="flex items-center gap-2.5">
+                <Handshake className="w-4 h-4 text-[#d4af37]" />
+                <span>شركاؤنا</span>
               </span>
               <ChevronLeft className="w-4 h-4 text-slate-400" />
             </button>
@@ -465,6 +511,22 @@ export const Header: React.FC<HeaderProps> = ({
                 <span>الرؤية</span>
               </span>
               <ChevronLeft className="w-4 h-4 text-[#d4af37]" />
+            </button>
+
+            <button
+              id="header-nav-contact-mobile-btn"
+              onClick={() => handleNav('contact')}
+              className={`w-full p-3 rounded-xl text-xs font-bold flex items-center justify-between transition-all text-right cursor-pointer ${
+                activeView === 'contact'
+                  ? 'bg-emerald-700/80 text-white border border-emerald-500/40'
+                  : 'bg-white/5 hover:bg-white/10 text-slate-200 border border-emerald-500/30'
+              }`}
+            >
+              <span className="flex items-center gap-2.5">
+                <PhoneCall className="w-4 h-4 text-emerald-400" />
+                <span>اتصل بنا</span>
+              </span>
+              <ChevronLeft className="w-4 h-4 text-emerald-400" />
             </button>
 
             {currentAdmin ? (

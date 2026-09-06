@@ -43,23 +43,29 @@ import {
   Globe,
   Shield,
   Target,
-  Link2
+  Link2,
+  PhoneCall,
+  Handshake
 } from 'lucide-react';
-import { User, Law, LawCategory, LegalCategory, SystemBranding, PlatformAboutData } from '../types';
+import { User, Law, LawCategory, LegalCategory, SystemBranding, PlatformAboutData, ContactInfo } from '../types';
 import { extractTextFromPDF, formatBytes, PDFProgress } from '../utils/pdfParser';
 import { SupervisorsAdminTab } from './admin/SupervisorsAdminTab';
 import { RelatedSitesAdminTab } from './admin/RelatedSitesAdminTab';
+import { PartnersAdminTab } from './admin/PartnersAdminTab';
 import { AboutPlatformAdminTab } from './admin/AboutPlatformAdminTab';
+import { ContactAdminTab } from './admin/ContactAdminTab';
+import { UserDetailsModal } from './admin/UserDetailsModal';
 import { useSync } from '../utils/sync';
 
 interface AdminPortalProps {
   onLawsUpdated?: () => void;
   onBrandingUpdated?: (branding: SystemBranding) => void;
   onAboutUpdated?: (about: PlatformAboutData) => void;
+  onContactUpdated?: (contact: ContactInfo) => void;
 }
 
-export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrandingUpdated, onAboutUpdated }) => {
-  const [activeTab, setActiveTab] = useState<'requests' | 'laws' | 'supervisors' | 'related-sites' | 'about' | 'settings'>('requests');
+export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrandingUpdated, onAboutUpdated, onContactUpdated }) => {
+  const [activeTab, setActiveTab] = useState<'requests' | 'laws' | 'supervisors' | 'related-sites' | 'partners' | 'about' | 'contact' | 'settings'>('requests');
 
   // Users state
   const [users, setUsers] = useState<User[]>([]);
@@ -78,6 +84,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
   const [trialModalUser, setTrialModalUser] = useState<User | null>(null);
   const [extendDaysInput, setExtendDaysInput] = useState<number>(7);
   const [updatingUserTrial, setUpdatingUserTrial] = useState(false);
+
+  // User Details Eye Modal
+  const [selectedUserDetails, setSelectedUserDetails] = useState<User | null>(null);
+
+  // Synchronize selectedUserDetails if users list changes
+  useEffect(() => {
+    if (selectedUserDetails) {
+      const fresh = users.find((u) => u.id === selectedUserDetails.id);
+      if (fresh) {
+        setSelectedUserDetails(fresh);
+      }
+    }
+  }, [users]);
 
   // Auto Approval State
   const [autoApproveEnabled, setAutoApproveEnabled] = useState(true);
@@ -1299,6 +1318,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
         </button>
 
         <button
+          id="admin-tab-partners"
+          onClick={() => setActiveTab('partners')}
+          className={`pb-3 px-3.5 sm:px-5 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 transition-all shrink-0 cursor-pointer ${
+            activeTab === 'partners'
+              ? 'border-[#12281e] text-[#12281e]'
+              : 'border-transparent text-gray-500 hover:text-gray-900'
+          }`}
+        >
+          <Handshake className="w-4 h-4 text-[#d4af37]" />
+          شركاؤنا
+        </button>
+
+        <button
           id="admin-tab-about"
           onClick={() => setActiveTab('about')}
           className={`pb-3 px-3.5 sm:px-5 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 transition-all shrink-0 cursor-pointer ${
@@ -1309,6 +1341,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
         >
           <Target className="w-4 h-4 text-[#d4af37]" />
           عن المنصة (الرؤية والرسالة)
+        </button>
+
+        <button
+          id="admin-tab-contact"
+          onClick={() => setActiveTab('contact')}
+          className={`pb-3 px-3.5 sm:px-5 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 transition-all shrink-0 cursor-pointer ${
+            activeTab === 'contact'
+              ? 'border-[#12281e] text-[#12281e]'
+              : 'border-transparent text-gray-500 hover:text-gray-900'
+          }`}
+        >
+          <PhoneCall className="w-4 h-4 text-emerald-600" />
+          بيانات التواصل (اتصل بنا)
         </button>
 
         <button
@@ -1708,6 +1753,17 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
                           </td>
                           <td className="py-3.5 px-4">
                             <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                              {/* View Full User Details Eye Button */}
+                              <button
+                                id={`admin-view-user-${user.id}`}
+                                onClick={() => setSelectedUserDetails(user)}
+                                className="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-200/90 flex items-center gap-1 transition-all shadow-xs cursor-pointer hover:border-amber-300"
+                                title="عرض كامل تفاصيل وبيانات المستخدم وكلمة المرور وتاريخ التسجيل"
+                              >
+                                <Eye className="w-3.5 h-3.5 text-amber-700" />
+                                <span>عرض التفاصيل</span>
+                              </button>
+
                               {/* If pending: Show approve/reject */}
                               {user.status === 'pending' && (
                                 <>
@@ -3163,10 +3219,24 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
       )}
 
       {/* ======================================================== */}
+      {/* TAB: PARTNERS MANAGEMENT (شركاؤنا - المؤسسات الشريكة)    */}
+      {/* ======================================================== */}
+      {activeTab === 'partners' && (
+        <PartnersAdminTab />
+      )}
+
+      {/* ======================================================== */}
       {/* TAB 6: PLATFORM ABOUT & VISION (عن المنصة والرؤية والرسالة) */}
       {/* ======================================================== */}
       {activeTab === 'about' && (
         <AboutPlatformAdminTab onAboutUpdated={onAboutUpdated} />
+      )}
+
+      {/* ======================================================== */}
+      {/* TAB 7: CONTACT US MANAGEMENT (بيانات التواصل واتساب وبريد) */}
+      {/* ======================================================== */}
+      {activeTab === 'contact' && (
+        <ContactAdminTab onContactUpdated={onContactUpdated} />
       )}
 
       {/* Dynamic Category Management Modal (إدارة التصنيفات القانونية) */}
@@ -3652,6 +3722,22 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
             </div>
           </div>
         </div>
+      )}
+
+      {/* User Details Modal (Eye icon pop-up) */}
+      {selectedUserDetails && (
+        <UserDetailsModal
+          user={selectedUserDetails}
+          onClose={() => setSelectedUserDetails(null)}
+          onToggleSubscription={handleToggleSubscription}
+          onOpenExtendTrial={(user) => {
+            setTrialModalUser(user);
+            setExtendDaysInput(7);
+          }}
+          onToggleFreeze={handleToggleFreeze}
+          onUpdateStatus={handleUpdateStatus}
+          defaultTrialDays={defaultTrialDays}
+        />
       )}
     </div>
   );

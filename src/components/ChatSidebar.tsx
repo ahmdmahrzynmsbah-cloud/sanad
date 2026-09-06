@@ -191,7 +191,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
         <div
           id="chat-sidebar-backdrop"
           onClick={onCloseMobile}
-          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 lg:hidden transition-opacity"
+          className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 lg:hidden transition-opacity"
         />
       )}
 
@@ -200,7 +200,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
         id="chat-history-sidebar"
         className={`
           fixed lg:relative top-2 lg:top-0 bottom-2 lg:bottom-0 right-2 lg:right-0
-          h-[calc(100%-16px)] lg:h-full z-40
+          h-[calc(100%-16px)] lg:h-full z-50
           bg-[#0d211a] text-slate-100
           border border-[#17382d]
           rounded-2xl sm:rounded-[22px]
@@ -208,7 +208,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
           flex flex-col shadow-xl lg:shadow-xs
           transition-all duration-300 ease-in-out select-none shrink-0
           ${isOpen ? 'translate-x-0' : 'translate-x-[calc(100%+16px)] lg:translate-x-0'}
-          ${isCollapsed ? 'lg:w-[68px]' : 'lg:w-[270px] xl:w-[285px] w-[285px] sm:w-[305px]'}
+          ${isCollapsed ? 'lg:w-[68px]' : 'lg:w-[270px] xl:w-[285px] w-[calc(100vw-32px)] max-w-[320px] sm:w-[305px]'}
         `}
       >
         {/* ========================================================================= */}

@@ -7,14 +7,17 @@ import { ChatPortal } from './components/ChatPortal';
 import { HomeLandingView } from './components/HomeLandingView';
 import { SupervisorsView } from './components/SupervisorsView';
 import { RelatedSitesView } from './components/RelatedSitesView';
+import { PartnersView } from './components/PartnersView';
 import { AboutPlatformView } from './components/AboutPlatformView';
-import { User, SystemBranding, PlatformAboutData } from './types';
+import { ContactUsView } from './components/ContactUsView';
+import { User, SystemBranding, PlatformAboutData, ContactInfo } from './types';
 import { Scale, ShieldAlert, Clock, LogOut, ArrowRight, BookOpen } from 'lucide-react';
 import { initGlobalSync, useSync } from './utils/sync';
 
 export default function App() {
   const [branding, setBranding] = useState<SystemBranding | undefined>(undefined);
   const [platformAbout, setPlatformAbout] = useState<PlatformAboutData | null>(null);
+  const [contactInfo, setContactInfo] = useState<ContactInfo | null>(null);
   const [authInitialMode, setAuthInitialMode] = useState<'login' | 'register'>('login');
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
@@ -92,6 +95,19 @@ export default function App() {
     }
   };
 
+  // Fetch Contact Info
+  const fetchContactInfo = async () => {
+    try {
+      const res = await fetch('/api/system/contact');
+      const data = await res.json();
+      if (res.ok && data && data.contactInfo) {
+        setContactInfo(data.contactInfo);
+      }
+    } catch (err) {
+      console.error('Failed to load contact info:', err);
+    }
+  };
+
   const fetchCurrentUser = async () => {
     if (!currentUser) return;
     try {
@@ -122,6 +138,7 @@ export default function App() {
     fetchLawsCount();
     fetchBranding();
     fetchPlatformAbout();
+    fetchContactInfo();
     return () => cleanupSync();
   }, []);
 
@@ -133,6 +150,7 @@ export default function App() {
     fetchLawsCount();
     fetchBranding();
     fetchPlatformAbout();
+    fetchContactInfo();
   });
 
   const handleUserLoginSuccess = (user: User) => {
@@ -200,7 +218,9 @@ export default function App() {
               }}
               onNavigateToSupervisors={() => setActiveView('supervisors')}
               onNavigateToRelatedSites={() => setActiveView('related-sites')}
+              onNavigateToPartners={() => setActiveView('partners')}
               onOpenAbout={() => setActiveView('about')}
+              onOpenContact={() => setActiveView('contact')}
               onNavigateToChat={() => {
                 if (currentUser && currentUser.status === 'approved') {
                   setActiveView('chat');
@@ -239,11 +259,30 @@ export default function App() {
           </div>
         )}
 
+        {/* VIEW 0.25: Public Partners Page (شركاؤنا) */}
+        {activeView === 'partners' && (
+          <div className="w-full">
+            <PartnersView
+              onBackToHome={() => setActiveView('home')}
+            />
+          </div>
+        )}
+
         {/* VIEW 0.3: Public About Platform Page (الرؤية والرسالة) */}
         {activeView === 'about' && (
           <div className="w-full">
             <AboutPlatformView
               aboutData={platformAbout}
+            />
+          </div>
+        )}
+
+        {/* VIEW 0.4: Public Contact Us Page (اتصل بنا) */}
+        {activeView === 'contact' && (
+          <div className="w-full">
+            <ContactUsView
+              contactData={contactInfo}
+              onBackToHome={() => setActiveView('home')}
             />
           </div>
         )}
@@ -287,6 +326,9 @@ export default function App() {
                 }}
                 onAboutUpdated={(newAbout) => {
                   setPlatformAbout(newAbout);
+                }}
+                onContactUpdated={(newContact) => {
+                  setContactInfo(newContact);
                 }}
               />
             ) : (
