@@ -94,22 +94,28 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         body: JSON.stringify({ username: username.trim(), password }),
       });
 
-      const data = await res.json();
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch (jsonErr) {
+        console.warn('Login non-JSON response:', res.status);
+      }
 
       if (!res.ok) {
-        if (data.status === 'pending') {
+        if (data?.status === 'pending') {
           setPendingStatusUser({ username: data.username || username });
-        } else if (data.status === 'rejected') {
+        } else if (data?.status === 'rejected') {
           setRejectedUser(data.username || username);
         } else {
-          setError(data.error || 'فشل تسجيل الدخول، تأكد من صحة البيانات.');
+          setError(data?.error || `فشل تسجيل الدخول (${res.status}). يرجى التحقق من صحة البيانات أو المحاولة لاحقاً.`);
         }
         return;
       }
 
       onLoginSuccess(data.user);
     } catch (err: any) {
-      setError('تعذر الاتصال بالخادم، يرجى المحاولة مرة أخرى.');
+      console.error('Login network error:', err);
+      setError(err?.message ? `تعذر الاتصال بالخادم: ${err.message}` : 'تعذر الاتصال بالخادم، يرجى المحاولة مرة أخرى.');
     } finally {
       setLoading(false);
     }
@@ -163,14 +169,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         }),
       });
 
-      const data = await res.json();
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch (jsonErr) {
+        console.warn('Register non-JSON response:', res.status);
+      }
 
       if (!res.ok) {
-        setError(data.error || 'فشل إنشاء الحساب، يرجى التحقق من البيانات.');
+        setError(data?.error || `فشل إنشاء الحساب (${res.status}). يرجى التحقق من البيانات أو المحاولة لاحقاً.`);
         return;
       }
 
-      if (data.isAutoApproved) {
+      if (data?.isAutoApproved) {
         setSuccessMessage(
           'تم إنشاء الحساب واعتماده تلقائياً بنجاح! تم حفظ وتأكيد بياناتك في السحابة، يمكنك الآن تسجيل الدخول مباشرة.'
         );
@@ -186,7 +197,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         setPassword('');
       }
     } catch (err: any) {
-      setError('تعذر الاتصال بالخادم أثناء التسجيل.');
+      console.error('Register network error:', err);
+      setError(err?.message ? `تعذر الاتصال بالخادم: ${err.message}` : 'تعذر الاتصال بالخادم أثناء التسجيل.');
     } finally {
       setLoading(false);
     }
@@ -228,10 +240,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         }),
       });
 
-      const data = await res.json();
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch (jsonErr) {
+        console.warn('Reset password non-JSON response:', res.status);
+      }
 
       if (!res.ok) {
-        setError(data.error || 'فشلت عملية تعيين كلمة المرور، يرجى التأكد من صحة رمز الأمان.');
+        setError(data?.error || `فشلت عملية تعيين كلمة المرور (${res.status})، يرجى التأكد من صحة رمز الأمان.`);
         return;
       }
 
@@ -243,44 +260,45 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setResetRecoveryCode('');
       setMode('login');
     } catch (err: any) {
-      setError('تعذر الاتصال بالخادم.');
+      console.error('Reset password network error:', err);
+      setError(err?.message ? `تعذر الاتصال بالخادم: ${err.message}` : 'تعذر الاتصال بالخادم.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="w-full max-w-5xl mx-auto my-2 px-3 sm:px-6">
+    <div className="w-full max-w-5xl mx-auto my-1 sm:my-2 px-2.5 sm:px-6">
       {/* Split-Screen Enterprise Government Card */}
       <div className="bg-white rounded-2xl shadow-xl shadow-slate-900/5 border border-slate-200/90 overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-[520px]">
         
         {/* RIGHT SIDE: Deep Olive Executive Brand Banner (LG: 5 cols) */}
-        <div className="lg:col-span-5 bg-gradient-to-br from-[#0b1f1a] via-[#0f2a24] to-[#081814] text-white p-7 sm:p-9 flex flex-col justify-between relative overflow-hidden border-b lg:border-b-0 lg:border-l border-[#1a3f36]">
+        <div className="lg:col-span-5 bg-gradient-to-br from-[#0b1f1a] via-[#0f2a24] to-[#081814] text-white p-5 sm:p-7 lg:p-9 flex flex-col justify-between relative overflow-hidden border-b lg:border-b-0 lg:border-l border-[#1a3f36]">
           {/* Subtle Ambient Glows & Grid Pattern */}
           <div className="absolute -top-24 -right-24 w-72 h-72 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
           <div className="absolute -bottom-24 -left-24 w-72 h-72 bg-[#d4af37]/10 rounded-full blur-3xl pointer-events-none"></div>
           
           {/* Top Brand Block */}
           <div className="relative z-10">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 rounded-xl bg-white/10 backdrop-blur-md border border-white/15 flex items-center justify-center shadow-lg text-[#d4af37]">
-                <Scale className="w-6 h-6" />
+            <div className="flex items-center gap-2.5 sm:gap-3 mb-4 sm:mb-6">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-white/10 backdrop-blur-md border border-white/15 flex items-center justify-center shadow-lg text-[#d4af37] shrink-0">
+                <Scale className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-base font-bold tracking-tight text-white">دولة فلسطين</span>
+                  <span className="text-sm sm:text-base font-bold tracking-tight text-white">دولة فلسطين</span>
                   <span className="text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/30">
                     رسمي
                   </span>
                 </div>
-                <p className="text-xs text-slate-300 font-light mt-0.5">
+                <p className="text-[11px] sm:text-xs text-slate-300 font-light mt-0.5">
                   وزارة المالية • الإدارة العامة للجمارك وضريبة الدخل
                 </p>
               </div>
             </div>
 
-            <div className="space-y-3 mt-8">
-              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white leading-snug">
+            <div className="space-y-2 sm:space-y-3 mt-4 sm:mt-8">
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-white leading-snug">
                 بوابة المستفيدين <br />
                 <span className="text-[#a7d9c0]">والاستعلام الجمركي والضريبي</span>
               </h2>
@@ -290,22 +308,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
 
             {/* Value Points Pill Highlights */}
-            <div className="mt-8 space-y-3 pt-6 border-t border-white/10">
-              <div className="flex items-center gap-3 text-xs text-slate-200">
-                <div className="w-7 h-7 rounded-lg bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-emerald-400 shrink-0">
-                  <BookOpen className="w-3.5 h-3.5" />
+            <div className="mt-5 sm:mt-8 space-y-2.5 sm:space-y-3 pt-4 sm:pt-6 border-t border-white/10">
+              <div className="flex items-center gap-2.5 sm:gap-3 text-xs text-slate-200">
+                <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-emerald-400 shrink-0">
+                  <BookOpen className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
                 </div>
                 <span>تشريعات محيّنة ومفهرسة بنصوص المواد الرسمية</span>
               </div>
-              <div className="flex items-center gap-3 text-xs text-slate-200">
-                <div className="w-7 h-7 rounded-lg bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-emerald-400 shrink-0">
-                  <ShieldCheck className="w-3.5 h-3.5" />
+              <div className="flex items-center gap-2.5 sm:gap-3 text-xs text-slate-200">
+                <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-emerald-400 shrink-0">
+                  <ShieldCheck className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
                 </div>
                 <span>تدقيق واعتماد أمني ورقابي للحسابات المصرح لها</span>
               </div>
-              <div className="flex items-center gap-3 text-xs text-slate-200">
-                <div className="w-7 h-7 rounded-lg bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-emerald-400 shrink-0">
-                  <Server className="w-3.5 h-3.5" />
+              <div className="flex items-center gap-2.5 sm:gap-3 text-xs text-slate-200">
+                <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-emerald-400 shrink-0">
+                  <Server className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
                 </div>
                 <span>حفظ وتزامن سحابي فوري عبر Cloud Firestore</span>
               </div>
@@ -313,7 +331,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </div>
 
           {/* Bottom Security Assurance */}
-          <div className="mt-8 pt-6 border-t border-white/10 relative z-10 flex items-center justify-between text-[11px] text-slate-400">
+          <div className="mt-5 sm:mt-8 pt-4 sm:pt-6 border-t border-white/10 relative z-10 flex items-center justify-between text-[11px] text-slate-400">
             <span className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
               اتصال مشفر ومؤمّن
@@ -323,7 +341,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         </div>
 
         {/* LEFT SIDE: Clean Modern Auth Card (LG: 7 cols) */}
-        <div className="lg:col-span-7 bg-white p-6 sm:p-9 flex flex-col justify-between">
+        <div className="lg:col-span-7 bg-white p-4 sm:p-7 lg:p-9 flex flex-col justify-between">
           <div>
             {/* Header with Segmented Control Tab Switcher */}
             {mode !== 'forgot' ? (

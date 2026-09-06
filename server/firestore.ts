@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
   getFirestore,
   collection,
@@ -117,7 +117,7 @@ export function initFirestore(): Firestore | null {
       // Ignore file error and fallback to DEFAULT_FIREBASE_CONFIG
     }
 
-    const app = initializeApp(config);
+    const app = getApps().length > 0 ? getApp() : initializeApp(config);
     firestoreDb = getFirestore(app, config.firestoreDatabaseId || undefined);
     isInitialized = true;
     console.log('✅ Firestore Database connected successfully to project:', config.projectId, 'Database ID:', config.firestoreDatabaseId);
@@ -1011,6 +1011,8 @@ export async function clearUserConversationsFromFirestore(userId: string): Promi
   }
 }
 
+let isAlreadySeeded = false;
+
 /**
  * Seed initial laws, users, categories, supervisors, and related sites to Firestore if they do not already exist
  */
@@ -1022,6 +1024,7 @@ export async function seedFirestoreIfEmpty(
   initialRelatedSites?: StoredRelatedSite[],
   initialPartners?: StoredPartner[]
 ) {
+  if (isAlreadySeeded) return;
   const db = initFirestore();
   if (!db) return;
 
@@ -1095,6 +1098,7 @@ export async function seedFirestoreIfEmpty(
       await Promise.all(seedTasks);
       console.log('✅ Parallel Firestore database seeding completed.');
     }
+    isAlreadySeeded = true;
   } catch (err) {
     console.error('Error during Firestore database seeding:', err);
   }

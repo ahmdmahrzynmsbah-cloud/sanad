@@ -77,19 +77,19 @@ export const SupervisorsView: React.FC<SupervisorsViewProps> = ({
   });
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-10 space-y-8 animate-in fade-in duration-300">
+    <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-10 space-y-5 sm:space-y-8 animate-in fade-in duration-300">
       {/* Top Header & Breadcrumb */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-slate-200">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 sm:pb-6 border-b border-slate-200">
         <div>
           <button
             onClick={onBackToHome}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-800 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-xl border border-emerald-200 transition-colors mb-3 cursor-pointer"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-800 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-xl border border-emerald-200 transition-colors mb-2.5 sm:mb-3 cursor-pointer"
           >
             <ArrowRight className="w-3.5 h-3.5" />
             <span>العودة للرئيسية</span>
           </button>
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-emerald-800 text-white flex items-center justify-center font-bold shadow-sm">
+            <div className="w-10 h-10 rounded-xl bg-emerald-800 text-white flex items-center justify-center font-bold shadow-sm shrink-0">
               <Users className="w-5 h-5 text-[#d4af37]" />
             </div>
             <div>
@@ -115,7 +115,7 @@ export const SupervisorsView: React.FC<SupervisorsViewProps> = ({
       </div>
 
       {/* Search & Department Filters Bar */}
-      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+      <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-3 sm:gap-4">
         {/* Search Input */}
         <div className="relative w-full md:w-80">
           <input
@@ -129,7 +129,7 @@ export const SupervisorsView: React.FC<SupervisorsViewProps> = ({
         </div>
 
         {/* Department Chips */}
-        <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-1 md:pb-0 scrollbar-none">
+        <div className="flex items-center gap-2 overflow-x-auto touch-scroll overscroll-x-contain w-full md:w-auto pb-1.5 md:pb-0 scrollbar-none">
           <button
             onClick={() => setSelectedDept('all')}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${

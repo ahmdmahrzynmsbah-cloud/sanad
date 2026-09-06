@@ -55,25 +55,63 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
+// 1. CORS headers & OPTIONS preflight support (crucial for Vercel and cross-origin)
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-requested-with');
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  next();
+});
+
+// 2. Normalize API path if stripped by Vercel serverless functions
+app.use((req, res, next) => {
+  if (
+    !req.url.startsWith('/api') && (
+      req.url.startsWith('/auth') ||
+      req.url.startsWith('/laws') ||
+      req.url.startsWith('/categories') ||
+      req.url.startsWith('/settings') ||
+      req.url.startsWith('/admin') ||
+      req.url.startsWith('/ask') ||
+      req.url.startsWith('/export') ||
+      req.url.startsWith('/supervisors') ||
+      req.url.startsWith('/related-sites') ||
+      req.url.startsWith('/partners') ||
+      req.url.startsWith('/contact-info') ||
+      req.url.startsWith('/platform-about')
+    )
+  ) {
+    req.url = '/api' + req.url;
+  }
+  next();
+});
 
 // --- Vercel & Firebase Sync Middleware ---
-let syncPromise = null;
+let syncPromise: Promise<void> | null = null;
 let lastSyncTime = 0;
 
 async function ensureDbSynced() {
   const now = Date.now();
-  // Always sync on cold start. On Vercel, refresh if older than 5 seconds to prevent stale memory.
-  const isStale = process.env.VERCEL ? (now - lastSyncTime > 5000) : (lastSyncTime === 0);
+  // Sync on cold start (lastSyncTime === 0) or refresh if older than 60 seconds (never block every 5s)
+  const isStale = lastSyncTime === 0 || (now - lastSyncTime > 60000);
   
   if (!syncPromise || isStale) {
     syncPromise = syncWithFirestore().then(() => {
       lastSyncTime = Date.now();
     }).catch(err => {
       console.error("Sync failed:", err);
-      syncPromise = null; 
+      lastSyncTime = Date.now(); // Back off 60s
     });
   }
-  await syncPromise;
+
+  // Bounded wait of 2500ms max so that Vercel serverless functions never timeout
+  await Promise.race([
+    syncPromise,
+    new Promise((resolve) => setTimeout(resolve, 2500)),
+  ]);
 }
 
 app.use(async (req, res, next) => {
@@ -831,86 +869,95 @@ function getGemini(): GoogleGenAI {
 
 // User Registration: New accounts automatically enter "pending" state
 app.post('/api/auth/register', async (req, res) => {
-  const { username, password, fullName, phone, recoveryCode } = req.body;
-  if (!username || !password) {
-    return res.status(400).json({ error: 'اسم المستخدم وكلمة المرور مطلوبان' });
-  }
-
-  const trimmedUsername = String(username).trim();
-  const trimmedFullName = fullName ? String(fullName).trim() : '';
-  const trimmedPhone = phone ? String(phone).trim() : '';
-  const trimmedRecoveryCode = recoveryCode ? String(recoveryCode).trim() : '';
-
-  if (!trimmedFullName) {
-    return res.status(400).json({ error: 'يرجى إدخال الاسم الكامل' });
-  }
-
-  if (!trimmedPhone) {
-    return res.status(400).json({ error: 'يرجى إدخال رقم الجوال' });
-  }
-
-  if (!trimmedRecoveryCode) {
-    return res.status(400).json({ error: 'يرجى تحديد رمز استعادة كلمة المرور في حال نسيانها' });
-  }
-
-  if (trimmedUsername.toLowerCase() === ADMIN_CREDENTIALS.username.toLowerCase()) {
-    return res.status(400).json({ error: 'اسم المستخدم هذا محجوز لإدارة النظام' });
-  }
-
-  const existingUser = db.users.find(
-    (u) => u.username.toLowerCase() === trimmedUsername.toLowerCase()
-  );
-  if (existingUser) {
-    return res.status(400).json({ error: 'اسم المستخدم مستخدم بالفعل، يرجى اختيار اسم آخر' });
-  }
-
-  // Check if phone number is already registered
-  if (trimmedPhone) {
-    const existingPhone = db.users.find((u) => u.phone && u.phone.trim() === trimmedPhone);
-    if (existingPhone) {
-      return res.status(400).json({ error: 'رقم الجوال هذا مسجل مسبقاً بحساب آخر' });
+  try {
+    const { username, password, fullName, phone, recoveryCode } = req.body || {};
+    if (!username || !password) {
+      return res.status(400).json({ error: 'اسم المستخدم وكلمة المرور مطلوبان' });
     }
+
+    const trimmedUsername = String(username).trim();
+    const trimmedFullName = fullName ? String(fullName).trim() : '';
+    const trimmedPhone = phone ? String(phone).trim() : '';
+    const trimmedRecoveryCode = recoveryCode ? String(recoveryCode).trim() : '';
+
+    if (!trimmedFullName) {
+      return res.status(400).json({ error: 'يرجى إدخال الاسم الكامل' });
+    }
+
+    if (!trimmedPhone) {
+      return res.status(400).json({ error: 'يرجى إدخال رقم الجوال' });
+    }
+
+    if (!trimmedRecoveryCode) {
+      return res.status(400).json({ error: 'يرجى تحديد رمز استعادة كلمة المرور في حال نسيانها' });
+    }
+
+    if (trimmedUsername.toLowerCase() === ADMIN_CREDENTIALS.username.toLowerCase()) {
+      return res.status(400).json({ error: 'اسم المستخدم هذا محجوز لإدارة النظام' });
+    }
+
+    const existingUser = db.users.find(
+      (u) => u.username.toLowerCase() === trimmedUsername.toLowerCase()
+    );
+    if (existingUser) {
+      return res.status(400).json({ error: 'اسم المستخدم مستخدم بالفعل، يرجى اختيار اسم آخر' });
+    }
+
+    // Check if phone number is already registered
+    if (trimmedPhone) {
+      const existingPhone = db.users.find((u) => u.phone && u.phone.trim() === trimmedPhone);
+      if (existingPhone) {
+        return res.status(400).json({ error: 'رقم الجوال هذا مسجل مسبقاً بحساب آخر' });
+      }
+    }
+
+    const defaultTrialDays = typeof db.settings?.defaultTrialDays === 'number' ? db.settings.defaultTrialDays : 7;
+    const now = new Date();
+    const trialStartedAt = now.toISOString();
+    const trialEndsAt = new Date(now.getTime() + defaultTrialDays * 24 * 60 * 60 * 1000).toISOString();
+
+    const isAutoApprove = db.settings?.autoApproveNewUsers !== false;
+    const newUser: StoredUser = {
+      id: 'user-' + Date.now(),
+      username: trimmedUsername,
+      fullName: trimmedFullName,
+      phone: trimmedPhone,
+      recoveryCode: trimmedRecoveryCode,
+      password: String(password),
+      role: 'user',
+      status: isAutoApprove ? 'approved' : 'pending',
+      createdAt: now.toISOString(),
+      ...(isAutoApprove ? { reviewedAt: now.toISOString() } : {}),
+
+      // Trial and Subscription policy
+      subscriptionStatus: 'trial',
+      trialDays: defaultTrialDays,
+      trialStartedAt,
+      trialEndsAt,
+      isSubscribed: false,
+    };
+
+    db.users.push(newUser);
+    saveDB();
+    try {
+      await saveUserToFirestore(newUser);
+    } catch (saveErr) {
+      console.error('Failed to sync new user to Firestore cloud:', saveErr);
+    }
+
+    return res.status(201).json({
+      message: isAutoApprove
+        ? `تم إنشاء الحساب واعتماده بنجاح! تم منحك فترة تجريبية مجانية لمدة ${defaultTrialDays} أيام لاستخدام مساعد الجمارك والضرائب.`
+        : `تم تقديم طلب الحساب بنجاح، وهو قيد المراجعة الإدارية. تم تخصيص فترة تجريبية مدتها ${defaultTrialDays} أيام تبدأ فور الاعتماد.`,
+      isAutoApproved: isAutoApprove,
+      defaultTrialDays,
+      trialEndsAt,
+      user: toSafeUser(newUser),
+    });
+  } catch (err: any) {
+    console.error('Registration internal error:', err);
+    return res.status(500).json({ error: err?.message || 'حدث خطأ في الخادم أثناء تسجيل الحساب' });
   }
-
-  const defaultTrialDays = typeof db.settings?.defaultTrialDays === 'number' ? db.settings.defaultTrialDays : 7;
-  const now = new Date();
-  const trialStartedAt = now.toISOString();
-  const trialEndsAt = new Date(now.getTime() + defaultTrialDays * 24 * 60 * 60 * 1000).toISOString();
-
-  const isAutoApprove = db.settings?.autoApproveNewUsers !== false;
-  const newUser: StoredUser = {
-    id: 'user-' + Date.now(),
-    username: trimmedUsername,
-    fullName: trimmedFullName,
-    phone: trimmedPhone,
-    recoveryCode: trimmedRecoveryCode,
-    password: String(password),
-    role: 'user',
-    status: isAutoApprove ? 'approved' : 'pending',
-    createdAt: now.toISOString(),
-    ...(isAutoApprove ? { reviewedAt: now.toISOString() } : {}),
-
-    // Trial and Subscription policy
-    subscriptionStatus: 'trial',
-    trialDays: defaultTrialDays,
-    trialStartedAt,
-    trialEndsAt,
-    isSubscribed: false,
-  };
-
-  db.users.push(newUser);
-  saveDB();
-  await saveUserToFirestore(newUser);
-
-  return res.status(201).json({
-    message: isAutoApprove
-      ? `تم إنشاء الحساب واعتماده بنجاح! تم منحك فترة تجريبية مجانية لمدة ${defaultTrialDays} أيام لاستخدام مساعد الجمارك والضرائب.`
-      : `تم تقديم طلب الحساب بنجاح، وهو قيد المراجعة الإدارية. تم تخصيص فترة تجريبية مدتها ${defaultTrialDays} أيام تبدأ فور الاعتماد.`,
-    isAutoApproved: isAutoApprove,
-    defaultTrialDays,
-    trialEndsAt,
-    user: toSafeUser(newUser),
-  });
 });
 
 // User Login: Checks credentials, approval status, and trial expiration

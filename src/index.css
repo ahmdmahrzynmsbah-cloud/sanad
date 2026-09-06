@@ -25,6 +25,23 @@
   input, textarea, select, button {
     font-family: inherit;
   }
+
+  @media screen and (max-width: 768px) {
+    input[type="text"],
+    input[type="password"],
+    input[type="email"],
+    input[type="tel"],
+    input[type="number"],
+    textarea,
+    select {
+      font-size: 16px !important;
+    }
+  }
+}
+
+/* Touch momentum scrolling */
+.touch-scroll {
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Safe area inset support for modern mobile devices (iPhone notch & home bar) */

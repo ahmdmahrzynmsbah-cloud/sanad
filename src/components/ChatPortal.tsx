@@ -396,7 +396,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
   };
 
   return (
-    <div className="flex h-full w-full min-h-0 overflow-hidden bg-[#f8faf9] p-2 sm:p-3 gap-2.5 sm:gap-3">
+    <div className="flex h-full w-full min-h-0 overflow-hidden bg-[#f8faf9] p-1.5 sm:p-3 gap-2 sm:gap-3">
       {/* 1. Floating Modern Persistent & Collapsible Sidebar (Right: Chat History) */}
       <ChatSidebar
         isOpen={isMobileSidebarOpen}
@@ -416,15 +416,15 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
       />
 
       {/* 2. Main Chat View Container (Center) */}
-      <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden max-w-5xl mx-auto w-full gap-2">
+      <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden max-w-5xl mx-auto w-full gap-1.5 sm:gap-2">
         {/* Top Status & Quick Bar */}
-        <div className="bg-white border border-zinc-200/80 rounded-2xl px-3.5 py-2 shadow-2xs flex flex-wrap items-center justify-between gap-2 text-xs shrink-0">
-          <div className="flex items-center gap-2 text-zinc-700 flex-wrap">
+        <div className="bg-white border border-zinc-200/80 rounded-2xl px-2.5 sm:px-3.5 py-2 shadow-2xs flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 text-xs shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 text-zinc-700 flex-wrap">
             {/* Mobile Open History Sidebar Button (Right) */}
             <button
               id="mobile-toggle-sidebar-btn"
               onClick={() => setIsMobileSidebarOpen(true)}
-              className="lg:hidden p-1.5 rounded-xl border border-zinc-200 hover:bg-zinc-100 text-zinc-700 transition-colors flex items-center gap-1.5 cursor-pointer font-bold text-xs"
+              className="lg:hidden p-1.5 rounded-xl border border-zinc-200 hover:bg-zinc-100 text-zinc-700 transition-colors flex items-center gap-1 cursor-pointer font-bold text-xs shrink-0 min-h-[36px]"
               title="سجل الاستشارات"
             >
               <PanelRight className="w-4 h-4 text-emerald-800" />
@@ -440,7 +440,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
             <button
               id="mobile-toggle-sanad-services-btn"
               onClick={() => setIsMobileServicesOpen(true)}
-              className="lg:hidden p-1.5 rounded-xl border border-[#d4af37]/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-900 transition-colors flex items-center gap-1.5 cursor-pointer font-bold text-xs"
+              className="lg:hidden p-1.5 rounded-xl border border-[#d4af37]/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-900 transition-colors flex items-center gap-1 cursor-pointer font-bold text-xs shrink-0 min-h-[36px]"
               title="منظومة سند المتكاملة"
             >
               <Layers className="w-4 h-4 text-[#d4af37]" />
@@ -456,7 +456,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             {currentUser.isSubscribed ? (
               <span className="bg-amber-50 text-amber-900 border border-amber-200 text-[11px] font-semibold px-2.5 py-0.5 rounded-full flex items-center gap-1">
                 <Crown className="w-3 h-3 text-amber-600" />
@@ -472,7 +472,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
             <button
               id="chat-new-session-btn"
               onClick={handleNewChat}
-              className="bg-emerald-900 hover:bg-emerald-800 text-white flex items-center gap-1 text-[11px] font-semibold px-3 py-1.5 rounded-xl transition-all shadow-2xs cursor-pointer"
+              className="bg-emerald-900 hover:bg-emerald-800 text-white flex items-center gap-1 text-[11px] font-semibold px-2.5 sm:px-3 py-1.5 rounded-xl transition-all shadow-2xs cursor-pointer shrink-0 min-h-[36px]"
               title="بدء محادثة جديدة"
             >
               <Plus className="w-3.5 h-3.5 text-emerald-300" />
@@ -482,28 +482,28 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
         </div>
 
         {/* Messages Scroll Area */}
-        <div className="flex-1 bg-white rounded-2xl border border-zinc-200/80 shadow-2xs overflow-y-auto p-4 sm:p-6 space-y-5">
+        <div className="flex-1 bg-white rounded-2xl border border-zinc-200/80 shadow-2xs overflow-y-auto p-3 sm:p-6 space-y-4 sm:space-y-5 touch-scroll">
           {messages.map((msg) => (
             <div
               key={msg.id}
-              className={`flex items-start gap-3 ${
+              className={`flex items-start gap-2.5 sm:gap-3 ${
                 msg.sender === 'user' ? 'flex-row-reverse' : 'flex-row'
               }`}
             >
               {/* Avatar */}
               <div
-                className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-2xs border overflow-hidden ${
+                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 shadow-2xs border overflow-hidden ${
                   msg.sender === 'bot'
                     ? 'bg-[#0f241d] text-[#d4af37] border-[#1d473a]'
                     : 'bg-zinc-100 text-zinc-700 border-zinc-200'
                 }`}
               >
-                {msg.sender === 'bot' ? renderBotIcon() : <UserIcon className="w-4 h-4 text-zinc-600" />}
+                {msg.sender === 'bot' ? renderBotIcon() : <UserIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-zinc-600" />}
               </div>
 
               {/* Bubble Container */}
               <div
-                className={`max-w-[88%] sm:max-w-[80%] rounded-2xl p-4 text-xs sm:text-sm leading-relaxed shadow-xs relative group ${
+                className={`max-w-[92%] sm:max-w-[80%] rounded-2xl p-3 sm:p-4 text-xs sm:text-sm leading-relaxed shadow-xs relative group ${
                   msg.sender === 'user'
                     ? 'bg-[#103025] text-white rounded-tr-xs'
                     : 'bg-[#fafcfb] text-zinc-900 border border-zinc-200/70 rounded-tl-xs'

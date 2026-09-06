@@ -69,19 +69,19 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
     'دولة فلسطين • وزارة المالية • الإدارة العامة للجمارك وضريبة الدخل';
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-8 animate-in fade-in duration-300">
+    <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-8 space-y-6 sm:space-y-8 animate-in fade-in duration-300">
       {/* 1. HERO & FOUNDER PRESENTATION: صورة المؤسس ع الشمال واسمه ومعلومات عنه وعن الموقع وأزرار الدخول والتسجيل ع اليمين */}
-      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0b1f1a] via-[#102d24] to-[#081814] text-white border border-[#1b4337] shadow-xl p-6 sm:p-10 lg:p-12">
+      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0b1f1a] via-[#102d24] to-[#081814] text-white border border-[#1b4337] shadow-xl p-4 sm:p-8 lg:p-12">
         {/* Subtle Ambient Glows */}
         <div className="absolute -top-24 -right-24 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
         <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-[#d4af37]/10 rounded-full blur-3xl pointer-events-none"></div>
 
-        <div className="relative z-10 flex flex-col lg:flex-row items-center lg:items-start justify-between gap-8 lg:gap-12">
+        <div className="relative z-10 flex flex-col-reverse lg:flex-row items-center lg:items-start justify-between gap-6 sm:gap-8 lg:gap-12">
           
           {/* الجانب الأيمن: اسم المؤسس، لقبه، معلومات عنه، معلومات عن الموقع، وأزرار تسجيل الدخول وإنشاء الحساب */}
-          <div className="flex-1 text-right space-y-4">
+          <div className="flex-1 w-full text-right space-y-4">
             {/* National Badge */}
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-semibold">
+            <div className="inline-flex flex-wrap items-center gap-1.5 sm:gap-2 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[11px] sm:text-xs font-semibold">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
               <span>دولة فلسطين • المنظومة الرقمية الأولى</span>
               <span className="bg-[#d4af37]/20 text-[#f5d77f] px-2 py-0.5 rounded-full text-[10px]">
@@ -95,29 +95,29 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
                 <Sparkles className="w-3.5 h-3.5" />
                 <span>مؤسس ومطوّر المنظومة</span>
               </div>
-              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-white tracking-tight leading-tight">
+              <h1 className="text-xl sm:text-3xl lg:text-4xl font-extrabold text-white tracking-tight leading-tight">
                 {founderName}
               </h1>
             </div>
 
             {/* Founder Bio / معلومات عن المؤسس */}
-            <div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-xs sm:text-sm text-slate-200 leading-relaxed">
+            <div className="p-3.5 sm:p-4 rounded-2xl bg-white/5 border border-white/10 text-xs sm:text-sm text-slate-200 leading-relaxed text-justify sm:text-right">
               <p>{founderBio}</p>
             </div>
 
             {/* Site Overview / معلومات عن الموقع */}
-            <div className="space-y-2 pt-1">
+            <div className="space-y-1.5 sm:space-y-2 pt-1">
               <div className="flex items-center gap-2 text-xs font-bold text-emerald-300">
                 <Building2 className="w-4 h-4 text-[#d4af37]" />
                 <span>عن المنظومة والموقع:</span>
               </div>
-              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-light">
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-light text-justify sm:text-right">
                 {siteOverview}
               </p>
             </div>
 
             {/* Key Platform Highlights */}
-            <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-slate-300">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 pt-1 text-[11px] text-slate-300">
               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/5 border border-white/10">
                 <CheckCircle2 className="w-3 h-3 text-emerald-400" />
                 <span>حسابات دقيقة بالشيكل</span>
@@ -134,7 +134,7 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
 
             {/* Status indicator if user is already logged in */}
             {currentUser && (
-              <div className="inline-flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-emerald-950/70 border border-emerald-500/30 text-xs text-emerald-200">
+              <div className="inline-flex flex-wrap items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-950/70 border border-emerald-500/30 text-xs text-emerald-200 w-full sm:w-auto">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                 <span>مرحباً بك: <strong className="text-white">{currentUser.fullName || currentUser.username}</strong></span>
                 <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-md font-semibold">
@@ -144,78 +144,84 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
             )}
 
             {/* REQUIRED BUTTONS: زرار تسجيل دخول وزرار انشاء حساب وزرار المشرفين والمواقع */}
-            <div className="pt-2 flex flex-wrap items-center gap-3 sm:gap-4">
-              {/* زرار تسجيل الدخول */}
-              <button
-                id="landing-hero-login-btn"
-                onClick={() => onNavigateToAuth('login')}
-                className="px-6 py-3 bg-[#d4af37] hover:bg-[#e2bd40] text-slate-950 font-bold text-sm rounded-xl shadow-lg shadow-black/30 hover:shadow-black/50 flex items-center gap-2 transition-all transform active:scale-95 cursor-pointer"
-              >
-                <UserCheck className="w-4 h-4 text-slate-950" />
-                <span>تسجيل الدخول</span>
-              </button>
-
-              {/* زرار إنشاء حساب */}
-              <button
-                id="landing-hero-register-btn"
-                onClick={() => onNavigateToAuth('register')}
-                className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-emerald-950/40 hover:shadow-emerald-900/60 flex items-center gap-2 transition-all transform active:scale-95 cursor-pointer border border-emerald-400/30"
-              >
-                <UserPlus className="w-4 h-4 text-[#f5d77f]" />
-                <span>إنشاء حساب جديد</span>
-              </button>
-
-              {/* Navigation to Supervisors */}
-              <button
-                id="landing-hero-supervisors-btn"
-                onClick={onNavigateToSupervisors}
-                className="px-4 py-3 bg-white/5 hover:bg-white/10 text-slate-200 hover:text-white border border-white/15 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
-              >
-                <Users className="w-4 h-4 text-[#d4af37]" />
-                <span>هيئة المشرفين</span>
-              </button>
-
-              {/* Navigation to Related Sites */}
-              <button
-                id="landing-hero-related-sites-btn"
-                onClick={onNavigateToRelatedSites}
-                className="px-4 py-3 bg-white/5 hover:bg-white/10 text-slate-200 hover:text-white border border-white/15 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
-              >
-                <Globe className="w-4 h-4 text-[#d4af37]" />
-                <span>مواقع ذات صلة</span>
-              </button>
-
-              {/* Navigation to About Platform Modal */}
-              {onOpenAbout && (
+            <div className="pt-2 space-y-3">
+              {/* Primary Auth Buttons (Full width on phone, touch-friendly min 46px) */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-4 w-full sm:w-auto">
+                {/* زرار تسجيل الدخول */}
                 <button
-                  id="landing-hero-about-btn"
-                  onClick={onOpenAbout}
-                  className="px-4 py-3 bg-white/5 hover:bg-white/10 text-slate-200 hover:text-white border border-[#d4af37]/40 hover:border-[#d4af37]/80 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
-                  title="الرؤية"
+                  id="landing-hero-login-btn"
+                  onClick={() => onNavigateToAuth('login')}
+                  className="w-full sm:w-auto justify-center px-6 py-3.5 bg-[#d4af37] hover:bg-[#e2bd40] text-slate-950 font-bold text-sm rounded-xl shadow-lg shadow-black/30 hover:shadow-black/50 flex items-center gap-2 transition-all transform active:scale-95 cursor-pointer min-h-[46px]"
                 >
-                  <Eye className="w-4 h-4 text-[#d4af37]" />
-                  <span>الرؤية</span>
+                  <UserCheck className="w-4 h-4 text-slate-950" />
+                  <span>تسجيل الدخول</span>
                 </button>
-              )}
 
-              {/* Navigation to Contact Us View */}
-              {onOpenContact && (
+                {/* زرار إنشاء حساب */}
                 <button
-                  id="landing-hero-contact-btn"
-                  onClick={onOpenContact}
-                  className="px-4 py-3 bg-white/5 hover:bg-white/10 text-slate-200 hover:text-white border border-emerald-500/40 hover:border-emerald-500/80 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
-                  title="اتصل بنا وتواصل مباشر عبر واتساب"
+                  id="landing-hero-register-btn"
+                  onClick={() => onNavigateToAuth('register')}
+                  className="w-full sm:w-auto justify-center px-6 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-emerald-950/40 hover:shadow-emerald-900/60 flex items-center gap-2 transition-all transform active:scale-95 cursor-pointer border border-emerald-400/30 min-h-[46px]"
                 >
-                  <PhoneCall className="w-4 h-4 text-emerald-400" />
-                  <span>اتصل بنا</span>
+                  <UserPlus className="w-4 h-4 text-[#f5d77f]" />
+                  <span>إنشاء حساب جديد</span>
                 </button>
-              )}
+              </div>
+
+              {/* Secondary Navigation Buttons Grid on Mobile */}
+              <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 sm:gap-3 w-full">
+                {/* Navigation to Supervisors */}
+                <button
+                  id="landing-hero-supervisors-btn"
+                  onClick={onNavigateToSupervisors}
+                  className="justify-center px-3 sm:px-4 py-2.5 sm:py-3 bg-white/5 hover:bg-white/10 text-slate-200 hover:text-white border border-white/15 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer min-h-[42px]"
+                >
+                  <Users className="w-4 h-4 text-[#d4af37]" />
+                  <span>هيئة المشرفين</span>
+                </button>
+
+                {/* Navigation to Related Sites */}
+                <button
+                  id="landing-hero-related-sites-btn"
+                  onClick={onNavigateToRelatedSites}
+                  className="justify-center px-3 sm:px-4 py-2.5 sm:py-3 bg-white/5 hover:bg-white/10 text-slate-200 hover:text-white border border-white/15 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer min-h-[42px]"
+                >
+                  <Globe className="w-4 h-4 text-[#d4af37]" />
+                  <span>مواقع ذات صلة</span>
+                </button>
+
+                {/* Navigation to About Platform Modal */}
+                {onOpenAbout && (
+                  <button
+                    id="landing-hero-about-btn"
+                    onClick={onOpenAbout}
+                    className="justify-center px-3 sm:px-4 py-2.5 sm:py-3 bg-white/5 hover:bg-white/10 text-slate-200 hover:text-white border border-[#d4af37]/40 hover:border-[#d4af37]/80 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-xs min-h-[42px]"
+                    title="الرؤية والرسالة"
+                  >
+                    <Eye className="w-4 h-4 text-[#d4af37]" />
+                    <span>الرؤية والرسالة</span>
+                  </button>
+                )}
+
+                {/* Navigation to Contact Us View */}
+                {onOpenContact && (
+                  <button
+                    id="landing-hero-contact-btn"
+                    onClick={onOpenContact}
+                    className="justify-center px-3 sm:px-4 py-2.5 sm:py-3 bg-white/5 hover:bg-white/10 text-slate-200 hover:text-white border border-emerald-500/40 hover:border-emerald-500/80 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-xs min-h-[42px]"
+                    title="اتصل بنا وتواصل مباشر عبر واتساب"
+                  >
+                    <PhoneCall className="w-4 h-4 text-emerald-400" />
+                    <span>اتصل بنا</span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
           {/* الجانب الأيسر: صورة المؤسس ع الشمال مع إطار احترافي وشارات واقتباس المؤسس */}
-          <div className="w-full lg:w-80 shrink-0 flex flex-col items-center text-center space-y-4">
-            <div className="relative group w-full max-w-[280px]">
+          <div className="w-full lg:w-80 shrink-0 flex flex-col items-center text-center space-y-3 sm:space-y-4">
+            <div className="relative group w-full max-w-[220px] sm:max-w-[280px]">
               {/* Luxury Accent Glow Ring */}
               <div className="absolute -inset-2 bg-gradient-to-tr from-[#12281e] via-[#d4af37] to-emerald-500 rounded-3xl blur-md opacity-60 group-hover:opacity-90 transition duration-500"></div>
 
@@ -245,8 +251,8 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
 
             {/* Founder Quote Card */}
             {founderQuote && (
-              <div className="w-full max-w-[280px] p-3.5 bg-white/5 rounded-2xl border border-white/10 relative text-right backdrop-blur-xs">
-                <Quote className="w-5 h-5 text-[#d4af37]/40 absolute top-2 left-2.5 rotate-180" />
+              <div className="w-full max-w-[260px] sm:max-w-[280px] p-3 sm:p-3.5 bg-white/5 rounded-2xl border border-white/10 relative text-right backdrop-blur-xs">
+                <Quote className="w-4 sm:w-5 h-4 sm:h-5 text-[#d4af37]/40 absolute top-2 left-2.5 rotate-180" />
                 <p className="text-[11px] sm:text-xs text-slate-300 font-medium italic leading-relaxed pr-1 pl-4">
                   {founderQuote}
                 </p>
@@ -258,11 +264,11 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
       </section>
 
       {/* BOTTOM NAVIGATION TILES: LINK TO SUPERVISORS, RELATED SITES & PARTNERS */}
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
         {/* Supervisors Tile */}
         <div
           onClick={onNavigateToSupervisors}
-          className="p-6 bg-white rounded-2xl border border-slate-200 hover:border-emerald-500/50 shadow-xs hover:shadow-md transition-all cursor-pointer group flex items-start justify-between gap-4"
+          className="p-4 sm:p-6 bg-white rounded-2xl border border-slate-200 hover:border-emerald-500/50 shadow-xs hover:shadow-md transition-all cursor-pointer group flex items-start justify-between gap-3 sm:gap-4"
         >
           <div className="space-y-2 text-right">
             <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center justify-center font-bold group-hover:bg-emerald-600 group-hover:text-white transition-colors">
@@ -281,7 +287,7 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
         {/* Related Sites Tile */}
         <div
           onClick={onNavigateToRelatedSites}
-          className="p-6 bg-white rounded-2xl border border-slate-200 hover:border-blue-500/50 shadow-xs hover:shadow-md transition-all cursor-pointer group flex items-start justify-between gap-4"
+          className="p-4 sm:p-6 bg-white rounded-2xl border border-slate-200 hover:border-blue-500/50 shadow-xs hover:shadow-md transition-all cursor-pointer group flex items-start justify-between gap-3 sm:gap-4"
         >
           <div className="space-y-2 text-right">
             <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-800 border border-blue-200 flex items-center justify-center font-bold group-hover:bg-blue-600 group-hover:text-white transition-colors">
@@ -300,7 +306,7 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
         {/* Partners Tile */}
         <div
           onClick={onNavigateToPartners}
-          className="p-6 bg-white rounded-2xl border border-slate-200 hover:border-amber-500/50 shadow-xs hover:shadow-md transition-all cursor-pointer group flex items-start justify-between gap-4"
+          className="p-4 sm:p-6 bg-white rounded-2xl border border-slate-200 hover:border-amber-500/50 shadow-xs hover:shadow-md transition-all cursor-pointer group flex items-start justify-between gap-3 sm:gap-4"
         >
           <div className="space-y-2 text-right">
             <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 flex items-center justify-center font-bold group-hover:bg-amber-600 group-hover:text-white transition-colors">

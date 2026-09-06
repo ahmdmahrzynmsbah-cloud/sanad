@@ -94,27 +94,27 @@ export const PartnersView: React.FC<PartnersViewProps> = ({
   };
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-10 space-y-8 animate-in fade-in duration-300">
+    <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-10 space-y-5 sm:space-y-8 animate-in fade-in duration-300">
       {/* Top Header & Breadcrumb */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-slate-200">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 sm:pb-6 border-b border-slate-200">
         <div>
           <button
             onClick={onBackToHome}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-800 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-xl border border-emerald-200 transition-colors mb-3 cursor-pointer"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-800 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-xl border border-emerald-200 transition-colors mb-2.5 sm:mb-3 cursor-pointer"
           >
             <ArrowRight className="w-3.5 h-3.5" />
             <span>العودة للرئيسية</span>
           </button>
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#12281e] to-emerald-950 text-white flex items-center justify-center font-bold shadow-sm border border-emerald-500/20">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#12281e] to-emerald-950 text-white flex items-center justify-center font-bold shadow-sm border border-emerald-500/20 shrink-0">
               <Handshake className="w-5 h-5 text-[#d4af37]" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-xl sm:text-3xl font-extrabold text-slate-950 tracking-tight">
                   شركاؤنا المؤسسيون
                 </h1>
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#d4af37]/15 text-[#917117] border border-[#d4af37]/30">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold bg-[#d4af37]/15 text-[#917117] border border-[#d4af37]/30">
                   شبكة التعاون الوطني
                 </span>
               </div>
@@ -137,7 +137,7 @@ export const PartnersView: React.FC<PartnersViewProps> = ({
       </div>
 
       {/* Search & Category Filter Bar */}
-      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+      <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-3 sm:gap-4">
         {/* Search Input */}
         <div className="relative w-full md:w-80">
           <input
@@ -151,7 +151,7 @@ export const PartnersView: React.FC<PartnersViewProps> = ({
         </div>
 
         {/* Category Filter - All Partners Only */}
-        <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-1 md:pb-0 scrollbar-none">
+        <div className="flex items-center gap-2 overflow-x-auto touch-scroll overscroll-x-contain w-full md:w-auto pb-1.5 md:pb-0 scrollbar-none">
           <button
             onClick={() => setSelectedCategory('all')}
             className="px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap bg-emerald-800 text-white shadow-xs cursor-pointer"

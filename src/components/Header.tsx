@@ -167,6 +167,21 @@ export const Header: React.FC<HeaderProps> = ({
               <span>الرئيسية</span>
             </button>
 
+            {currentUser && (
+              <button
+                id="header-nav-chat-btn"
+                onClick={() => handleNav('chat')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  activeView === 'chat'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-emerald-950/50 text-emerald-300 hover:bg-emerald-900/60 hover:text-white border border-emerald-500/30'
+                }`}
+              >
+                <MessageSquare className="w-3.5 h-3.5 text-[#d4af37]" />
+                <span>المستشار الذكي</span>
+              </button>
+            )}
+
             <button
               id="header-nav-supervisors-btn"
               onClick={() => handleNav('supervisors')}
@@ -357,7 +372,7 @@ export const Header: React.FC<HeaderProps> = ({
                 type="button"
                 onClick={() => setIsMobileMenuOpen((prev) => !prev)}
                 aria-label="القائمة الرئيسية"
-                className="p-2 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/10 transition-colors flex items-center justify-center cursor-pointer min-w-[40px] min-h-[40px]"
+                className="p-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/10 transition-colors flex items-center justify-center cursor-pointer min-w-[44px] min-h-[44px] shrink-0"
               >
                 {isMobileMenuOpen ? <X className="w-5 h-5 text-emerald-300" /> : <Menu className="w-5 h-5 text-white" />}
               </button>
@@ -368,7 +383,7 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Mobile Drawer Navigation Menu */}
       {isMobileMenuOpen && (
-        <div className="md:hidden border-t border-[#1d473a] bg-[#0c221c] animate-in slide-in-from-top-2 duration-200 px-4 py-4 space-y-3 shadow-2xl">
+        <div className="md:hidden border-t border-[#1d473a] bg-[#0c221c] animate-in slide-in-from-top-2 duration-200 px-4 py-4 space-y-3 shadow-2xl max-h-[calc(100vh-64px)] overflow-y-auto overscroll-contain touch-scroll">
           {/* User Status Card (if logged in) */}
           {currentUser && (
             <div className="bg-[#14362b] border border-[#235b48] rounded-2xl p-3.5 flex items-center justify-between gap-3">
@@ -449,6 +464,23 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
               <ChevronLeft className="w-4 h-4 text-slate-400" />
             </button>
+
+            {currentUser && (
+              <button
+                onClick={() => handleNav('chat')}
+                className={`w-full p-3 rounded-xl text-xs font-bold flex items-center justify-between transition-all text-right cursor-pointer ${
+                  activeView === 'chat'
+                    ? 'bg-emerald-600 text-white shadow-md'
+                    : 'bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-200 border border-emerald-500/30'
+                }`}
+              >
+                <span className="flex items-center gap-2.5">
+                  <MessageSquare className="w-4 h-4 text-[#d4af37]" />
+                  <span>المستشار الذكي (الشات المباشر)</span>
+                </span>
+                <ChevronLeft className="w-4 h-4 text-[#d4af37]" />
+              </button>
+            )}
 
             <button
               onClick={() => handleNav('supervisors')}

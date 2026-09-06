@@ -1188,9 +1188,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
   });
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6">
       {/* Official Government Admin Header Banner */}
-      <div className="bg-gradient-to-l from-[#193225] via-[#12281e] to-[#0d1c15] text-white rounded-xl p-5 sm:p-6 shadow-sm border border-[#2b5942] flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="bg-gradient-to-l from-[#193225] via-[#12281e] to-[#0d1c15] text-white rounded-xl p-4 sm:p-6 shadow-sm border border-[#2b5942] flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-[#f5d77f] mb-1">
             <ShieldCheck className="w-4 h-4 text-[#d4af37]" />
@@ -1205,21 +1205,21 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
         </div>
 
         {/* Global Stats Badges */}
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <div className="bg-[#1b3d2d] border border-[#2d6148] px-3.5 py-2 rounded-lg text-center min-w-[90px]">
-            <span className="block text-[11px] text-[#93dfb3]">طلبات معلقة</span>
-            <span className="text-lg font-bold text-amber-300">{pendingCount}</span>
+        <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
+          <div className="bg-[#1b3d2d] border border-[#2d6148] px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-lg text-center min-w-[80px] sm:min-w-[90px]">
+            <span className="block text-[10px] sm:text-[11px] text-[#93dfb3]">طلبات معلقة</span>
+            <span className="text-base sm:text-lg font-bold text-amber-300">{pendingCount}</span>
           </div>
-          <div className="bg-[#1b3d2d] border border-[#2d6148] px-3.5 py-2 rounded-lg text-center min-w-[90px]">
-            <span className="block text-[11px] text-[#93dfb3]">قوانين بالمعرفة</span>
-            <span className="text-lg font-bold text-emerald-300">{laws.length}</span>
+          <div className="bg-[#1b3d2d] border border-[#2d6148] px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-lg text-center min-w-[80px] sm:min-w-[90px]">
+            <span className="block text-[10px] sm:text-[11px] text-[#93dfb3]">قوانين بالمعرفة</span>
+            <span className="text-base sm:text-lg font-bold text-emerald-300">{laws.length}</span>
           </div>
-          <div className="bg-[#163527] border border-[#275940] px-3.5 py-2 rounded-lg flex flex-col justify-center text-right">
-            <span className="text-[11px] text-[#86efac] flex items-center gap-1">
+          <div className="bg-[#163527] border border-[#275940] px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-lg flex flex-col justify-center text-right">
+            <span className="text-[10px] sm:text-[11px] text-[#86efac] flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
               قاعدة بيانات سحابية متصلة
             </span>
-            <span className="text-xs font-semibold text-white mt-0.5">
+            <span className="text-[11px] sm:text-xs font-semibold text-white mt-0.5">
               Google Cloud Firestore
             </span>
           </div>
@@ -1227,13 +1227,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
       </div>
 
       {/* Cloud Database Integration Info Bar */}
-      <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3.5 sm:p-4 text-xs flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold">
+      <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 sm:p-4 text-xs flex items-center justify-between flex-wrap gap-2.5 sm:gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold shrink-0">
             <Database className="w-4 h-4" />
           </div>
           <div>
-            <div className="font-bold text-emerald-900 flex items-center gap-2">
+            <div className="font-bold text-emerald-900 flex items-center gap-1.5 sm:gap-2 flex-wrap">
               <span>قاعدة البيانات السحابية: Google Cloud Firestore</span>
               <span className="bg-emerald-200/80 text-emerald-800 text-[10px] px-2 py-0.5 rounded-full font-bold">
                 نشطة وسريعة للغاية
@@ -1248,7 +1248,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
             fetchSystemStatus();
           }}
           disabled={isSyncing}
-          className="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
+          className="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer min-h-[36px]"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
           {isSyncing ? 'جارِ التحقق...' : 'تحديث البيانات السحابية'}
@@ -1256,7 +1256,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
       </div>
 
       {/* Main Tabs Navigation */}
-      <div className="flex overflow-x-auto whitespace-nowrap border-b border-gray-200 bg-white rounded-t-xl px-2 sm:px-4 pt-3 shadow-xs scrollbar-none">
+      <div className="flex overflow-x-auto whitespace-nowrap border-b border-gray-200 bg-white rounded-t-xl px-2 sm:px-4 pt-3 shadow-xs scrollbar-none touch-scroll overscroll-x-contain">
         <button
           id="admin-tab-requests"
           onClick={() => setActiveTab('requests')}
@@ -1639,8 +1639,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
                 )}
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-right text-xs">
+              <div className="overflow-x-auto touch-scroll overscroll-x-contain pb-2">
+                <table className="w-full text-right text-xs min-w-[680px]">
                   <thead className="bg-[#f8fafc] text-gray-600 border-b border-gray-200 font-bold">
                     <tr>
                       <th className="py-3 px-4">مقدم الطلب / الحساب</th>

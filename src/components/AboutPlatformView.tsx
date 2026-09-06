@@ -103,19 +103,19 @@ export const AboutPlatformView: React.FC<AboutPlatformViewProps> = ({
   );
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 lg:space-y-8 animate-in fade-in duration-300" dir="rtl">
+    <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-5 sm:space-y-6 lg:space-y-8 animate-in fade-in duration-300" dir="rtl">
       {/* Top Banner */}
-      <div className="relative bg-linear-to-r from-[#12281e] via-[#1a382b] to-[#12281e] px-6 py-6 sm:px-8 sm:py-7 text-white rounded-3xl shadow-xl overflow-hidden border border-[#d4af37]/30">
+      <div className="relative bg-linear-to-r from-[#12281e] via-[#1a382b] to-[#12281e] px-4 py-5 sm:px-8 sm:py-7 text-white rounded-2xl sm:rounded-3xl shadow-xl overflow-hidden border border-[#d4af37]/30">
         {/* Subtle Islamic pattern or luxury accent */}
         <div className="absolute inset-0 opacity-10 pointer-events-none bg-[radial-gradient(#d4af37_1px,transparent_1px)] [background-size:16px_16px]" />
         
-        <div className="relative flex flex-col md:flex-row items-center justify-between gap-6 md:gap-4">
-          <div className="flex items-center gap-4 sm:gap-5 w-full md:w-auto">
-            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-linear-to-br from-[#d4af37]/30 to-[#d4af37]/10 border border-[#d4af37]/50 flex items-center justify-center shadow-lg shrink-0">
-              <Eye className="w-7 h-7 sm:w-8 sm:h-8 text-[#d4af37]" />
+        <div className="relative flex flex-col md:flex-row items-center justify-between gap-4 sm:gap-6">
+          <div className="flex items-center gap-3 sm:gap-5 w-full md:w-auto">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-linear-to-br from-[#d4af37]/30 to-[#d4af37]/10 border border-[#d4af37]/50 flex items-center justify-center shadow-lg shrink-0">
+              <Eye className="w-6 h-6 sm:w-8 sm:h-8 text-[#d4af37]" />
             </div>
             <div>
-              <div className="flex items-center gap-2 mb-1.5">
+              <div className="flex items-center gap-1.5 sm:gap-2 mb-1">
                 <span className="px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold bg-[#d4af37] text-[#12281e]">
                   PS المنظومة الوطنية الأولى
                 </span>
@@ -124,7 +124,7 @@ export const AboutPlatformView: React.FC<AboutPlatformViewProps> = ({
                   تشريعات، ضرائب، وتدقيق مالي ذكي
                 </span>
               </div>
-              <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-2">
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-white tracking-tight flex items-center gap-2">
                 <span>عن منصة «سَنَد» الذكية</span>
               </h2>
             </div>
@@ -132,7 +132,7 @@ export const AboutPlatformView: React.FC<AboutPlatformViewProps> = ({
         </div>
 
         {/* Quick Filter Tabs */}
-        <div className="flex items-center gap-2 mt-6 pt-5 border-t border-white/10 overflow-x-auto no-scrollbar text-xs sm:text-sm">
+        <div className="flex items-center gap-2 mt-4 sm:mt-6 pt-4 sm:pt-5 border-t border-white/10 overflow-x-auto no-scrollbar touch-scroll overscroll-x-contain pb-1 text-xs sm:text-sm">
           <button
             id="about-tab-all"
             onClick={() => setActiveTab('all')}
@@ -191,24 +191,24 @@ export const AboutPlatformView: React.FC<AboutPlatformViewProps> = ({
           {(activeTab === 'all' || activeTab === 'overview') && (
             <div
               id="about-card-overview"
-              className="relative p-6 sm:p-7 rounded-2xl bg-white border border-slate-200/90 shadow-xs hover:border-emerald-500/30 transition-all group"
+              className="relative p-4 sm:p-7 rounded-2xl bg-white border border-slate-200/90 shadow-xs hover:border-emerald-500/30 transition-all group"
             >
-              <div className="absolute top-0 right-0 w-2 h-full bg-linear-to-b from-emerald-600 to-[#12281e] rounded-r-2xl" />
+              <div className="absolute top-0 right-0 w-1.5 sm:w-2 h-full bg-linear-to-b from-emerald-600 to-[#12281e] rounded-r-2xl" />
               
-              <div className="flex items-start gap-4">
-                <div className="w-11 h-11 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center justify-center shrink-0 shadow-xs">
-                  <Target className="w-6 h-6 text-emerald-700" />
+              <div className="flex items-start gap-3 sm:gap-4">
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center justify-center shrink-0 shadow-xs">
+                  <Target className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-700" />
                 </div>
-                <div className="space-y-3 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="text-lg sm:text-xl font-black text-slate-900 flex items-center gap-2">
+                <div className="space-y-2 sm:space-y-3 flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <h3 className="text-base sm:text-xl font-black text-slate-900 flex items-center gap-2">
                       <span>{data.overviewTitle || 'عن منصة «سَنَد»'}</span>
                     </h3>
-                    <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                    <span className="text-[10px] sm:text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
                       المرجع الذكي
                     </span>
                   </div>
-                  <p className="text-sm sm:text-base text-slate-700 leading-relaxed font-normal text-justify">
+                  <p className="text-xs sm:text-base text-slate-700 leading-relaxed font-normal text-justify">
                     {data.overviewContent}
                   </p>
                 </div>
@@ -218,30 +218,30 @@ export const AboutPlatformView: React.FC<AboutPlatformViewProps> = ({
 
           {/* Cards 2 & 3: Vision & Mission (الرؤية والرسالة) */}
           {(activeTab === 'all' || activeTab === 'vision-mission') && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
               {/* Vision Card */}
               <div
                 id="about-card-vision"
-                className="relative p-6 rounded-2xl bg-linear-to-br from-amber-50/70 via-white to-white border border-amber-200/80 shadow-xs flex flex-col justify-between"
+                className="relative p-4 sm:p-6 rounded-2xl bg-linear-to-br from-amber-50/70 via-white to-white border border-amber-200/80 shadow-xs flex flex-col justify-between"
               >
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-300/80 text-amber-800 flex items-center justify-center shrink-0 shadow-xs">
-                      <Eye className="w-5 h-5 text-amber-700" />
+                <div className="space-y-2.5 sm:space-y-3">
+                  <div className="flex items-center gap-2.5 sm:gap-3">
+                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-100 border border-amber-300/80 text-amber-800 flex items-center justify-center shrink-0 shadow-xs">
+                      <Eye className="w-4 h-4 sm:w-5 sm:h-5 text-amber-700" />
                     </div>
                     <div>
-                      <span className="text-[11px] font-black tracking-wider text-amber-800 uppercase block">Vision</span>
-                      <h4 className="text-base sm:text-lg font-black text-slate-900">
+                      <span className="text-[10px] sm:text-[11px] font-black tracking-wider text-amber-800 uppercase block">Vision</span>
+                      <h4 className="text-sm sm:text-lg font-black text-slate-900">
                         {data.visionTitle || 'رؤيتنا (Vision)'}
                       </h4>
                     </div>
                   </div>
-                  <p className="text-sm text-slate-700 leading-relaxed text-justify">
+                  <p className="text-xs sm:text-sm text-slate-700 leading-relaxed text-justify">
                     {data.visionContent}
                   </p>
                 </div>
-                <div className="mt-4 pt-3 border-t border-amber-100 flex items-center gap-2 text-xs font-bold text-amber-900">
-                  <Sparkles className="w-4 h-4 text-amber-600" />
+                <div className="mt-3 sm:mt-4 pt-2.5 sm:pt-3 border-t border-amber-100 flex items-center gap-2 text-[11px] sm:text-xs font-bold text-amber-900">
+                  <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-600 shrink-0" />
                   <span>ريادة الحلول المالية والتشريعية في فلسطين</span>
                 </div>
               </div>
@@ -249,26 +249,26 @@ export const AboutPlatformView: React.FC<AboutPlatformViewProps> = ({
               {/* Mission Card */}
               <div
                 id="about-card-mission"
-                className="relative p-6 rounded-2xl bg-linear-to-br from-emerald-50/70 via-white to-white border border-emerald-200/80 shadow-xs flex flex-col justify-between"
+                className="relative p-4 sm:p-6 rounded-2xl bg-linear-to-br from-emerald-50/70 via-white to-white border border-emerald-200/80 shadow-xs flex flex-col justify-between"
               >
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-100 border border-emerald-300/80 text-emerald-800 flex items-center justify-center shrink-0 shadow-xs">
-                      <Compass className="w-5 h-5 text-emerald-700" />
+                <div className="space-y-2.5 sm:space-y-3">
+                  <div className="flex items-center gap-2.5 sm:gap-3">
+                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-100 border border-emerald-300/80 text-emerald-800 flex items-center justify-center shrink-0 shadow-xs">
+                      <Compass className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-700" />
                     </div>
                     <div>
-                      <span className="text-[11px] font-black tracking-wider text-emerald-800 uppercase block">Mission</span>
-                      <h4 className="text-base sm:text-lg font-black text-slate-900">
+                      <span className="text-[10px] sm:text-[11px] font-black tracking-wider text-emerald-800 uppercase block">Mission</span>
+                      <h4 className="text-sm sm:text-lg font-black text-slate-900">
                         {data.missionTitle || 'رسالتنا (Mission)'}
                       </h4>
                     </div>
                   </div>
-                  <p className="text-sm text-slate-700 leading-relaxed text-justify">
+                  <p className="text-xs sm:text-sm text-slate-700 leading-relaxed text-justify">
                     {data.missionContent}
                   </p>
                 </div>
-                <div className="mt-4 pt-3 border-t border-emerald-100 flex items-center gap-2 text-xs font-bold text-emerald-900">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <div className="mt-3 sm:mt-4 pt-2.5 sm:pt-3 border-t border-emerald-100 flex items-center gap-2 text-[11px] sm:text-xs font-bold text-emerald-900">
+                  <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 shrink-0" />
                   <span>دقة تشريعية وسرعة إنجاز موثوقة</span>
                 </div>
               </div>
