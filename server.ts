@@ -852,7 +852,8 @@ function getGemini(): GoogleGenAI {
   if (!geminiClient) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      throw new Error('مفتاح GEMINI_API_KEY غير متوفر في إعدادات البيئة (Environment Variables) على الخادم.');
+      const availableKeys = Object.keys(process.env).filter(k => k.includes('GEMINI')).join(', ');
+      throw new Error(`مفتاح GEMINI_API_KEY غير متوفر في الخادم. (المتغيرات الموجودة حالياً التي تحتوي على كلمة GEMINI: ${availableKeys || 'لا يوجد شيء'}). يرجى حذفه من Vercel وإضافته من جديد.`);
     }
     geminiClient = new GoogleGenAI({
       apiKey,
