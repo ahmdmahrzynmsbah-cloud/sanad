@@ -852,7 +852,7 @@ function getGemini(): GoogleGenAI {
   if (!geminiClient) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      throw new Error('GEMINI_API_KEY environment variable is not set');
+      throw new Error('مفتاح GEMINI_API_KEY غير متوفر في إعدادات البيئة (Environment Variables) على الخادم.');
     }
     geminiClient = new GoogleGenAI({
       apiKey,
