@@ -1,50 +1,23 @@
-var __create = Object.create;
-var __defProp = Object.defineProperty;
-var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-var __getOwnPropNames = Object.getOwnPropertyNames;
-var __getProtoOf = Object.getPrototypeOf;
-var __hasOwnProp = Object.prototype.hasOwnProperty;
-var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
-};
-var __copyProps = (to, from, except, desc) => {
-  if (from && typeof from === "object" || typeof from === "function") {
-    for (let key of __getOwnPropNames(from))
-      if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-  }
-  return to;
-};
-var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
-  // If the importer is in node compatibility mode or this is not an ESM
-  // file that has been converted to a CommonJS file using a Babel-
-  // compatible transform (i.e. "__esModule" has not been set), then set
-  // "default" to the CommonJS "module.exports" for node compatibility.
-  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
-  mod
-));
-var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
-
-// api/index.ts
-var index_exports = {};
-__export(index_exports, {
-  default: () => handler
-});
-module.exports = __toCommonJS(index_exports);
-
 // server.ts
-var import_express = __toESM(require("express"), 1);
-var import_path2 = __toESM(require("path"), 1);
-var import_fs2 = __toESM(require("fs"), 1);
-var import_genai = require("@google/genai");
-var import_dotenv = __toESM(require("dotenv"), 1);
+import express from "express";
+import path2 from "path";
+import fs2 from "fs";
+import { GoogleGenAI, Type } from "@google/genai";
+import dotenv from "dotenv";
 
 // server/firestore.ts
-var import_fs = __toESM(require("fs"), 1);
-var import_path = __toESM(require("path"), 1);
-var import_app = require("firebase/app");
-var import_firestore = require("firebase/firestore");
+import fs from "fs";
+import path from "path";
+import { initializeApp, getApps, getApp } from "firebase/app";
+import {
+  getFirestore,
+  collection,
+  getDocs,
+  doc,
+  setDoc as firebaseSetDoc,
+  updateDoc as firebaseUpdateDoc,
+  deleteDoc as firebaseDeleteDoc
+} from "firebase/firestore";
 var changeListeners = [];
 function onDatabaseChange(callback) {
   changeListeners.push(callback);
@@ -53,17 +26,17 @@ function notifyChange(collectionName) {
   changeListeners.forEach((cb) => cb(collectionName));
 }
 async function setDoc(docRef, data, options) {
-  const result = options ? await (0, import_firestore.setDoc)(docRef, data, options) : await (0, import_firestore.setDoc)(docRef, data);
+  const result = options ? await firebaseSetDoc(docRef, data, options) : await firebaseSetDoc(docRef, data);
   notifyChange(docRef.parent.id);
   return result;
 }
 async function updateDoc(docRef, data) {
-  const result = await (0, import_firestore.updateDoc)(docRef, data);
+  const result = await firebaseUpdateDoc(docRef, data);
   notifyChange(docRef.parent.id);
   return result;
 }
 async function deleteDoc(docRef) {
-  const result = await (0, import_firestore.deleteDoc)(docRef);
+  const result = await firebaseDeleteDoc(docRef);
   notifyChange(docRef.parent.id);
   return result;
 }
@@ -83,17 +56,17 @@ function initFirestore() {
   try {
     let config = DEFAULT_FIREBASE_CONFIG;
     try {
-      const configPath = import_path.default.join(process.cwd(), "firebase-applet-config.json");
-      if (import_fs.default.existsSync(configPath)) {
-        const parsed = JSON.parse(import_fs.default.readFileSync(configPath, "utf-8"));
+      const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+      if (fs.existsSync(configPath)) {
+        const parsed = JSON.parse(fs.readFileSync(configPath, "utf-8"));
         if (parsed && parsed.apiKey && parsed.projectId) {
           config = parsed;
         }
       }
     } catch {
     }
-    const app2 = (0, import_app.initializeApp)(config);
-    firestoreDb = (0, import_firestore.getFirestore)(app2, config.firestoreDatabaseId || void 0);
+    const app2 = getApps().length > 0 ? getApp() : initializeApp(config);
+    firestoreDb = getFirestore(app2, config.firestoreDatabaseId || void 0);
     isInitialized = true;
     console.log("\u2705 Firestore Database connected successfully to project:", config.projectId, "Database ID:", config.firestoreDatabaseId);
     return firestoreDb;
@@ -106,8 +79,8 @@ async function fetchUsersFromFirestore() {
   const db2 = initFirestore();
   if (!db2) return null;
   try {
-    const usersCol = (0, import_firestore.collection)(db2, "users");
-    const snapshot = await (0, import_firestore.getDocs)(usersCol);
+    const usersCol = collection(db2, "users");
+    const snapshot = await getDocs(usersCol);
     if (snapshot.empty) {
       return [];
     }
@@ -129,7 +102,7 @@ async function saveUserToFirestore(user) {
   const db2 = initFirestore();
   if (!db2) return false;
   try {
-    const userRef = (0, import_firestore.doc)(db2, "users", user.id);
+    const userRef = doc(db2, "users", user.id);
     await setDoc(userRef, {
       id: user.id,
       username: user.username,
@@ -161,8 +134,8 @@ async function fetchSettingsFromFirestore() {
   const db2 = initFirestore();
   if (!db2) return null;
   try {
-    const settingsCol = (0, import_firestore.collection)(db2, "system_settings");
-    const snapshot = await (0, import_firestore.getDocs)(settingsCol);
+    const settingsCol = collection(db2, "system_settings");
+    const snapshot = await getDocs(settingsCol);
     if (snapshot.empty) {
       return null;
     }
@@ -182,7 +155,7 @@ async function saveSettingsToFirestore(settings) {
   const db2 = initFirestore();
   if (!db2) return false;
   try {
-    const settingsRef = (0, import_firestore.doc)(db2, "system_settings", "general");
+    const settingsRef = doc(db2, "system_settings", "general");
     await setDoc(settingsRef, settings, { merge: true });
     return true;
   } catch (err) {
@@ -194,7 +167,7 @@ async function updateUserInFirestore(userId, partial) {
   const db2 = initFirestore();
   if (!db2) return false;
   try {
-    const userRef = (0, import_firestore.doc)(db2, "users", userId);
+    const userRef = doc(db2, "users", userId);
     await setDoc(userRef, partial, { merge: true });
     return true;
   } catch (err) {
@@ -206,7 +179,7 @@ async function deleteUserFromFirestore(userId) {
   const db2 = initFirestore();
   if (!db2) return false;
   try {
-    const userRef = (0, import_firestore.doc)(db2, "users", userId);
+    const userRef = doc(db2, "users", userId);
     await deleteDoc(userRef);
     return true;
   } catch (err) {
@@ -218,8 +191,8 @@ async function fetchLawsFromFirestore() {
   const db2 = initFirestore();
   if (!db2) return null;
   try {
-    const lawsCol = (0, import_firestore.collection)(db2, "laws");
-    const snapshot = await (0, import_firestore.getDocs)(lawsCol);
+    const lawsCol = collection(db2, "laws");
+    const snapshot = await getDocs(lawsCol);
     if (snapshot.empty) {
       return [];
     }
@@ -241,7 +214,7 @@ async function saveLawToFirestore(law) {
   const db2 = initFirestore();
   if (!db2) return false;
   try {
-    const lawRef = (0, import_firestore.doc)(db2, "laws", law.id);
+    const lawRef = doc(db2, "laws", law.id);
     await setDoc(lawRef, {
       id: law.id,
       title: law.title,
@@ -263,7 +236,7 @@ async function updateLawInFirestore(lawId, partial) {
   const db2 = initFirestore();
   if (!db2) return false;
   try {
-    const lawRef = (0, import_firestore.doc)(db2, "laws", lawId);
+    const lawRef = doc(db2, "laws", lawId);
     await updateDoc(lawRef, partial);
     return true;
   } catch (err) {
@@ -275,7 +248,7 @@ async function deleteLawFromFirestore(lawId) {
   const db2 = initFirestore();
   if (!db2) return false;
   try {
-    const lawRef = (0, import_firestore.doc)(db2, "laws", lawId);
+    const lawRef = doc(db2, "laws", lawId);
     await deleteDoc(lawRef);
     return true;
   } catch (err) {
@@ -287,8 +260,8 @@ async function fetchCategoriesFromFirestore() {
   const db2 = initFirestore();
   if (!db2) return null;
   try {
-    const catCol = (0, import_firestore.collection)(db2, "legal_categories");
-    const snapshot = await (0, import_firestore.getDocs)(catCol);
+    const catCol = collection(db2, "legal_categories");
+    const snapshot = await getDocs(catCol);
     if (snapshot.empty) {
       return [];
     }
@@ -310,7 +283,7 @@ async function saveCategoryToFirestore(category) {
   const db2 = initFirestore();
   if (!db2) return false;
   try {
-    const catRef = (0, import_firestore.doc)(db2, "legal_categories", category.id);
+    const catRef = doc(db2, "legal_categories", category.id);
     await setDoc(catRef, {
       id: category.id,
       name: category.name,
@@ -327,7 +300,7 @@ async function deleteCategoryFromFirestore(categoryId) {
   const db2 = initFirestore();
   if (!db2) return false;
   try {
-    const catRef = (0, import_firestore.doc)(db2, "legal_categories", categoryId);
+    const catRef = doc(db2, "legal_categories", categoryId);
     await deleteDoc(catRef);
     return true;
   } catch (err) {
@@ -339,8 +312,8 @@ async function fetchSupervisorsFromFirestore() {
   const db2 = initFirestore();
   if (!db2) return null;
   try {
-    const col = (0, import_firestore.collection)(db2, "supervisors");
-    const snapshot = await (0, import_firestore.getDocs)(col);
+    const col = collection(db2, "supervisors");
+    const snapshot = await getDocs(col);
     if (snapshot.empty) {
       return [];
     }
@@ -362,7 +335,7 @@ async function saveSupervisorToFirestore(supervisor) {
   const db2 = initFirestore();
   if (!db2) return false;
   try {
-    const docRef = (0, import_firestore.doc)(db2, "supervisors", supervisor.id);
+    const docRef = doc(db2, "supervisors", supervisor.id);
     await setDoc(docRef, {
       id: supervisor.id,
       name: supervisor.name,
@@ -385,7 +358,7 @@ async function deleteSupervisorFromFirestore(supervisorId) {
   const db2 = initFirestore();
   if (!db2) return false;
   try {
-    const docRef = (0, import_firestore.doc)(db2, "supervisors", supervisorId);
+    const docRef = doc(db2, "supervisors", supervisorId);
     await deleteDoc(docRef);
     return true;
   } catch (err) {
@@ -397,8 +370,8 @@ async function fetchRelatedSitesFromFirestore() {
   const db2 = initFirestore();
   if (!db2) return null;
   try {
-    const col = (0, import_firestore.collection)(db2, "related_sites");
-    const snapshot = await (0, import_firestore.getDocs)(col);
+    const col = collection(db2, "related_sites");
+    const snapshot = await getDocs(col);
     if (snapshot.empty) {
       return [];
     }
@@ -419,7 +392,7 @@ async function saveRelatedSiteToFirestore(site) {
   const db2 = initFirestore();
   if (!db2) return false;
   try {
-    const docRef = (0, import_firestore.doc)(db2, "related_sites", site.id);
+    const docRef = doc(db2, "related_sites", site.id);
     await setDoc(docRef, {
       id: site.id,
       title: site.title,
@@ -440,7 +413,7 @@ async function deleteRelatedSiteFromFirestore(siteId) {
   const db2 = initFirestore();
   if (!db2) return false;
   try {
-    const docRef = (0, import_firestore.doc)(db2, "related_sites", siteId);
+    const docRef = doc(db2, "related_sites", siteId);
     await deleteDoc(docRef);
     return true;
   } catch (err) {
@@ -526,8 +499,8 @@ async function fetchPartnersFromFirestore() {
   const db2 = initFirestore();
   if (!db2) return null;
   try {
-    const col = (0, import_firestore.collection)(db2, "partners");
-    const snapshot = await (0, import_firestore.getDocs)(col);
+    const col = collection(db2, "partners");
+    const snapshot = await getDocs(col);
     if (snapshot.empty) {
       return [];
     }
@@ -548,7 +521,7 @@ async function savePartnerToFirestore(partner) {
   const db2 = initFirestore();
   if (!db2) return false;
   try {
-    const docRef = (0, import_firestore.doc)(db2, "partners", partner.id);
+    const docRef = doc(db2, "partners", partner.id);
     await setDoc(docRef, {
       id: partner.id,
       name: partner.name,
@@ -571,7 +544,7 @@ async function deletePartnerFromFirestore(partnerId) {
   const db2 = initFirestore();
   if (!db2) return false;
   try {
-    const docRef = (0, import_firestore.doc)(db2, "partners", partnerId);
+    const docRef = doc(db2, "partners", partnerId);
     await deleteDoc(docRef);
     return true;
   } catch (err) {
@@ -593,8 +566,8 @@ async function fetchPlatformAboutFromFirestore() {
   const db2 = initFirestore();
   if (!db2) return null;
   try {
-    const docRef = (0, import_firestore.doc)(db2, "system_settings", "platform_about");
-    const docSnap = await (0, import_firestore.getDocs)((0, import_firestore.collection)(db2, "system_settings"));
+    const docRef = doc(db2, "system_settings", "platform_about");
+    const docSnap = await getDocs(collection(db2, "system_settings"));
     let found = null;
     docSnap.forEach((snap) => {
       if (snap.id === "platform_about") {
@@ -611,7 +584,7 @@ async function savePlatformAboutToFirestore(data) {
   const db2 = initFirestore();
   if (!db2) return false;
   try {
-    const docRef = (0, import_firestore.doc)(db2, "system_settings", "platform_about");
+    const docRef = doc(db2, "system_settings", "platform_about");
     await setDoc(docRef, {
       overviewTitle: data.overviewTitle || DEFAULT_PLATFORM_ABOUT.overviewTitle,
       overviewContent: data.overviewContent || DEFAULT_PLATFORM_ABOUT.overviewContent,
@@ -661,7 +634,7 @@ async function fetchContactInfoFromFirestore() {
   const db2 = initFirestore();
   if (!db2) return null;
   try {
-    const docSnap = await (0, import_firestore.getDocs)((0, import_firestore.collection)(db2, "system_settings"));
+    const docSnap = await getDocs(collection(db2, "system_settings"));
     let found = null;
     docSnap.forEach((snap) => {
       if (snap.id === "contact_info") {
@@ -678,7 +651,7 @@ async function saveContactInfoToFirestore(data) {
   const db2 = initFirestore();
   if (!db2) return false;
   try {
-    const docRef = (0, import_firestore.doc)(db2, "system_settings", "contact_info");
+    const docRef = doc(db2, "system_settings", "contact_info");
     await setDoc(docRef, {
       whatsappNumbers: Array.isArray(data.whatsappNumbers) ? data.whatsappNumbers : DEFAULT_CONTACT_INFO.whatsappNumbers,
       email: data.email || DEFAULT_CONTACT_INFO.email,
@@ -699,8 +672,8 @@ async function fetchConversationsFromFirestore(userId) {
   const db2 = initFirestore();
   if (!db2) return null;
   try {
-    const col = (0, import_firestore.collection)(db2, "conversations");
-    const snapshot = await (0, import_firestore.getDocs)(col);
+    const col = collection(db2, "conversations");
+    const snapshot = await getDocs(col);
     if (snapshot.empty) {
       return [];
     }
@@ -725,7 +698,7 @@ async function saveConversationToFirestore(conv) {
   const db2 = initFirestore();
   if (!db2) return false;
   try {
-    const docRef = (0, import_firestore.doc)(db2, "conversations", conv.id);
+    const docRef = doc(db2, "conversations", conv.id);
     await setDoc(docRef, {
       id: conv.id,
       userId: conv.userId,
@@ -744,7 +717,7 @@ async function deleteConversationFromFirestore(convId) {
   const db2 = initFirestore();
   if (!db2) return false;
   try {
-    const docRef = (0, import_firestore.doc)(db2, "conversations", convId);
+    const docRef = doc(db2, "conversations", convId);
     await deleteDoc(docRef);
     return true;
   } catch (err) {
@@ -756,8 +729,8 @@ async function clearUserConversationsFromFirestore(userId) {
   const db2 = initFirestore();
   if (!db2) return false;
   try {
-    const col = (0, import_firestore.collection)(db2, "conversations");
-    const snapshot = await (0, import_firestore.getDocs)(col);
+    const col = collection(db2, "conversations");
+    const snapshot = await getDocs(col);
     const deleteTasks = [];
     snapshot.forEach((docSnap) => {
       const data = docSnap.data();
@@ -772,25 +745,27 @@ async function clearUserConversationsFromFirestore(userId) {
     return false;
   }
 }
+var isAlreadySeeded = false;
 async function seedFirestoreIfEmpty(initialUsers, initialLaws, initialCategories, initialSupervisors, initialRelatedSites, initialPartners) {
+  if (isAlreadySeeded) return;
   const db2 = initFirestore();
   if (!db2) return;
   try {
-    const lawsCol = (0, import_firestore.collection)(db2, "laws");
-    const usersCol = (0, import_firestore.collection)(db2, "users");
-    const catCol = (0, import_firestore.collection)(db2, "legal_categories");
-    const supCol = (0, import_firestore.collection)(db2, "supervisors");
-    const sitesCol = (0, import_firestore.collection)(db2, "related_sites");
-    const settingsCol = (0, import_firestore.collection)(db2, "system_settings");
-    const partnersCol = (0, import_firestore.collection)(db2, "partners");
+    const lawsCol = collection(db2, "laws");
+    const usersCol = collection(db2, "users");
+    const catCol = collection(db2, "legal_categories");
+    const supCol = collection(db2, "supervisors");
+    const sitesCol = collection(db2, "related_sites");
+    const settingsCol = collection(db2, "system_settings");
+    const partnersCol = collection(db2, "partners");
     const [lawSnap, userSnap, catSnap, supSnap, siteSnap, settingsSnap, partnersSnap] = await Promise.all([
-      (0, import_firestore.getDocs)(lawsCol),
-      (0, import_firestore.getDocs)(usersCol),
-      (0, import_firestore.getDocs)(catCol),
-      (0, import_firestore.getDocs)(supCol),
-      (0, import_firestore.getDocs)(sitesCol),
-      (0, import_firestore.getDocs)(settingsCol),
-      (0, import_firestore.getDocs)(partnersCol)
+      getDocs(lawsCol),
+      getDocs(usersCol),
+      getDocs(catCol),
+      getDocs(supCol),
+      getDocs(sitesCol),
+      getDocs(settingsCol),
+      getDocs(partnersCol)
     ]);
     const seedTasks = [];
     let hasAbout = false;
@@ -831,29 +806,48 @@ async function seedFirestoreIfEmpty(initialUsers, initialLaws, initialCategories
       await Promise.all(seedTasks);
       console.log("\u2705 Parallel Firestore database seeding completed.");
     }
+    isAlreadySeeded = true;
   } catch (err) {
     console.error("Error during Firestore database seeding:", err);
   }
 }
 
 // server.ts
-import_dotenv.default.config();
-var app = (0, import_express.default)();
+dotenv.config();
+var app = express();
 var PORT = 3e3;
+app.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-requested-with");
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+  next();
+});
+app.use((req, res, next) => {
+  if (!req.url.startsWith("/api") && (req.url.startsWith("/auth") || req.url.startsWith("/laws") || req.url.startsWith("/categories") || req.url.startsWith("/settings") || req.url.startsWith("/admin") || req.url.startsWith("/ask") || req.url.startsWith("/export") || req.url.startsWith("/supervisors") || req.url.startsWith("/related-sites") || req.url.startsWith("/partners") || req.url.startsWith("/contact-info") || req.url.startsWith("/platform-about"))) {
+    req.url = "/api" + req.url;
+  }
+  next();
+});
 var syncPromise = null;
 var lastSyncTime = 0;
 async function ensureDbSynced() {
   const now = Date.now();
-  const isStale = process.env.VERCEL ? now - lastSyncTime > 5e3 : lastSyncTime === 0;
+  const isStale = lastSyncTime === 0 || now - lastSyncTime > 6e4;
   if (!syncPromise || isStale) {
     syncPromise = syncWithFirestore().then(() => {
       lastSyncTime = Date.now();
     }).catch((err) => {
       console.error("Sync failed:", err);
-      syncPromise = null;
+      lastSyncTime = Date.now();
     });
   }
-  await syncPromise;
+  await Promise.race([
+    syncPromise,
+    new Promise((resolve) => setTimeout(resolve, 2500))
+  ]);
 }
 app.use(async (req, res, next) => {
   if (req.path.startsWith("/api/") && req.path !== "/api/admin/login") {
@@ -861,8 +855,8 @@ app.use(async (req, res, next) => {
   }
   next();
 });
-app.use(import_express.default.json({ limit: "60mb" }));
-app.use(import_express.default.urlencoded({ extended: true, limit: "60mb" }));
+app.use(express.json({ limit: "60mb" }));
+app.use(express.urlencoded({ extended: true, limit: "60mb" }));
 app.use((err, req, res, next) => {
   if (err?.type === "entity.too.large" || err?.status === 413) {
     return res.status(413).json({
@@ -889,8 +883,8 @@ onDatabaseChange((collectionName) => {
 `);
   });
 });
-var DATA_DIR = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME ? import_path2.default.join("/tmp", "data") : import_path2.default.join(process.cwd(), "data");
-var DB_FILE = import_path2.default.join(DATA_DIR, "db.json");
+var DATA_DIR = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME ? path2.join("/tmp", "data") : path2.join(process.cwd(), "data");
+var DB_FILE = path2.join(DATA_DIR, "db.json");
 var DEFAULT_CATEGORIES = [
   { id: "cat-customs", name: "\u062C\u0645\u0627\u0631\u0643", isDefault: true, createdAt: "2026-01-01T00:00:00.000Z" },
   { id: "cat-income-tax", name: "\u0636\u0631\u064A\u0628\u0629 \u062F\u062E\u0644", isDefault: true, createdAt: "2026-01-01T00:00:00.000Z" },
@@ -1070,14 +1064,14 @@ var INITIAL_LAWS = [
 ];
 function initDB() {
   try {
-    if (!import_fs2.default.existsSync(DATA_DIR)) {
-      import_fs2.default.mkdirSync(DATA_DIR, { recursive: true });
+    if (!fs2.existsSync(DATA_DIR)) {
+      fs2.mkdirSync(DATA_DIR, { recursive: true });
     }
   } catch (err) {
   }
-  if (import_fs2.default.existsSync(DB_FILE)) {
+  if (fs2.existsSync(DB_FILE)) {
     try {
-      const content = import_fs2.default.readFileSync(DB_FILE, "utf-8");
+      const content = fs2.readFileSync(DB_FILE, "utf-8");
       const data = JSON.parse(content);
       if (!data.settings) {
         data.settings = { autoApproveNewUsers: true, defaultTrialDays: 7, trialPolicyEnabled: true, ...DEFAULT_BRANDING };
@@ -1136,13 +1130,13 @@ function initDB() {
     users: [],
     laws: INITIAL_LAWS
   };
-  import_fs2.default.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2), "utf-8");
+  fs2.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2), "utf-8");
   return initialData;
 }
 var db = initDB();
 function saveDB() {
   try {
-    import_fs2.default.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), "utf-8");
+    fs2.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), "utf-8");
   } catch (err) {
     console.error("Error saving DB:", err);
   }
@@ -1405,7 +1399,7 @@ function getGemini() {
     if (!apiKey) {
       throw new Error("GEMINI_API_KEY environment variable is not set");
     }
-    geminiClient = new import_genai.GoogleGenAI({
+    geminiClient = new GoogleGenAI({
       apiKey,
       httpOptions: {
         headers: {
@@ -1417,71 +1411,80 @@ function getGemini() {
   return geminiClient;
 }
 app.post("/api/auth/register", async (req, res) => {
-  const { username, password, fullName, phone, recoveryCode } = req.body;
-  if (!username || !password) {
-    return res.status(400).json({ error: "\u0627\u0633\u0645 \u0627\u0644\u0645\u0633\u062A\u062E\u062F\u0645 \u0648\u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631 \u0645\u0637\u0644\u0648\u0628\u0627\u0646" });
-  }
-  const trimmedUsername = String(username).trim();
-  const trimmedFullName = fullName ? String(fullName).trim() : "";
-  const trimmedPhone = phone ? String(phone).trim() : "";
-  const trimmedRecoveryCode = recoveryCode ? String(recoveryCode).trim() : "";
-  if (!trimmedFullName) {
-    return res.status(400).json({ error: "\u064A\u0631\u062C\u0649 \u0625\u062F\u062E\u0627\u0644 \u0627\u0644\u0627\u0633\u0645 \u0627\u0644\u0643\u0627\u0645\u0644" });
-  }
-  if (!trimmedPhone) {
-    return res.status(400).json({ error: "\u064A\u0631\u062C\u0649 \u0625\u062F\u062E\u0627\u0644 \u0631\u0642\u0645 \u0627\u0644\u062C\u0648\u0627\u0644" });
-  }
-  if (!trimmedRecoveryCode) {
-    return res.status(400).json({ error: "\u064A\u0631\u062C\u0649 \u062A\u062D\u062F\u064A\u062F \u0631\u0645\u0632 \u0627\u0633\u062A\u0639\u0627\u062F\u0629 \u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631 \u0641\u064A \u062D\u0627\u0644 \u0646\u0633\u064A\u0627\u0646\u0647\u0627" });
-  }
-  if (trimmedUsername.toLowerCase() === ADMIN_CREDENTIALS.username.toLowerCase()) {
-    return res.status(400).json({ error: "\u0627\u0633\u0645 \u0627\u0644\u0645\u0633\u062A\u062E\u062F\u0645 \u0647\u0630\u0627 \u0645\u062D\u062C\u0648\u0632 \u0644\u0625\u062F\u0627\u0631\u0629 \u0627\u0644\u0646\u0638\u0627\u0645" });
-  }
-  const existingUser = db.users.find(
-    (u) => u.username.toLowerCase() === trimmedUsername.toLowerCase()
-  );
-  if (existingUser) {
-    return res.status(400).json({ error: "\u0627\u0633\u0645 \u0627\u0644\u0645\u0633\u062A\u062E\u062F\u0645 \u0645\u0633\u062A\u062E\u062F\u0645 \u0628\u0627\u0644\u0641\u0639\u0644\u060C \u064A\u0631\u062C\u0649 \u0627\u062E\u062A\u064A\u0627\u0631 \u0627\u0633\u0645 \u0622\u062E\u0631" });
-  }
-  if (trimmedPhone) {
-    const existingPhone = db.users.find((u) => u.phone && u.phone.trim() === trimmedPhone);
-    if (existingPhone) {
-      return res.status(400).json({ error: "\u0631\u0642\u0645 \u0627\u0644\u062C\u0648\u0627\u0644 \u0647\u0630\u0627 \u0645\u0633\u062C\u0644 \u0645\u0633\u0628\u0642\u0627\u064B \u0628\u062D\u0633\u0627\u0628 \u0622\u062E\u0631" });
+  try {
+    const { username, password, fullName, phone, recoveryCode } = req.body || {};
+    if (!username || !password) {
+      return res.status(400).json({ error: "\u0627\u0633\u0645 \u0627\u0644\u0645\u0633\u062A\u062E\u062F\u0645 \u0648\u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631 \u0645\u0637\u0644\u0648\u0628\u0627\u0646" });
     }
+    const trimmedUsername = String(username).trim();
+    const trimmedFullName = fullName ? String(fullName).trim() : "";
+    const trimmedPhone = phone ? String(phone).trim() : "";
+    const trimmedRecoveryCode = recoveryCode ? String(recoveryCode).trim() : "";
+    if (!trimmedFullName) {
+      return res.status(400).json({ error: "\u064A\u0631\u062C\u0649 \u0625\u062F\u062E\u0627\u0644 \u0627\u0644\u0627\u0633\u0645 \u0627\u0644\u0643\u0627\u0645\u0644" });
+    }
+    if (!trimmedPhone) {
+      return res.status(400).json({ error: "\u064A\u0631\u062C\u0649 \u0625\u062F\u062E\u0627\u0644 \u0631\u0642\u0645 \u0627\u0644\u062C\u0648\u0627\u0644" });
+    }
+    if (!trimmedRecoveryCode) {
+      return res.status(400).json({ error: "\u064A\u0631\u062C\u0649 \u062A\u062D\u062F\u064A\u062F \u0631\u0645\u0632 \u0627\u0633\u062A\u0639\u0627\u062F\u0629 \u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631 \u0641\u064A \u062D\u0627\u0644 \u0646\u0633\u064A\u0627\u0646\u0647\u0627" });
+    }
+    if (trimmedUsername.toLowerCase() === ADMIN_CREDENTIALS.username.toLowerCase()) {
+      return res.status(400).json({ error: "\u0627\u0633\u0645 \u0627\u0644\u0645\u0633\u062A\u062E\u062F\u0645 \u0647\u0630\u0627 \u0645\u062D\u062C\u0648\u0632 \u0644\u0625\u062F\u0627\u0631\u0629 \u0627\u0644\u0646\u0638\u0627\u0645" });
+    }
+    const existingUser = db.users.find(
+      (u) => u.username.toLowerCase() === trimmedUsername.toLowerCase()
+    );
+    if (existingUser) {
+      return res.status(400).json({ error: "\u0627\u0633\u0645 \u0627\u0644\u0645\u0633\u062A\u062E\u062F\u0645 \u0645\u0633\u062A\u062E\u062F\u0645 \u0628\u0627\u0644\u0641\u0639\u0644\u060C \u064A\u0631\u062C\u0649 \u0627\u062E\u062A\u064A\u0627\u0631 \u0627\u0633\u0645 \u0622\u062E\u0631" });
+    }
+    if (trimmedPhone) {
+      const existingPhone = db.users.find((u) => u.phone && u.phone.trim() === trimmedPhone);
+      if (existingPhone) {
+        return res.status(400).json({ error: "\u0631\u0642\u0645 \u0627\u0644\u062C\u0648\u0627\u0644 \u0647\u0630\u0627 \u0645\u0633\u062C\u0644 \u0645\u0633\u0628\u0642\u0627\u064B \u0628\u062D\u0633\u0627\u0628 \u0622\u062E\u0631" });
+      }
+    }
+    const defaultTrialDays = typeof db.settings?.defaultTrialDays === "number" ? db.settings.defaultTrialDays : 7;
+    const now = /* @__PURE__ */ new Date();
+    const trialStartedAt = now.toISOString();
+    const trialEndsAt = new Date(now.getTime() + defaultTrialDays * 24 * 60 * 60 * 1e3).toISOString();
+    const isAutoApprove = db.settings?.autoApproveNewUsers !== false;
+    const newUser = {
+      id: "user-" + Date.now(),
+      username: trimmedUsername,
+      fullName: trimmedFullName,
+      phone: trimmedPhone,
+      recoveryCode: trimmedRecoveryCode,
+      password: String(password),
+      role: "user",
+      status: isAutoApprove ? "approved" : "pending",
+      createdAt: now.toISOString(),
+      ...isAutoApprove ? { reviewedAt: now.toISOString() } : {},
+      // Trial and Subscription policy
+      subscriptionStatus: "trial",
+      trialDays: defaultTrialDays,
+      trialStartedAt,
+      trialEndsAt,
+      isSubscribed: false
+    };
+    db.users.push(newUser);
+    saveDB();
+    try {
+      await saveUserToFirestore(newUser);
+    } catch (saveErr) {
+      console.error("Failed to sync new user to Firestore cloud:", saveErr);
+    }
+    return res.status(201).json({
+      message: isAutoApprove ? `\u062A\u0645 \u0625\u0646\u0634\u0627\u0621 \u0627\u0644\u062D\u0633\u0627\u0628 \u0648\u0627\u0639\u062A\u0645\u0627\u062F\u0647 \u0628\u0646\u062C\u0627\u062D! \u062A\u0645 \u0645\u0646\u062D\u0643 \u0641\u062A\u0631\u0629 \u062A\u062C\u0631\u064A\u0628\u064A\u0629 \u0645\u062C\u0627\u0646\u064A\u0629 \u0644\u0645\u062F\u0629 ${defaultTrialDays} \u0623\u064A\u0627\u0645 \u0644\u0627\u0633\u062A\u062E\u062F\u0627\u0645 \u0645\u0633\u0627\u0639\u062F \u0627\u0644\u062C\u0645\u0627\u0631\u0643 \u0648\u0627\u0644\u0636\u0631\u0627\u0626\u0628.` : `\u062A\u0645 \u062A\u0642\u062F\u064A\u0645 \u0637\u0644\u0628 \u0627\u0644\u062D\u0633\u0627\u0628 \u0628\u0646\u062C\u0627\u062D\u060C \u0648\u0647\u0648 \u0642\u064A\u062F \u0627\u0644\u0645\u0631\u0627\u062C\u0639\u0629 \u0627\u0644\u0625\u062F\u0627\u0631\u064A\u0629. \u062A\u0645 \u062A\u062E\u0635\u064A\u0635 \u0641\u062A\u0631\u0629 \u062A\u062C\u0631\u064A\u0628\u064A\u0629 \u0645\u062F\u062A\u0647\u0627 ${defaultTrialDays} \u0623\u064A\u0627\u0645 \u062A\u0628\u062F\u0623 \u0641\u0648\u0631 \u0627\u0644\u0627\u0639\u062A\u0645\u0627\u062F.`,
+      isAutoApproved: isAutoApprove,
+      defaultTrialDays,
+      trialEndsAt,
+      user: toSafeUser(newUser)
+    });
+  } catch (err) {
+    console.error("Registration internal error:", err);
+    return res.status(500).json({ error: err?.message || "\u062D\u062F\u062B \u062E\u0637\u0623 \u0641\u064A \u0627\u0644\u062E\u0627\u062F\u0645 \u0623\u062B\u0646\u0627\u0621 \u062A\u0633\u062C\u064A\u0644 \u0627\u0644\u062D\u0633\u0627\u0628" });
   }
-  const defaultTrialDays = typeof db.settings?.defaultTrialDays === "number" ? db.settings.defaultTrialDays : 7;
-  const now = /* @__PURE__ */ new Date();
-  const trialStartedAt = now.toISOString();
-  const trialEndsAt = new Date(now.getTime() + defaultTrialDays * 24 * 60 * 60 * 1e3).toISOString();
-  const isAutoApprove = db.settings?.autoApproveNewUsers !== false;
-  const newUser = {
-    id: "user-" + Date.now(),
-    username: trimmedUsername,
-    fullName: trimmedFullName,
-    phone: trimmedPhone,
-    recoveryCode: trimmedRecoveryCode,
-    password: String(password),
-    role: "user",
-    status: isAutoApprove ? "approved" : "pending",
-    createdAt: now.toISOString(),
-    ...isAutoApprove ? { reviewedAt: now.toISOString() } : {},
-    // Trial and Subscription policy
-    subscriptionStatus: "trial",
-    trialDays: defaultTrialDays,
-    trialStartedAt,
-    trialEndsAt,
-    isSubscribed: false
-  };
-  db.users.push(newUser);
-  saveDB();
-  await saveUserToFirestore(newUser);
-  return res.status(201).json({
-    message: isAutoApprove ? `\u062A\u0645 \u0625\u0646\u0634\u0627\u0621 \u0627\u0644\u062D\u0633\u0627\u0628 \u0648\u0627\u0639\u062A\u0645\u0627\u062F\u0647 \u0628\u0646\u062C\u0627\u062D! \u062A\u0645 \u0645\u0646\u062D\u0643 \u0641\u062A\u0631\u0629 \u062A\u062C\u0631\u064A\u0628\u064A\u0629 \u0645\u062C\u0627\u0646\u064A\u0629 \u0644\u0645\u062F\u0629 ${defaultTrialDays} \u0623\u064A\u0627\u0645 \u0644\u0627\u0633\u062A\u062E\u062F\u0627\u0645 \u0645\u0633\u0627\u0639\u062F \u0627\u0644\u062C\u0645\u0627\u0631\u0643 \u0648\u0627\u0644\u0636\u0631\u0627\u0626\u0628.` : `\u062A\u0645 \u062A\u0642\u062F\u064A\u0645 \u0637\u0644\u0628 \u0627\u0644\u062D\u0633\u0627\u0628 \u0628\u0646\u062C\u0627\u062D\u060C \u0648\u0647\u0648 \u0642\u064A\u062F \u0627\u0644\u0645\u0631\u0627\u062C\u0639\u0629 \u0627\u0644\u0625\u062F\u0627\u0631\u064A\u0629. \u062A\u0645 \u062A\u062E\u0635\u064A\u0635 \u0641\u062A\u0631\u0629 \u062A\u062C\u0631\u064A\u0628\u064A\u0629 \u0645\u062F\u062A\u0647\u0627 ${defaultTrialDays} \u0623\u064A\u0627\u0645 \u062A\u0628\u062F\u0623 \u0641\u0648\u0631 \u0627\u0644\u0627\u0639\u062A\u0645\u0627\u062F.`,
-    isAutoApproved: isAutoApprove,
-    defaultTrialDays,
-    trialEndsAt,
-    user: toSafeUser(newUser)
-  });
 });
 app.post("/api/auth/login", (req, res) => {
   const { username, password } = req.body;
@@ -2494,22 +2497,22 @@ app.post("/api/admin/parse-pdf", async (req, res) => {
             systemInstruction: "\u0623\u0646\u062A \u062E\u0628\u064A\u0631 \u0642\u0627\u0646\u0648\u0646\u064A \u0648\u062A\u0634\u0631\u064A\u0639\u064A \u0645\u062A\u062E\u0635\u0635 \u0641\u064A \u0627\u0633\u062A\u062E\u0631\u0627\u062C \u0648\u0647\u064A\u0643\u0644\u0629 \u0627\u0644\u0642\u0648\u0627\u0646\u064A\u0646 \u0648\u0627\u0644\u0623\u0646\u0638\u0645\u0629 \u0648\u0627\u0644\u0642\u0631\u0627\u0631\u0627\u062A \u0627\u0644\u0641\u0644\u0633\u0637\u064A\u0646\u064A\u0629 \u0645\u0646 \u0648\u062B\u0627\u0626\u0642 PDF \u0627\u0644\u0631\u0633\u0645\u064A\u0629 \u0648\u0627\u0644\u0645\u0645\u0633\u0648\u062D\u0629 \u0636\u0648\u0626\u064A\u0627\u064B.",
             responseMimeType: "application/json",
             responseSchema: {
-              type: import_genai.Type.OBJECT,
+              type: Type.OBJECT,
               properties: {
                 title: {
-                  type: import_genai.Type.STRING,
+                  type: Type.STRING,
                   description: "\u0639\u0646\u0648\u0627\u0646 \u0627\u0644\u0642\u0627\u0646\u0648\u0646 \u0623\u0648 \u0627\u0644\u062A\u0634\u0631\u064A\u0639 \u0627\u0644\u0631\u0633\u0645\u064A \u0627\u0644\u0645\u0633\u062A\u062E\u0631\u062C \u0628\u0627\u0644\u0643\u0627\u0645\u0644."
                 },
                 category: {
-                  type: import_genai.Type.STRING,
+                  type: Type.STRING,
                   description: "\u0627\u0644\u062A\u0635\u0646\u064A\u0641 \u0627\u0644\u062A\u0634\u0631\u064A\u0639\u064A \u0627\u0644\u0623\u0646\u0633\u0628 (\u062C\u0645\u0627\u0631\u0643\u060C \u0636\u0631\u064A\u0628\u0629 \u062F\u062E\u0644\u060C \u0636\u0631\u064A\u0628\u0629 \u0627\u0644\u0642\u064A\u0645\u0629 \u0627\u0644\u0645\u0636\u0627\u0641\u0629\u060C \u0631\u0633\u0648\u0645 \u0648\u0645\u0643\u0648\u0633\u060C \u0625\u0644\u062E)."
                 },
                 content: {
-                  type: import_genai.Type.STRING,
+                  type: Type.STRING,
                   description: "\u0627\u0644\u0646\u0635 \u0627\u0644\u0643\u0627\u0645\u0644 \u0648\u0627\u0644\u0634\u0627\u0645\u0644 \u0644\u0643\u0627\u0641\u0629 \u0627\u0644\u0645\u0648\u0627\u062F \u0648\u0627\u0644\u0628\u0646\u0648\u062F \u0648\u0627\u0644\u0642\u0631\u0627\u0631\u0627\u062A \u0627\u0644\u0642\u0627\u0646\u0648\u0646\u064A\u0629 \u0645\u0627\u062F\u0629 \u0628\u0645\u0627\u062F\u0629 \u0648\u0628\u0646\u062F\u0627\u064B \u0628\u0628\u0646\u062F."
                 },
                 summary: {
-                  type: import_genai.Type.STRING,
+                  type: Type.STRING,
                   description: "\u0645\u0644\u062E\u0635 \u0645\u0648\u062C\u0632 \u0644\u0646\u0637\u0627\u0642 \u0648\u0623\u0647\u062F\u0627\u0641 \u0627\u0644\u062A\u0634\u0631\u064A\u0639."
                 }
               },
@@ -3057,10 +3060,10 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else if (!process.env.VERCEL) {
-    const distPath = import_path2.default.join(process.cwd(), "dist");
-    app.use(import_express.default.static(distPath));
+    const distPath = path2.join(process.cwd(), "dist");
+    app.use(express.static(distPath));
     app.get("*", (req, res) => {
-      res.sendFile(import_path2.default.join(distPath, "index.html"));
+      res.sendFile(path2.join(distPath, "index.html"));
     });
   }
   const isServerless = Boolean(
@@ -3080,5 +3083,15 @@ var server_default = app;
 
 // api/index.ts
 function handler(req, res) {
+  const original = req.url || "";
+  const matchedPath = req.headers["x-matched-path"] || "";
+  if (matchedPath && matchedPath.startsWith("/api") && (original === "/api" || original === "/" || original === "")) {
+    req.url = matchedPath;
+  } else if (original && !original.startsWith("/api")) {
+    req.url = "/api" + (original.startsWith("/") ? original : "/" + original);
+  }
   return server_default(req, res);
 }
+export {
+  handler as default
+};
