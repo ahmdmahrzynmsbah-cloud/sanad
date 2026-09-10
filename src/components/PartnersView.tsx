@@ -42,7 +42,7 @@ export const PartnersView: React.FC<PartnersViewProps> = ({
         setPartners(data.partners);
       }
     } catch (err) {
-      console.error('Failed to load partners:', err);
+      console.warn('Failed to load partners:', err);
     } finally {
       setLoading(false);
     }

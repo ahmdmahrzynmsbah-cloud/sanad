@@ -2523,41 +2523,103 @@ app.post('/api/chat', async (req, res) => {
     }
   }
 
-  // 1. Organize knowledge base with chunking and relevant section priority
+  // 1. Organize knowledge base with smart RAG chunking and concise catalog (prevents 250k token quota blowout)
   const laws = db.laws;
-  const { prioritizedContext, fullCatalog } = buildStructuredLegalContext(message, laws);
+  const isCasualGreeting = /^(سلام|السلام عليكم|سلام عليكم|مرحبا|أهلا|اهلا|مرحباً|صباح الخير|مساء الخير|هاي|hello|hi|عامل ايه|عامل إيه|كيفك|كيف حالك|ازيك|إزيك|شخبارك|أخبارك|شو أخبارك|شو اخبارك|شكرا|شكراً|تسلم|مشكور)\b/i.test(message.trim());
+  
+  const { prioritizedContext, fullCatalog } = isCasualGreeting 
+    ? { prioritizedContext: '', fullCatalog: '' } 
+    : buildStructuredLegalContext(message, laws);
 
-  // 2. Exact fixed system instructions specified by user:
-  const systemInstruction = `أنت "مساعد الجمارك والضرائب"، مساعد افتراضي متخصص حصريًا في القوانين والأنظمة الفلسطينية المتعلقة بالجمارك والضرائب.
-التزم بما يلي بدقة:
-أجب فقط بالاعتماد على نصوص القوانين والمواد المستخرجة المرفقة أدناه تحت "قاعدة المعرفة". لا تخترع أرقامًا أو نسبًا من عندك.
-إن لم تجد إجابة في القوانين المتاحة، قل بوضوح إن المعلومة غير متوفرة حاليًا وأنصح بمراجعة الجهة الرسمية المختصة.
-اذكر مصدر كل إجابة في نهايتها بدقة (اسم القانون أو القرار ورقم المادة أو البند كما وردا في قاعدة المعرفة).
-عند حساب ضريبة أو رسم، اعرض خطوات الحساب رقمًا برقم بشكل منسق وواضح، ثم اذكر الناتج النهائي بالشيكل بخط بارز.
-أضف دائمًا في نهاية أي إجابة حسابية أو قانونية أن هذه إجابة استرشادية وليست استشارة رسمية ملزمة.
-أجب بالعربية ما لم يطلب المستخدم غير ذلك. استخدم عناوين قصيرة وقوائم نقطية، وتجنب الفقرات الطويلة المتصلة.
-التزم الحياد التام وعدم إبداء آراء سياسية شخصية.
+  // 2. Comprehensive, warm, and highly capable system instruction
+  const systemInstruction = `أنت "سَنَد"، المستشار الذكي التفاعلي المتخصص في القوانين والأنظمة الفلسطينية والضرائب والجمارك، والمساعد الشخصي الودود والمفيد للمستخدم.
 
-${prioritizedContext}
+تتمتع بشخصية ذكية، لبقة، راقية، ومرنة في الحديث، وتلتزم بالقواعد التالية بدقة:
 
-قاعدة المعرفة (القوانين والتشريعات المتاحة حاليًا):
-${fullCatalog}`;
+1. التحية والتفاعل الإنساني الطبيعي والدردشة الاجتماعية:
+- إذا بدأ المستخدم بالتحية (مثل: "السلام عليكم"، "أهلاً وسهلاً"، "مرحبا"، "صباح الخير"، "مساء الخير")، رد عليه بتحية تفيض بالود والترحاب واللطف.
+- إذا سألك عن حالك (مثل: "عامل ايه"، "كيف حالك"، "شخبارك"، "إزيك"، "كيفك"): أجب بعفوية ولباقة ودودة (مثل: "الحمد لله بخير ونعمة، تسلم على سؤالك ولطفك! كيف حالك أنت؟ أتمنى أن تكون بأفضل صحة وعافية. كيف أقدر أساعدك اليوم؟").
+- تفاعل بود وتقدير مع عبارات الشكر أو أي كلام اجتماعي لطيف.
+
+2. الإجابة على أي سؤال وموضوع دون قيود أو رفض:
+- أجب عن أي سؤال أو استفسار يطرحه المستخدم بذكاء ورحابة صدر ووضوح، حتى لو كان سؤالاً عاماً، علمياً، حسابياً، لغوياً، تقنياً، أو خارج إطار القوانين.
+- إياك أن ترفض الإجابة أو تقول "هذا خارج تخصصي ولا يمكنني الإجابة" أو "أنا مخصص فقط للجمارك". كن دائماً مساعداً ذكياً ومفيداً في كل ما يطرحه المستخدم.
+
+3. الاستشارات والأسئلة القانونية والضريبية والجمركية (مجال التخصص الرئيسي):
+- عندما يخص سؤال المستخدم القوانين أو التشريعات أو الجمارك أو الضرائب أو الرسوم في دولة فلسطين:
+  * استند باحترافية ودقة متناهية إلى نصوص المواد والقرارات المتاحة في "قاعدة المعرفة" أدناه.
+  * اذكر اسم القانون أو القرار ورقم المادة إن وجد في النصوص.
+  * عند حساب ضريبة أو رسم، اعرض خطوات الحساب رقمياً بوضوح واذكر الناتج النهائي بالشيكل ₪ بخط بارز.
+  * إن كان هناك تفصيل تشريعي محدد جداً لم يرد بنصه الصريح في قاعدة المعرفة، قدّم التوضيح العام المفيد وانصح بمراجعة جهة الاختصاص الرسمية للإفادة القانونية النهائية.
+
+4. أسلوب الصياغة والتنسيق:
+- نسق إجاباتك باستخدام عناوين واضحة ونقاط محددة وفقرات مريحة للقراءة.
+- تحدث باللغة العربية الواضحة والسلسة دائماً، وكن إيجابياً ومستعداً للمساعدة.
+${prioritizedContext ? `\n${prioritizedContext}\n` : ''}
+${fullCatalog ? `\nقاعدة المعرفة (المرجعية التشريعية المتاحة):\n${fullCatalog}` : ''}`;
 
   try {
     const ai = getGemini();
-    // Prioritize high-throughput models with generous limits
-    const modelsToTry = ['gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-flash-latest'];
+    // Prioritize high-throughput, stable models
+    const modelsToTry = [
+      'gemini-2.5-flash',
+      'gemini-2.5-flash-lite',
+      'gemini-flash-latest',
+      'gemini-3.1-flash-lite',
+    ];
     let response = null;
     let lastErr = null;
+
+    // Build multi-turn conversational contents if conversationHistory is sent (keep last 6 messages to stay well within tokens)
+    let multiTurnContents: any[] = [];
+    const rawHistory = (req.body as any)?.conversationHistory;
+    if (Array.isArray(rawHistory) && rawHistory.length > 0) {
+      const recentHistory = rawHistory.slice(-6);
+      for (const msg of recentHistory) {
+        if (!msg || typeof msg.text !== 'string' || !msg.text.trim()) continue;
+        const role = msg.sender === 'user' ? 'user' : 'model';
+        if (multiTurnContents.length > 0 && multiTurnContents[multiTurnContents.length - 1].role === role) {
+          multiTurnContents[multiTurnContents.length - 1].parts[0].text += `\n${msg.text}`;
+        } else {
+          multiTurnContents.push({
+            role,
+            parts: [{ text: msg.text }],
+          });
+        }
+      }
+    }
+
+    // Ensure conversation starts with 'user'
+    while (multiTurnContents.length > 0 && multiTurnContents[0].role !== 'user') {
+      multiTurnContents.shift();
+    }
+
+    // Ensure conversation ends with current user message
+    if (
+      multiTurnContents.length === 0 ||
+      multiTurnContents[multiTurnContents.length - 1].role !== 'user'
+    ) {
+      multiTurnContents.push({
+        role: 'user',
+        parts: [{ text: message }],
+      });
+    } else if (multiTurnContents[multiTurnContents.length - 1].parts[0]?.text !== message) {
+      multiTurnContents.push({
+        role: 'user',
+        parts: [{ text: message }],
+      });
+    }
+
+    const contentsToSend = multiTurnContents.length > 1 ? multiTurnContents : message;
 
     for (const modelName of modelsToTry) {
       try {
         response = await ai.models.generateContent({
           model: modelName,
-          contents: message,
+          contents: contentsToSend,
           config: {
             systemInstruction,
-            temperature: 0.2, // Low temperature for high factual accuracy against legal text
+            temperature: 0.4,
           },
         });
         if (response?.text) {
@@ -2570,9 +2632,29 @@ ${fullCatalog}`;
           e?.message?.includes('429') ||
           e?.message?.includes('quota') ||
           e?.message?.includes('RESOURCE_EXHAUSTED');
+        const isUnavailable =
+          e?.status === 503 ||
+          e?.message?.includes('503') ||
+          e?.message?.includes('UNAVAILABLE');
 
-        console.warn(`Model ${modelName} call failed (quota: ${isQuotaError}):`, e?.message || e);
-        // If quota exceeded or error, smoothly cascade to next model
+        console.log(`[AI Model] ${modelName} note: ${isQuotaError ? 'Quota limit' : isUnavailable ? 'Unavailable 503' : 'Fallback'}, trying next...`);
+        
+        // If it failed possibly due to multi-turn contents structure, retry once with simple message
+        if (typeof contentsToSend !== 'string') {
+          try {
+            response = await ai.models.generateContent({
+              model: modelName,
+              contents: message,
+              config: {
+                systemInstruction,
+                temperature: 0.4,
+              },
+            });
+            if (response?.text) {
+              break;
+            }
+          } catch {}
+        }
         continue;
       }
     }
@@ -2582,11 +2664,11 @@ ${fullCatalog}`;
     }
 
     // Graceful Knowledge Base Fallback if Gemini quota is completely exhausted
-    console.warn('All Gemini models exhausted, using legal database knowledge retrieval fallback.');
+    console.log('All Gemini models deferred, using smart legal knowledge retrieval fallback.');
     const fallbackAnswer = generateKnowledgeFallback(message, db.laws);
     return res.json({ reply: fallbackAnswer, isFallback: true });
   } catch (error: any) {
-    console.error('Error generating AI response:', error);
+    console.error('Error in AI handler, using fallback:', error?.message || error);
     // Even if client creation fails, provide direct legal database response
     const fallbackAnswer = generateKnowledgeFallback(message, db.laws);
     return res.json({ reply: fallbackAnswer, isFallback: true });
@@ -2841,31 +2923,54 @@ function buildStructuredLegalContext(
   }
 
   allChunks.sort((a, b) => (b.score || 0) - (a.score || 0));
-  const topChunks = allChunks.filter((c) => (c.score || 0) > 0).slice(0, 5);
+  const topChunks = allChunks.filter((c) => (c.score || 0) > 0).slice(0, 8);
 
   let prioritizedContext = '';
   if (topChunks.length > 0) {
-    prioritizedContext = `[أبرز المواد والبنود القانونية ذات الصلة المباشرة باستفسار المستخدم (اعتمد عليها واستشهد برقم مادتها وقانونها)]:\n` +
+    prioritizedContext = `[المواد والبنود القانونية المعتمدة المسترجعة ذات الصلة الوثيقة باستفسار المستخدم (اعتمد عليها مباشرة واذكر مراجعها)]:\n` +
       topChunks
         .map(
           (c, idx) =>
-            `--- بند ذو أولوية (${idx + 1}) ---\nالقانون: ${c.lawTitle} (${c.category})\n${c.sectionHeader}:\n${c.text}`
+            `--- مادة/بند ذو أولوية (${idx + 1}) ---\nالتشريع: ${c.lawTitle} [${c.category}]\nالموضع/البند: ${c.sectionHeader}\n${c.text}`
         )
         .join('\n\n');
   }
 
-  const fullCatalog = laws
-    .map((l, index) => {
-      const pdfNote = l.sourceFileName ? ` [مستورد من PDF: ${l.sourceFileName}, ${l.pageCount || 1} صفحة]` : '';
-      return `[قانون ${index + 1}${pdfNote}]\nعنوان التشريع: ${l.title}\nالتصنيف: ${l.category}\nنص المواد والبنود:\n${l.content}`;
-    })
-    .join('\n\n-------------------------\n\n');
+  // Provide a compact, token-efficient index of available laws instead of dumping full 450k-character raw text
+  const fullCatalog = `[قائمة التشريعات والقوانين المعتمدة في قاعدة المعرفة (${laws.length} تشريع)]:\n` +
+    laws
+      .map((l, index) => {
+        const fileNote = l.sourceFileName ? ` [ملف: ${l.sourceFileName}]` : '';
+        return `${index + 1}. ${l.title} - ${l.category}${fileNote}`;
+      })
+      .join('\n');
 
   return { prioritizedContext, fullCatalog };
 }
 
 // Helper for local legal knowledge retrieval when API quota is constrained
 function generateKnowledgeFallback(query: string, laws: StoredLaw[]): string {
+  const trimmed = query.trim().toLowerCase();
+
+  // 1. Polite greetings & conversational check-ins
+  if (
+    /^(سلام|السلام عليكم|سلام عليكم|مرحبا|أهلا|اهلا|مرحباً|صباح الخير|مساء الخير|هاي|hello|hi)\b/i.test(trimmed) ||
+    trimmed === 'سلام' ||
+    trimmed === 'سلام عليكم' ||
+    trimmed === 'السلام عليكم'
+  ) {
+    return `وعليكم السلام ورحمة الله وبركاته! أهلاً وسهلاً بك في منصة «سَنَد». يسعدني جداً التواصل معك، كيف أستطيع مساعدتك اليوم؟`;
+  }
+  if (/^(عامل ايه|عامل إيه|كيفك|كيف حالك|ازيك|إزيك|شخبارك|أخبارك|شو أخبارك|شو اخبارك)/i.test(trimmed)) {
+    return `الحمد لله بألف خير ونعمة، تسلم على سؤالك ولطفك! أرجو أن تكون بأفضل صحة وعافية. تفضل بأي سؤال أو موضوع يدور في ذهنك وسأجيبك بكل سرور.`;
+  }
+  if (/^(شكرا|شكراً|تسلم|مشكور|الله يبارك فيك|يعطيك العافية|يسلمو)/i.test(trimmed)) {
+    return `العفو يا غالي، على الرحب والسعة دائماً! أنا في خدمتك في أي وقت لأي سؤال أو استفسار.`;
+  }
+  if (/^(مين انت|من انت|ما وظيفتك|عرف عن نفسك|شو بتعمل)/i.test(trimmed)) {
+    return `أنا «سَنَد»، مساعدك الذكي ومستشارك المتخصص في القوانين والأنظمة الفلسطينية والضرائب والجمارك والاستفسارات المتنوعة. أنا هنا للإجابة على جميع تساؤلاتك ومساعدتك في أي وقت.`;
+  }
+
   const normalizedQuery = query.toLowerCase();
   const keywords = normalizedQuery
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
@@ -2902,7 +3007,7 @@ function generateKnowledgeFallback(query: string, laws: StoredLaw[]): string {
     return result;
   }
 
-  return `عذراً، لم نتمكن من العثور على نص صريح ومباشر في نصوص القوانين المتاحة حالياً يغطي هذا الاستفسار بدقة.\n\nننصح بمراجعة الدائرة المختصة في وزارة المالية (الإدارة العامة للجمارك والمكوس أو الإدارة العامة لضريبة الدخل) للحصول على إفادة رسمية.`;
+  return `أهلاً بك! أنا مستعد للإجابة على جميع أسئلتك واستفساراتك.\n\nإذا كان سؤالك يخص مادة أو قانوناً أو سلعة جمركية أو ضريبية معينة، يرجى كتابة تفاصيلها لأستخرج لك نصوصها وحساباتها مباشرة، أو اسألني أي سؤال تريده وسأساعدك فوراً.`;
 }
 
 // Vite middleware & Static serving

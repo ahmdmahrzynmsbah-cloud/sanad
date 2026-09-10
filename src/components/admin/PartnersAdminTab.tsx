@@ -71,7 +71,7 @@ export const PartnersAdminTab: React.FC = () => {
         setPartners(data.partners);
       }
     } catch (err) {
-      console.error('Failed to fetch partners:', err);
+      console.warn('Failed to fetch partners:', err);
     } finally {
       setLoading(false);
     }

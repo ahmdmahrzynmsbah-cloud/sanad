@@ -52,7 +52,6 @@ export default function App() {
   });
 
   const [lawsCount, setLawsCount] = useState<number>(3);
-  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
 
   // Fetch Laws count
   const fetchLawsCount = async () => {
@@ -63,7 +62,7 @@ export default function App() {
         setLawsCount(data.laws.length);
       }
     } catch (err) {
-      console.error('Failed to load laws count:', err);
+      console.warn('Failed to load laws count:', err);
     }
   };
 
@@ -79,7 +78,7 @@ export default function App() {
         }
       }
     } catch (err) {
-      console.error('Failed to load branding:', err);
+      console.warn('Failed to load branding:', err);
     }
   };
 
@@ -92,7 +91,7 @@ export default function App() {
         setPlatformAbout(data);
       }
     } catch (err) {
-      console.error('Failed to load platform about:', err);
+      console.warn('Failed to load platform about:', err);
     }
   };
 
@@ -105,7 +104,7 @@ export default function App() {
         setContactInfo(data.contactInfo);
       }
     } catch (err) {
-      console.error('Failed to load contact info:', err);
+      console.warn('Failed to load contact info:', err);
     }
   };
 
@@ -137,18 +136,11 @@ export default function App() {
   useEffect(() => {
     const cleanupSync = initGlobalSync();
     
-    const loadInitialData = async () => {
-      setIsInitialLoading(true);
-      await Promise.allSettled([
-        fetchLawsCount(),
-        fetchBranding(),
-        fetchPlatformAbout(),
-        fetchContactInfo()
-      ]);
-      setIsInitialLoading(false);
-    };
-
-    loadInitialData();
+    // Fetch initial data in the background without blocking the UI
+    fetchLawsCount();
+    fetchBranding();
+    fetchPlatformAbout();
+    fetchContactInfo();
     
     return () => cleanupSync();
   }, []);
@@ -194,20 +186,6 @@ export default function App() {
     currentUser.status === 'approved' &&
     currentUser.subscriptionStatus !== 'frozen' &&
     !currentUser.isFrozen;
-
-  if (isInitialLoading) {
-    return (
-      <div className="min-h-screen bg-[#f4f7f5] flex flex-col items-center justify-center font-['IBM_Plex_Sans_Arabic',sans-serif]">
-        <div className="relative flex items-center justify-center mb-6">
-          <div className="absolute w-20 h-20 border-4 border-[#033b2e]/10 rounded-full"></div>
-          <div className="absolute w-20 h-20 border-4 border-transparent border-t-[#033b2e] border-r-[#033b2e] rounded-full animate-spin"></div>
-          <Scale className="w-8 h-8 text-[#033b2e] z-10" />
-        </div>
-        <h2 className="text-xl font-bold text-[#033b2e] mb-2">جاري تهيئة النظام</h2>
-        <p className="text-slate-500 text-sm">مساعد الجمارك والضرائب الفلسطيني</p>
-      </div>
-    );
-  }
 
   return (
     <div

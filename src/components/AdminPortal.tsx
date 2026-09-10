@@ -40,6 +40,9 @@ import {
   Image as ImageIcon,
   RotateCcw,
   Eye,
+  EyeOff,
+  ChevronDown,
+  ChevronUp,
   Globe,
   Shield,
   Target,
@@ -146,6 +149,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
   const [lawsLoading, setLawsLoading] = useState(false);
   const [lawSearch, setLawSearch] = useState('');
   const [lawCategoryFilter, setLawCategoryFilter] = useState<string>('الكل');
+  const [expandedLawIds, setExpandedLawIds] = useState<Record<string, boolean>>({});
+  const [viewingLawModal, setViewingLawModal] = useState<Law | null>(null);
+  const [copiedLawId, setCopiedLawId] = useState<string | null>(null);
+
+  const toggleLawContent = (lawId: string) => {
+    setExpandedLawIds((prev) => ({
+      ...prev,
+      [lawId]: !prev[lawId],
+    }));
+  };
 
   // Dynamic Legal Categories state
   const [categories, setCategories] = useState<LegalCategory[]>([]);
@@ -211,7 +224,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
       const data = await res.json();
       setSystemStatus(data);
     } catch (err) {
-      console.error('Failed to fetch system status:', err);
+      console.warn('Failed to fetch system status:', err);
     } finally {
       setIsSyncing(false);
     }
@@ -227,7 +240,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
         setUsers(data.users);
       }
     } catch (err) {
-      console.error('Failed to fetch users:', err);
+      console.warn('Failed to fetch users:', err);
     } finally {
       setUsersLoading(false);
     }
@@ -244,7 +257,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
         if (onLawsUpdated) onLawsUpdated();
       }
     } catch (err) {
-      console.error('Failed to fetch laws:', err);
+      console.warn('Failed to fetch laws:', err);
     } finally {
       setLawsLoading(false);
     }
@@ -267,7 +280,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
         }
       }
     } catch (err) {
-      console.error('Failed to fetch categories:', err);
+      console.warn('Failed to fetch categories:', err);
     } finally {
       setCategoriesLoading(false);
     }
@@ -291,7 +304,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
         }
       }
     } catch (err) {
-      console.error('Failed to fetch settings:', err);
+      console.warn('Failed to fetch settings:', err);
     }
   };
 
@@ -304,7 +317,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
         applyBrandingState(data);
       }
     } catch (err) {
-      console.error('Failed to fetch branding:', err);
+      console.warn('Failed to fetch branding:', err);
     } finally {
       setBrandingLoading(false);
     }
@@ -1186,6 +1199,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
       lawCategoryFilter === 'الكل' || l.category === lawCategoryFilter;
     return matchesSearch && matchesCategory;
   });
+
+  const toggleAllLaws = (expand: boolean) => {
+    const updated: Record<string, boolean> = {};
+    if (expand) {
+      filteredLaws.forEach((l) => {
+        updated[l.id] = true;
+      });
+    }
+    setExpandedLawIds(updated);
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6">
@@ -2255,6 +2278,33 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
               </div>
             )}
 
+            {/* Header / Actions: count and expand/collapse all */}
+            <div className="flex items-center justify-between gap-2 mb-3 px-1 text-xs text-gray-500">
+              <span className="font-semibold">
+                عرض {filteredLaws.length} من أصل {laws.length} قانون
+              </span>
+              {filteredLaws.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => toggleAllLaws(true)}
+                    className="px-2.5 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold transition-colors flex items-center gap-1 text-[11px] cursor-pointer"
+                  >
+                    <BookOpen className="w-3 h-3 text-emerald-600" />
+                    عرض محتوى الكل
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => toggleAllLaws(false)}
+                    className="px-2.5 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold transition-colors flex items-center gap-1 text-[11px] cursor-pointer"
+                  >
+                    <EyeOff className="w-3 h-3 text-gray-500" />
+                    طي الكل
+                  </button>
+                </div>
+              )}
+            </div>
+
             {/* Laws Cards */}
             {filteredLaws.length === 0 ? (
               <div className="text-center py-10">
@@ -2262,64 +2312,138 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
                 <p className="text-xs text-gray-500">لم يتم العثور على أي قوانين مطابقة للبحث.</p>
               </div>
             ) : (
-              <div className="space-y-4">
-                {filteredLaws.map((law) => (
-                  <div
-                    key={law.id}
-                    className="border border-gray-200 rounded-xl p-4 bg-gray-50/50 hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${getCategoryBadgeClass(law.category)}`}
-                        >
-                          {law.category}
-                        </span>
-                        <h4 className="text-sm font-bold text-gray-900">{law.title}</h4>
-                        {law.sourceFileName && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-red-50 text-red-700 border border-red-200">
-                            <FileType className="w-3 h-3 text-red-500" />
-                            <span>{law.sourceFileName}</span>
-                            {law.pageCount ? <span>({law.pageCount} ص)</span> : null}
+              <div className="space-y-3">
+                {filteredLaws.map((law) => {
+                  const isExpanded = !!expandedLawIds[law.id];
+                  return (
+                    <div
+                      key={law.id}
+                      className="border border-gray-200 rounded-xl p-3.5 sm:p-4 bg-white hover:border-emerald-300 transition-all shadow-xs"
+                    >
+                      {/* Law Main Row: نص/اسم القانون + التصنيف + زر عرض المحتوى + تعديل + حذف */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                          <span
+                            className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border shrink-0 ${getCategoryBadgeClass(law.category)}`}
+                          >
+                            {law.category}
                           </span>
-                        )}
+                          <h4 className="text-sm font-bold text-gray-900 leading-snug">
+                            {law.title}
+                          </h4>
+                          {law.sourceFileName && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-red-50 text-red-700 border border-red-200 shrink-0">
+                              <FileType className="w-3 h-3 text-red-500" />
+                              <span>{law.sourceFileName}</span>
+                              {law.pageCount ? <span>({law.pageCount} ص)</span> : null}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Actions Row: عرض المحتوى + تعديل + حذف */}
+                        <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                          {/* زر عرض المحتوى / إخفاء المحتوى */}
+                          <button
+                            id={`law-toggle-content-btn-${law.id}`}
+                            type="button"
+                            onClick={() => toggleLawContent(law.id)}
+                            className={`px-3 py-1.5 text-xs font-bold rounded-lg border flex items-center gap-1.5 transition-all cursor-pointer ${
+                              isExpanded
+                                ? 'bg-emerald-100 text-emerald-900 border-emerald-300 shadow-xs'
+                                : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 shadow-xs'
+                            }`}
+                            title={isExpanded ? 'إخفاء محتوى القانون' : 'عرض محتوى القانون'}
+                          >
+                            <BookOpen className="w-3.5 h-3.5 text-emerald-700" />
+                            <span>{isExpanded ? 'إخفاء المحتوى' : 'عرض المحتوى'}</span>
+                            {isExpanded ? (
+                              <ChevronUp className="w-3.5 h-3.5 text-emerald-700" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5 text-emerald-700" />
+                            )}
+                          </button>
+
+                          {/* زر تعديل */}
+                          <button
+                            id={`law-edit-btn-${law.id}`}
+                            type="button"
+                            onClick={() => handleStartEdit(law)}
+                            className="px-2.5 py-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 flex items-center gap-1 transition-colors cursor-pointer"
+                          >
+                            <Edit2 className="w-3 h-3 text-gray-600" />
+                            تعديل
+                          </button>
+
+                          {/* زر حذف */}
+                          <button
+                            id={`law-delete-btn-${law.id}`}
+                            type="button"
+                            onClick={() => handleOpenDeleteLawModal(law)}
+                            className="px-2.5 py-1.5 text-xs font-semibold text-red-700 bg-white border border-red-200 rounded-lg hover:bg-red-50 flex items-center gap-1 transition-colors cursor-pointer"
+                            title="حذف هذا القانون"
+                          >
+                            <Trash2 className="w-3 h-3 text-red-600" />
+                            حذف
+                          </button>
+                        </div>
                       </div>
 
-                      {/* Edit / Delete Buttons */}
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          id={`law-edit-btn-${law.id}`}
-                          onClick={() => handleStartEdit(law)}
-                          className="px-2.5 py-1 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-100 flex items-center gap-1 transition-colors cursor-pointer"
-                        >
-                          <Edit2 className="w-3 h-3 text-gray-600" />
-                          تعديل
-                        </button>
-                        <button
-                          id={`law-delete-btn-${law.id}`}
-                          onClick={() => handleOpenDeleteLawModal(law)}
-                          className="px-2.5 py-1 text-xs font-semibold text-red-700 bg-white border border-red-200 rounded hover:bg-red-50 flex items-center gap-1 transition-colors cursor-pointer"
-                          title="حذف هذا القانون"
-                        >
-                          <Trash2 className="w-3 h-3 text-red-600" />
-                          حذف
-                        </button>
+                      {/* المحتوى يظهر فقط عند الضغط على "عرض المحتوى" */}
+                      {isExpanded && (
+                        <div className="mt-3 pt-3 border-t border-gray-200 animate-in fade-in duration-150">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
+                              <FileText className="w-3.5 h-3.5 text-emerald-700" />
+                              نصوص ومواد القانون الكاملة:
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setViewingLawModal(law)}
+                                className="text-[11px] font-semibold text-emerald-800 hover:text-emerald-950 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200 hover:bg-emerald-100 flex items-center gap-1 transition-colors cursor-pointer"
+                              >
+                                <Eye className="w-3 h-3" />
+                                <span>نافذة مكبرة</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(law.content);
+                                  setCopiedLawId(law.id);
+                                  setTimeout(() => setCopiedLawId(null), 2000);
+                                }}
+                                className="text-[11px] font-semibold text-gray-600 hover:text-gray-900 bg-gray-100 px-2.5 py-1 rounded-md hover:bg-gray-200 flex items-center gap-1 transition-colors cursor-pointer"
+                              >
+                                {copiedLawId === law.id ? (
+                                  <>
+                                    <Check className="w-3 h-3 text-emerald-600" />
+                                    <span>تم النسخ</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span>نسخ النص</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 text-sm text-slate-800 whitespace-pre-wrap leading-relaxed max-h-80 overflow-y-auto font-sans shadow-inner">
+                            {law.content}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="mt-2.5 pt-2 border-t border-gray-100 text-[10px] text-gray-400 flex items-center justify-between">
+                        <span>معرّف المرجع: {law.id}</span>
+                        <span>
+                          آخر تحديث:{' '}
+                          {new Date(law.updatedAt || law.createdAt).toLocaleDateString('ar-EG')}
+                        </span>
                       </div>
                     </div>
-
-                    <div className="bg-slate-50/70 border border-slate-200/80 rounded-xl p-4 text-sm text-slate-700 whitespace-pre-wrap leading-relaxed max-h-56 overflow-y-auto font-sans">
-                      {law.content}
-                    </div>
-
-                    <div className="mt-2 text-[10px] text-gray-400 flex items-center justify-between">
-                      <span>معرّف المرجع: {law.id}</span>
-                      <span>
-                        آخر تحديث:{' '}
-                        {new Date(law.updatedAt || law.createdAt).toLocaleDateString('ar-EG')}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -2436,8 +2560,75 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
         </div>
       )}
 
-      {/* ======================================================== */}
-      {/* TAB 3: SYSTEM SETTINGS (إعدادات السيستم)                  */}
+      {/* Viewing Law Content Modal */}
+      {viewingLawModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full border border-gray-200 overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="bg-[#12281e] text-white px-5 py-4 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <BookOpen className="w-5 h-5 text-[#d4af37] shrink-0" />
+                <h3 className="font-bold text-sm sm:text-base truncate">
+                  {viewingLawModal.title}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingLawModal(null)}
+                className="text-gray-300 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between gap-2 shrink-0">
+              <div className="flex items-center gap-2">
+                <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${getCategoryBadgeClass(viewingLawModal.category)}`}>
+                  {viewingLawModal.category}
+                </span>
+                {viewingLawModal.sourceFileName && (
+                  <span className="text-xs text-gray-500">
+                    المصدر: {viewingLawModal.sourceFileName}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(viewingLawModal.content);
+                  setCopiedLawId(viewingLawModal.id);
+                  setTimeout(() => setCopiedLawId(null), 2000);
+                }}
+                className="px-3 py-1 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                {copiedLawId === viewingLawModal.id ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>تم النسخ</span>
+                  </>
+                ) : (
+                  <>
+                    <span>نسخ كامل النص</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1 font-sans text-sm text-slate-800 leading-relaxed whitespace-pre-wrap selection:bg-emerald-100">
+              {viewingLawModal.content}
+            </div>
+
+            <div className="px-5 py-3 bg-gray-100 border-t border-gray-200 flex items-center justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => setViewingLawModal(null)}
+                className="px-4 py-2 text-xs font-bold text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* ======================================================== */}
       {activeTab === 'settings' && (
         <div className="space-y-6 animate-in fade-in duration-200">

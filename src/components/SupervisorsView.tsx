@@ -44,7 +44,7 @@ export const SupervisorsView: React.FC<SupervisorsViewProps> = ({
         setSupervisors(data.supervisors);
       }
     } catch (err) {
-      console.error('Failed to load supervisors:', err);
+      console.warn('Failed to load supervisors:', err);
     } finally {
       setLoading(false);
     }

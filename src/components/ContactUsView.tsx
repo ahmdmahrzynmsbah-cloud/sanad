@@ -68,7 +68,7 @@ export const ContactUsView: React.FC<ContactUsViewProps> = ({ onBackToHome, cont
           }
         }
       } catch (err) {
-        console.error('Failed to load contact info:', err);
+        console.warn('Failed to load contact info:', err);
       } finally {
         setLoading(false);
       }

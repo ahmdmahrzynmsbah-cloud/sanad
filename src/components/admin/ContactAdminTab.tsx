@@ -102,7 +102,7 @@ export const ContactAdminTab: React.FC<ContactAdminTabProps> = ({ onContactUpdat
           setUpdatedAt(info.updatedAt);
         }
       } catch (err) {
-        console.error('Failed to load contact data in admin tab:', err);
+        console.warn('Failed to load contact data in admin tab:', err);
       } finally {
         setLoading(false);
       }

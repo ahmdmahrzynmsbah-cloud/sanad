@@ -61,7 +61,7 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
         setSupervisors(data.supervisors);
       }
     } catch (err) {
-      console.error('Failed to fetch supervisors:', err);
+      console.warn('Failed to fetch supervisors:', err);
     } finally {
       setLoading(false);
     }

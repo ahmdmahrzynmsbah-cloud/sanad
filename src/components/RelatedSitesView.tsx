@@ -40,7 +40,7 @@ export const RelatedSitesView: React.FC<RelatedSitesViewProps> = ({
         setSites(data.relatedSites);
       }
     } catch (err) {
-      console.error('Failed to load related sites:', err);
+      console.warn('Failed to load related sites:', err);
     } finally {
       setLoading(false);
     }

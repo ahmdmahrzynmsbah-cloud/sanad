@@ -88,7 +88,7 @@ export const AboutPlatformAdminTab: React.FC<AboutPlatformAdminTabProps> = ({ on
         setUpdatedAt(data.updatedAt);
       }
     } catch (err) {
-      console.error('Failed to load about data:', err);
+      console.warn('Failed to load about data:', err);
       setFeedback({ type: 'error', message: 'تعذر جلب بيانات عن المنصة من الخادم.' });
     } finally {
       setLoading(false);

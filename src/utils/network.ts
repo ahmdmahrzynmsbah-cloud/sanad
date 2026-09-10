@@ -6,7 +6,7 @@ export function setupNetworkRetry() {
   Object.defineProperty(window, 'fetch', {
     configurable: true,
     writable: true,
-    value: async function (...args: any[]) {
+    value: async function (...args: Parameters<typeof fetch>) {
     let retries = 3;
     let delay = 1000;
     
@@ -18,7 +18,7 @@ export function setupNetworkRetry() {
 
     while (retries > 0) {
       try {
-        const response = await originalFetch(...args);
+        const response = await originalFetch(args[0], args[1]);
         // We do not retry on 4xx/5xx because those are server responses, 
         // unless it's a 502/503/504 which indicates gateway/proxy issues.
         if (!response.ok && [502, 503, 504].includes(response.status)) {

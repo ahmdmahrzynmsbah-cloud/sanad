@@ -53,7 +53,7 @@ export const RelatedSitesAdminTab: React.FC<RelatedSitesAdminTabProps> = ({
         setSites(data.relatedSites);
       }
     } catch (err) {
-      console.error('Failed to fetch related sites:', err);
+      console.warn('Failed to fetch related sites:', err);
     } finally {
       setLoading(false);
     }
