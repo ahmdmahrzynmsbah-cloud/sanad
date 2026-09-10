@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Send,
   User as UserIcon,
-  Sparkles,
   Scale,
   Copy,
   Check,
@@ -30,13 +29,6 @@ interface ChatPortalProps {
   branding?: SystemBranding;
   onLogout?: () => void;
 }
-
-const SAMPLE_QUESTIONS = [
-  'كيف تُحسب ضريبة الدخل السنوية لموظف دخله 90,000 شيكل سنوياً؟',
-  'ما هي النسبة العامة لضريبة القيمة المضافة وما السلع المعفاة منها؟',
-  'ما هي شروط الإعفاء الجمركي للطرود البريدية ومشتريات التجارة الإلكترونية؟',
-  'ما هي الرسوم والجمارك المفروضة على استيراد سيارة ركوب أو سيارة كهربائية؟',
-];
 
 export const ChatPortal: React.FC<ChatPortalProps> = ({
   currentUser,
@@ -70,6 +62,15 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
     }
   };
 
+  const cleanLegacyWelcomeText = (text: string): string => {
+    return text
+      .replace(/يمكنك محادثتي وسؤالي عن أي شيء في أي وقت:\s*\n?/g, '')
+      .replace(/- \*\*الدردشة والتحية\*\*:[^\n]*\n?/g, '')
+      .replace(/- \*\*القوانين والتشريعات\*\*:[^\n]*\n?/g, '')
+      .replace(/- \*\*الضرائب والجمارك\*\*:[^\n]*\n?/g, '')
+      .replace(/أو اختر من الأسئلة الاسترشادية أدناه\.?/g, 'وسأقوم بالرد عليك وتوضيح كافة التفاصيل فوراً.');
+  };
+
   const getWelcomeMessage = (): ChatMessage => ({
     id: 'welcome-' + Date.now(),
     sender: 'bot',
@@ -77,12 +78,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
 
 أنا مستشارك الذكي ومساعدك التفاعلي في كل ما يتعلق بالقوانين والأنظمة المالية والضريبية والجمركية، بالإضافة للإجابة على جميع تساؤلاتك واستفساراتك العامة بكل ترحيب.
 
-يمكنك محادثتي وسؤالي عن أي شيء في أي وقت:
-- **الدردشة والتحية**: يمكنك إلقاء التحية وسؤالي بشكل طبيعي وعفوي في أي لحظة.
-- **القوانين والتشريعات**: نصوص ومواد القوانين والقرارات المعتمدة رسمياً في فلسطين.
-- **الضرائب والجمارك**: حسابات ضريبة الدخل والقيمة المضافة ورسوم الجمارك والمكوس وتفاصيل الاستيراد والإعفاءات.
-
-تفضل بكتابة ما ترغب به أو اختر من الأسئلة الاسترشادية أدناه.`,
+تفضل بكتابة استفسارك في الأسفل وسأقوم بالرد عليك وتوضيح كافة التفاصيل فوراً.`,
     timestamp: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
   });
 
@@ -127,14 +123,32 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
       if (saved) {
         const parsed: Conversation[] = JSON.parse(saved);
         if (parsed.length > 0 && parsed[0].messages?.length > 0) {
-          return parsed[0].messages;
+          const cleaned = parsed[0].messages.map((m) => {
+            if (m.sender === 'bot') {
+              return {
+                ...m,
+                text: cleanLegacyWelcomeText(m.text),
+              };
+            }
+            return m;
+          });
+          return cleaned;
         }
       }
     } catch {}
     return [getWelcomeMessage()];
   });
 
-  const [inputPrompt, setInputPrompt] = useState('');
+  const [inputPrompt, setInputPrompt] = useState(() => {
+    try {
+      const initial = sessionStorage.getItem('sanad_initial_prompt');
+      if (initial) {
+        sessionStorage.removeItem('sanad_initial_prompt');
+        return initial;
+      }
+    } catch {}
+    return '';
+  });
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -155,8 +169,14 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
       if (res.ok) {
         const data = await res.json();
         if (data.conversations && Array.isArray(data.conversations)) {
-          setConversations(data.conversations);
-          localStorage.setItem(storageKey, JSON.stringify(data.conversations));
+          const cleanedConvs = data.conversations.map((c: Conversation) => ({
+            ...c,
+            messages: (c.messages || []).map((m: ChatMessage) =>
+              m.sender === 'bot' ? { ...m, text: cleanLegacyWelcomeText(m.text) } : m
+            ),
+          }));
+          setConversations(cleanedConvs);
+          localStorage.setItem(storageKey, JSON.stringify(cleanedConvs));
         }
       }
     } catch (err) {
@@ -611,27 +631,6 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
           )}
 
           <div ref={messagesEndRef} />
-        </div>
-
-        {/* Suggested Quick Questions */}
-        <div className="py-2 overflow-x-auto shrink-0">
-          <div className="flex items-center gap-1.5 whitespace-nowrap">
-            <span className="text-[11px] font-semibold text-zinc-500 flex items-center gap-1 shrink-0">
-              <Sparkles className="w-3 h-3 text-amber-500" />
-              مقترحات:
-            </span>
-            {SAMPLE_QUESTIONS.map((q, idx) => (
-              <button
-                key={idx}
-                type="button"
-                disabled={loading}
-                onClick={() => handleSendMessage(q)}
-                className="px-3 py-1 bg-white border border-zinc-200/80 rounded-full text-[11px] text-zinc-700 hover:bg-zinc-50 hover:border-zinc-300 transition-colors shadow-2xs truncate max-w-[280px] disabled:opacity-50 cursor-pointer"
-              >
-                {q}
-              </button>
-            ))}
-          </div>
         </div>
 
         {/* Clean Input Bar */}

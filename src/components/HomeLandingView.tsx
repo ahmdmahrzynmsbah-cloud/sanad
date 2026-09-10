@@ -31,6 +31,7 @@ interface HomeLandingViewProps {
   onNavigateToPartners?: () => void;
   onOpenAbout?: () => void;
   onOpenContact?: () => void;
+  onOpenSanadIntro?: () => void;
   onNavigateToChat: () => void;
   lawsCount: number;
 }
@@ -44,6 +45,7 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
   onNavigateToPartners,
   onOpenAbout,
   onOpenContact,
+  onOpenSanadIntro,
   onNavigateToChat,
   lawsCount,
 }) => {
@@ -170,6 +172,19 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
 
               {/* Secondary Navigation Buttons Grid on Mobile */}
               <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 sm:gap-3 w-full">
+                {/* Reopen Sanad Welcome Modal */}
+                {onOpenSanadIntro && (
+                  <button
+                    id="landing-hero-ask-sanad-modal-btn"
+                    onClick={onOpenSanadIntro}
+                    className="col-span-2 sm:col-span-1 justify-center px-4 py-2.5 sm:py-3 bg-gradient-to-r from-emerald-700/60 to-[#0e3b2e] hover:from-emerald-600 hover:to-[#134d3c] text-white border border-emerald-400/40 text-xs font-bold rounded-xl flex items-center gap-2 transition-all cursor-pointer min-h-[42px] shadow-sm shadow-emerald-950/40"
+                    title="اسأل سَنَد • المستشار الذكي"
+                  >
+                    <Sparkles className="w-4 h-4 text-[#d4af37] animate-pulse" />
+                    <span>اسأل سَنَد (المستشار الذكي)</span>
+                  </button>
+                )}
+
                 {/* Navigation to Supervisors */}
                 <button
                   id="landing-hero-supervisors-btn"

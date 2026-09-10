@@ -2369,6 +2369,7 @@ app.put('/api/laws/:id', async (req, res) => {
   if (sourceFileSize !== undefined) law.sourceFileSize = sourceFileSize;
   if (pageCount !== undefined) law.pageCount = pageCount;
   law.updatedAt = new Date().toISOString();
+  cachedIndexedChunks = null;
 
   saveDB();
   await updateLawInFirestore(law.id, {
@@ -2523,6 +2524,17 @@ app.post('/api/chat', async (req, res) => {
     }
   }
 
+  // 0. Ultra-fast response for pure greetings and casual check-ins (< 5ms)
+  const trimmed = message.trim();
+  const isPureGreeting = /^(سلام|السلام عليكم|سلام عليكم|مرحبا|أهلا|اهلا|مرحباً|صباح الخير|مساء الخير|هاي|hello|hi|عامل ايه|عامل إيه|كيفك|كيف حالك|ازيك|إزيك|شخبارك|أخبارك|شو أخبارك|شو اخبارك|شكرا|شكراً|تسلم|مشكور|الله يعطيك العافية|يعطيك العافية|يسلمو|مين انت|من انت)$/i.test(
+    trimmed.replace(/[!؟?.,\s]+/g, ' ')
+  );
+
+  if (isPureGreeting) {
+    const instantGreeting = generateKnowledgeFallback(trimmed, db.laws);
+    return res.json({ reply: instantGreeting, isFastReply: true });
+  }
+
   // 1. Organize knowledge base with smart RAG chunking and concise catalog (prevents 250k token quota blowout)
   const laws = db.laws;
   const isCasualGreeting = /^(سلام|السلام عليكم|سلام عليكم|مرحبا|أهلا|اهلا|مرحباً|صباح الخير|مساء الخير|هاي|hello|hi|عامل ايه|عامل إيه|كيفك|كيف حالك|ازيك|إزيك|شخبارك|أخبارك|شو أخبارك|شو اخبارك|شكرا|شكراً|تسلم|مشكور)\b/i.test(message.trim());
@@ -2560,21 +2572,39 @@ ${fullCatalog ? `\nقاعدة المعرفة (المرجعية التشريعي�
 
   try {
     const ai = getGemini();
-    // Prioritize high-throughput, stable models
-    const modelsToTry = [
-      'gemini-2.5-flash',
-      'gemini-2.5-flash-lite',
-      'gemini-flash-latest',
-      'gemini-3.1-flash-lite',
+    // High-speed low-latency models with thinkingBudget: 0 to eliminate 6-10s reasoning delays
+    const candidateConfigs = [
+      {
+        model: 'gemini-2.5-flash',
+        config: {
+          systemInstruction,
+          temperature: 0.3,
+          thinkingConfig: { thinkingBudget: 0 },
+        },
+      },
+      {
+        model: 'gemini-3.5-flash-lite',
+        config: {
+          systemInstruction,
+          temperature: 0.3,
+        },
+      },
+      {
+        model: 'gemini-flash-latest',
+        config: {
+          systemInstruction,
+          temperature: 0.3,
+        },
+      },
     ];
     let response = null;
     let lastErr = null;
 
-    // Build multi-turn conversational contents if conversationHistory is sent (keep last 6 messages to stay well within tokens)
+    // Build multi-turn conversational contents if conversationHistory is sent (keep last 4 messages for rapid processing)
     let multiTurnContents: any[] = [];
     const rawHistory = (req.body as any)?.conversationHistory;
     if (Array.isArray(rawHistory) && rawHistory.length > 0) {
-      const recentHistory = rawHistory.slice(-6);
+      const recentHistory = rawHistory.slice(-4);
       for (const msg of recentHistory) {
         if (!msg || typeof msg.text !== 'string' || !msg.text.trim()) continue;
         const role = msg.sender === 'user' ? 'user' : 'model';
@@ -2612,15 +2642,12 @@ ${fullCatalog ? `\nقاعدة المعرفة (المرجعية التشريعي�
 
     const contentsToSend = multiTurnContents.length > 1 ? multiTurnContents : message;
 
-    for (const modelName of modelsToTry) {
+    for (const candidate of candidateConfigs) {
       try {
         response = await ai.models.generateContent({
-          model: modelName,
+          model: candidate.model,
           contents: contentsToSend,
-          config: {
-            systemInstruction,
-            temperature: 0.4,
-          },
+          config: candidate.config,
         });
         if (response?.text) {
           break;
@@ -2637,18 +2664,15 @@ ${fullCatalog ? `\nقاعدة المعرفة (المرجعية التشريعي�
           e?.message?.includes('503') ||
           e?.message?.includes('UNAVAILABLE');
 
-        console.log(`[AI Model] ${modelName} note: ${isQuotaError ? 'Quota limit' : isUnavailable ? 'Unavailable 503' : 'Fallback'}, trying next...`);
+        console.log(`[AI Model] ${candidate.model} note: ${isQuotaError ? 'Quota limit' : isUnavailable ? 'Unavailable 503' : 'Fallback'}, trying next...`);
         
         // If it failed possibly due to multi-turn contents structure, retry once with simple message
         if (typeof contentsToSend !== 'string') {
           try {
             response = await ai.models.generateContent({
-              model: modelName,
+              model: candidate.model,
               contents: message,
-              config: {
-                systemInstruction,
-                temperature: 0.4,
-              },
+              config: candidate.config,
             });
             if (response?.text) {
               break;
@@ -2841,6 +2865,8 @@ interface LegalChunk {
   score?: number;
 }
 
+let cachedIndexedChunks: { lawsCount: number; chunks: LegalChunk[] } | null = null;
+
 function chunkLawContent(law: StoredLaw): LegalChunk[] {
   const lines = law.content.split('\n');
   const chunks: LegalChunk[] = [];
@@ -2901,29 +2927,42 @@ function buildStructuredLegalContext(
     .split(/\s+/)
     .filter((w) => w.length > 2);
 
+  // Retrieve or compute indexed chunks
+  let baseChunks: LegalChunk[];
+  if (cachedIndexedChunks && cachedIndexedChunks.lawsCount === laws.length) {
+    baseChunks = cachedIndexedChunks.chunks;
+  } else {
+    baseChunks = [];
+    for (const law of laws) {
+      const lawChunks = chunkLawContent(law);
+      for (const chunk of lawChunks) {
+        baseChunks.push(chunk);
+      }
+    }
+    cachedIndexedChunks = { lawsCount: laws.length, chunks: baseChunks };
+  }
+
   // Score individual chunks across all laws
-  const allChunks: LegalChunk[] = [];
-  for (const law of laws) {
-    const lawChunks = chunkLawContent(law);
-    for (const chunk of lawChunks) {
-      const fullText = (chunk.lawTitle + ' ' + chunk.category + ' ' + chunk.sectionHeader + ' ' + chunk.text).toLowerCase();
-      let score = 0;
-      for (const word of keywords) {
-        if (fullText.includes(word)) {
-          score += 1;
-          // Extra weight if keyword is in the header or title
-          if (chunk.sectionHeader.toLowerCase().includes(word) || chunk.lawTitle.toLowerCase().includes(word)) {
-            score += 2;
-          }
+  const scoredChunks: LegalChunk[] = [];
+  for (const chunk of baseChunks) {
+    const fullText = (chunk.lawTitle + ' ' + chunk.category + ' ' + chunk.sectionHeader + ' ' + chunk.text).toLowerCase();
+    let score = 0;
+    for (const word of keywords) {
+      if (fullText.includes(word)) {
+        score += 1;
+        // Extra weight if keyword is in the header or title
+        if (chunk.sectionHeader.toLowerCase().includes(word) || chunk.lawTitle.toLowerCase().includes(word)) {
+          score += 2;
         }
       }
-      chunk.score = score;
-      allChunks.push(chunk);
+    }
+    if (score > 0) {
+      scoredChunks.push({ ...chunk, score });
     }
   }
 
-  allChunks.sort((a, b) => (b.score || 0) - (a.score || 0));
-  const topChunks = allChunks.filter((c) => (c.score || 0) > 0).slice(0, 8);
+  scoredChunks.sort((a, b) => (b.score || 0) - (a.score || 0));
+  const topChunks = scoredChunks.slice(0, 6);
 
   let prioritizedContext = '';
   if (topChunks.length > 0) {

@@ -10,6 +10,7 @@ import { RelatedSitesView } from './components/RelatedSitesView';
 import { PartnersView } from './components/PartnersView';
 import { AboutPlatformView } from './components/AboutPlatformView';
 import { ContactUsView } from './components/ContactUsView';
+import { SanadWelcomeModal } from './components/SanadWelcomeModal';
 import { User, SystemBranding, PlatformAboutData, ContactInfo } from './types';
 import { Scale, ShieldAlert, Clock, LogOut, ArrowRight, BookOpen } from 'lucide-react';
 import { initGlobalSync, useSync } from './utils/sync';
@@ -52,6 +53,21 @@ export default function App() {
   });
 
   const [lawsCount, setLawsCount] = useState<number>(3);
+  const [showWelcomeModal, setShowWelcomeModal] = useState<boolean>(true);
+
+  const handleQuestionFromWelcomeModal = (questionText: string) => {
+    if (!questionText.trim()) return;
+    try {
+      sessionStorage.setItem('sanad_initial_prompt', questionText.trim());
+    } catch {}
+
+    if (currentUser && currentUser.status === 'approved') {
+      setActiveView('chat');
+    } else {
+      setAuthInitialMode('login');
+      setActiveView('auth');
+    }
+  };
 
   // Fetch Laws count
   const fetchLawsCount = async () => {
@@ -224,6 +240,7 @@ export default function App() {
               onNavigateToPartners={() => setActiveView('partners')}
               onOpenAbout={() => setActiveView('about')}
               onOpenContact={() => setActiveView('contact')}
+              onOpenSanadIntro={() => setShowWelcomeModal(true)}
               onNavigateToChat={() => {
                 if (currentUser && currentUser.status === 'approved') {
                   setActiveView('chat');
@@ -477,7 +494,12 @@ export default function App() {
         </footer>
       )}
 
-      {/* Main Content Area Ends Here */}
+      {/* Interactive Sanad Welcome Dialog (النافذة المنبثقة: اسأل سند + من هو سند) */}
+      <SanadWelcomeModal
+        isOpen={showWelcomeModal}
+        onClose={() => setShowWelcomeModal(false)}
+        onQuestionAsked={handleQuestionFromWelcomeModal}
+      />
     </div>
   );
 }
