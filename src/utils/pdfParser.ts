@@ -1,8 +1,21 @@
 /**
  * PDF Parsing & Legal Text Extraction Utility
- * Directly leverages Gemini AI multimodal vision & document understanding
- * for comprehensive extraction of articles, clauses, titles, and legal categories.
+ * Provides high-speed client-side extraction via PDF.js to avoid Vercel 4.5MB payload limits,
+ * with hybrid AI legal structuring via Gemini and resilient local heuristic fallbacks.
  */
+
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Configure PDF.js worker safely for Vite / Browser
+if (typeof window !== 'undefined') {
+  try {
+    // Primary: Cloudflare CDN for reliable static worker across deployments
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version || '5.4.296'}/pdf.worker.min.mjs`;
+  } catch {
+    // Secondary fallback
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version || '5.4.296'}/build/pdf.worker.min.mjs`;
+  }
+}
 
 export interface PDFProgress {
   currentPage: number;
@@ -20,7 +33,7 @@ export interface PDFExtractionResult {
   suggestedTitle: string;
   suggestedCategory: string;
   summary?: string;
-  method: 'gemini_ai' | 'fallback_parser';
+  method: 'client_pdfjs' | 'gemini_ai' | 'fallback_parser';
   model?: string;
 }
 
@@ -54,9 +67,129 @@ export function fileToBase64(file: File): Promise<string> {
 }
 
 /**
- * Extract structured legal text from a PDF file using server-side Gemini AI.
- * Handles both scanned images and digital documents, extracting title, category,
- * and comprehensive articles.
+ * Local heuristic metadata detection from raw Palestinian legal text
+ */
+export function detectLawMetadataLocally(
+  text: string,
+  fileName: string
+): { title: string; category: string; summary: string } {
+  const cleanName = fileName
+    .replace(/\.pdf$/i, '')
+    .replace(/[-_]+/g, ' ')
+    .trim();
+
+  const lines = text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  let title = cleanName;
+  for (const line of lines.slice(0, 15)) {
+    if (
+      line.length >= 6 &&
+      line.length <= 150 &&
+      (line.includes('قانون') ||
+        line.includes('قرار بقانون') ||
+        line.includes('قرار رقم') ||
+        line.includes('نظام رقم') ||
+        line.includes('تعليمات') ||
+        line.includes('مرسوم'))
+    ) {
+      title = line;
+      break;
+    }
+  }
+
+  let category = 'جمارك';
+  const lower = (text + ' ' + fileName).toLowerCase();
+  if (
+    lower.includes('ضريبة دخل') ||
+    lower.includes('ضريبة الدخل') ||
+    lower.includes('الدخل الخاضع') ||
+    cleanName.includes('دخل')
+  ) {
+    category = 'ضريبة دخل';
+  } else if (
+    lower.includes('قيمة مضافة') ||
+    lower.includes('القيمة المضافة') ||
+    lower.includes('فواتير ضريبية') ||
+    cleanName.includes('مضافة')
+  ) {
+    category = 'ضريبة القيمة المضافة';
+  } else if (
+    lower.includes('رسوم') ||
+    lower.includes('طوابع') ||
+    lower.includes('مكوس') ||
+    cleanName.includes('رسوم') ||
+    cleanName.includes('مكوس')
+  ) {
+    category = 'رسوم ومكوس';
+  }
+
+  const summary = `تشريع قانوني رسمي مستخرج من ملف "${fileName}"، يحتوي على المواد والأحكام المنظمة لمجال (${category}).`;
+
+  return { title, category, summary };
+}
+
+/**
+ * Client-Side Direct PDF Text Extraction using PDF.js
+ * Extracts raw digital text directly in the browser with 0 network payload overhead!
+ */
+async function extractTextWithPDFJS(
+  file: File,
+  onProgress?: (progress: PDFProgress) => void
+): Promise<{ text: string; numPages: number } | null> {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const loadingTask = pdfjsLib.getDocument({
+      data: arrayBuffer,
+      useSystemFonts: true,
+      isEvalSupported: false,
+    });
+
+    const pdfDoc = await loadingTask.promise;
+    const numPages = pdfDoc.numPages;
+    let fullText = '';
+
+    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+      try {
+        const page = await pdfDoc.getPage(pageNum);
+        const textContent = await page.getTextContent();
+        const pageStrings = textContent.items
+          .map((item: any) => item.str || '')
+          .filter(Boolean);
+        const pageText = pageStrings.join(' ');
+        if (pageText.trim()) {
+          fullText += pageText + '\n\n';
+        }
+
+        if (onProgress) {
+          const percent = Math.min(85, Math.round((pageNum / numPages) * 80));
+          onProgress({
+            currentPage: pageNum,
+            totalPages: numPages,
+            percent,
+            statusText: `استخراج النصوص من الصفحة ${pageNum} من ${numPages}...`,
+          });
+        }
+      } catch (pageErr) {
+        console.warn(`Error reading page ${pageNum} via PDF.js:`, pageErr);
+      }
+    }
+
+    return { text: fullText.trim(), numPages: numPages || 1 };
+  } catch (err) {
+    console.warn('[PDF.js] Direct browser extraction could not read stream:', err);
+    return null;
+  }
+}
+
+/**
+ * Extract structured legal text from a PDF file.
+ * Strategy:
+ * 1. Try instant client-side extraction (0 bandwidth, bypasses Vercel 4.5MB limit entirely).
+ * 2. If text extracted, call lightweight text structuring endpoint for AI enrichment.
+ * 3. If PDF is scanned/image-only, fallback to server-side multimodal Gemini vision.
  */
 export async function extractTextFromPDF(
   file: File,
@@ -65,21 +198,93 @@ export async function extractTextFromPDF(
   const cleanName = file.name.replace(/\.pdf$/i, '').replace(/[-_]+/g, ' ').trim();
   const fileSizeFormatted = formatBytes(file.size);
 
-  // File size validation (up to 35MB for Base64 transmission)
-  if (file.size > 35 * 1024 * 1024) {
-    throw new Error(
-      `حجم ملف الـ PDF (${fileSizeFormatted}) يتجاوز الحد الأقصى المدعوم (35 ميجابايت). يرجى اختيار ملف أصغر حجماً لتسريع المعالجة.`
-    );
-  }
-
-  // Step 1: Client-side preparation & encoding
+  // Step 1: Attempt Client-Side Extraction (Ultra fast & zero network payload limit)
   if (onProgress) {
     onProgress({
       currentPage: 1,
       totalPages: 1,
-      percent: 20,
-      statusText: 'جاري قراءة وتجهيز ملف الـ PDF للمعالجة الذكية...',
+      percent: 15,
+      statusText: 'جاري فحص وقراءة ملف الـ PDF عبر المتصفح مباشرةً...',
     });
+  }
+
+  const clientResult = await extractTextWithPDFJS(file, onProgress);
+
+  if (clientResult && clientResult.text && clientResult.text.length > 50) {
+    if (onProgress) {
+      onProgress({
+        currentPage: clientResult.numPages,
+        totalPages: clientResult.numPages,
+        percent: 85,
+        statusText: 'تم استخراج نصوص الوثيقة، جاري تحليل وتصنيف المواد القانونية...',
+      });
+    }
+
+    // Default heuristic metadata in case network/AI is unavailable
+    const localMeta = detectLawMetadataLocally(clientResult.text, file.name);
+
+    let structuredTitle = localMeta.title;
+    let structuredCategory = localMeta.category;
+    let structuredSummary = localMeta.summary;
+
+    // Send lightweight sample text to server for AI metadata enrichment (only ~10KB payload!)
+    try {
+      const res = await fetch('/api/admin/structure-law-text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: clientResult.text.slice(0, 15000),
+          fileName: file.name,
+        }),
+      });
+
+      if (res.ok) {
+        const aiData = await res.json();
+        if (aiData.title) structuredTitle = aiData.title;
+        if (aiData.category) structuredCategory = aiData.category;
+        if (aiData.summary) structuredSummary = aiData.summary;
+      }
+    } catch (enrichErr) {
+      console.warn('[PDFParser] AI enrichment skipped, using robust local heuristics:', enrichErr);
+    }
+
+    if (onProgress) {
+      onProgress({
+        currentPage: clientResult.numPages,
+        totalPages: clientResult.numPages,
+        percent: 100,
+        statusText: 'تم استخراج وتصنيف المواد القانونية بنجاح',
+      });
+    }
+
+    return {
+      text: clientResult.text,
+      numPages: clientResult.numPages,
+      fileName: file.name,
+      fileSizeBytes: file.size,
+      fileSizeFormatted,
+      suggestedTitle: structuredTitle,
+      suggestedCategory: structuredCategory,
+      summary: structuredSummary,
+      method: 'client_pdfjs',
+    };
+  }
+
+  // Step 2: Fallback to Server-Side AI Parser for scanned/image PDFs
+  if (onProgress) {
+    onProgress({
+      currentPage: 1,
+      totalPages: 1,
+      percent: 30,
+      statusText: 'المستند ممسوح ضوئياً، جاري الإرسال للمعالجة البصرية بالذكاء الاصطناعي...',
+    });
+  }
+
+  // File size validation for base64 transmission (Vercel payload constraint is ~4.5MB)
+  if (file.size > 20 * 1024 * 1024) {
+    throw new Error(
+      `حجم ملف الـ PDF (${fileSizeFormatted}) يتجاوز الحد الأقصى للمعالجة البصرية. يرجى اختيار ملف بحجم أصغر.`
+    );
   }
 
   let base64Data = '';
@@ -89,20 +294,9 @@ export async function extractTextFromPDF(
     throw new Error('تعذر قراءة بيانات ملف الـ PDF من المتصفح.');
   }
 
-  // Step 2: AI-Powered Extraction via Gemini
-  if (onProgress) {
-    onProgress({
-      currentPage: 1,
-      totalPages: 1,
-      percent: 45,
-      statusText: 'جاري قراءة واستخراج المواد القانونية من الملف بواسطة الذكاء الاصطناعي...',
-    });
-  }
-
-  // Simulated progressive updates for UX responsiveness during AI reasoning
   let progressInterval: any = null;
   if (onProgress) {
-    let curr = 45;
+    let curr = 35;
     progressInterval = setInterval(() => {
       if (curr < 90) {
         curr += 5;
@@ -110,10 +304,10 @@ export async function extractTextFromPDF(
           currentPage: 1,
           totalPages: 1,
           percent: curr,
-          statusText: 'جاري قراءة واستخراج المواد القانونية من الملف بواسطة الذكاء الاصطناعي...',
+          statusText: 'جاري استخراج المواد والقرارات بواسطة الذكاء الاصطناعي...',
         });
       }
-    }, 600);
+    }, 700);
   }
 
   try {
@@ -129,24 +323,20 @@ export async function extractTextFromPDF(
       let errorMessage = 'تعذر استخراج المواد القانونية من ملف الـ PDF';
       try {
         const errData = await res.json();
-        if (errData?.error) {
-          errorMessage = errData.error;
-        }
+        if (errData?.error) errorMessage = errData.error;
       } catch {
         if (res.status === 413) {
-          errorMessage = 'حجم ملف الـ PDF كبير جداً. يرجى اختيار ملف أصغر حجماً من 35 ميجابايت.';
+          errorMessage = 'حجم ملف الـ PDF الممسوح ضوئياً كبير جداً بالنسبة للمنصة (الحد الأقصى 4.5 ميجابايت على Vercel).';
         }
       }
       throw new Error(errorMessage);
     }
 
     const serverResult = await res.json();
-
     const extractedText = serverResult.content || serverResult.text || '';
+
     if (!extractedText.trim() && !serverResult.title) {
-      throw new Error(
-        'تمت قراءة ملف الـ PDF ولكن لم يتم العثور على نصوص أو مواد قانونية واضحة داخل المستند.'
-      );
+      throw new Error('تمت قراءة ملف الـ PDF ولكن لم يتم العثور على نصوص أو مواد قانونية واضحة.');
     }
 
     if (onProgress) {

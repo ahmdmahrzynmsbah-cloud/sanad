@@ -123,6 +123,13 @@ app.use(async (req, res, next) => {
 });
 
 // ----------------------------------------
+// Vercel serverless helper: if body is already parsed by Vercel runtime, mark _body to avoid stream deadlock
+app.use((req, res, next) => {
+  if (req.body !== undefined && typeof req.body === 'object') {
+    (req as any)._body = true;
+  }
+  next();
+});
 app.use(express.json({ limit: '60mb' }));
 app.use(express.urlencoded({ extended: true, limit: '60mb' }));
 
@@ -2300,16 +2307,23 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
     let localPdfText = '';
     let estimatedPages = 1;
     try {
-      const parser: any = new (PDFParse as any)({ data: buffer });
+      const PDFParseClass: any = (PDFParse as any)?.PDFParse || (PDFParse as any)?.default || PDFParse;
+      const parser: any = new PDFParseClass({ data: buffer });
       await parser.load();
       const rawParsedText: any = await parser.getText();
       const info: any = await parser.getInfo().catch(() => null);
       await parser.destroy().catch(() => {});
-      if (rawParsedText && typeof rawParsedText === 'string') {
-        localPdfText = (rawParsedText as string).trim();
+      if (rawParsedText) {
+        if (typeof rawParsedText === 'string') {
+          localPdfText = rawParsedText.trim();
+        } else if (typeof rawParsedText.text === 'string') {
+          localPdfText = rawParsedText.text.trim();
+        }
       }
       if (info && info.total) {
         estimatedPages = info.total;
+      } else if (rawParsedText && rawParsedText.total) {
+        estimatedPages = rawParsedText.total;
       }
     } catch (parserErr) {
       console.warn('[AI-PDF] PDFParse direct buffer parse warning:', parserErr);
@@ -2534,6 +2548,115 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
   }
 });
 
+// Lightweight text structuring endpoint for client-extracted PDF text (bypasses Vercel payload limits)
+app.post('/api/admin/structure-law-text', async (req, res) => {
+  try {
+    const { text, fileName } = req.body;
+    if (!text || typeof text !== 'string') {
+      return res.status(400).json({ error: 'لم يتم إرسال نص القانون' });
+    }
+
+    const cleanTitle = (fileName || 'تشريع فلسطيني')
+      .replace(/\.pdf$/i, '')
+      .replace(/[-_]+/g, ' ')
+      .trim();
+
+    // 1. Fast local heuristics
+    const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+    let detectedTitle = cleanTitle;
+    for (const line of lines.slice(0, 15)) {
+      if (
+        line.length >= 6 &&
+        line.length <= 150 &&
+        (line.includes('قانون') ||
+          line.includes('قرار بقانون') ||
+          line.includes('قرار رقم') ||
+          line.includes('نظام رقم') ||
+          line.includes('تعليمات') ||
+          line.includes('مرسوم'))
+      ) {
+        detectedTitle = line;
+        break;
+      }
+    }
+
+    let detectedCategory = 'جمارك';
+    const lower = (text + ' ' + (fileName || '')).toLowerCase();
+    if (
+      lower.includes('ضريبة دخل') ||
+      lower.includes('ضريبة الدخل') ||
+      lower.includes('الدخل الخاضع')
+    ) {
+      detectedCategory = 'ضريبة دخل';
+    } else if (
+      lower.includes('قيمة مضافة') ||
+      lower.includes('القيمة المضافة') ||
+      lower.includes('فواتير ضريبية')
+    ) {
+      detectedCategory = 'ضريبة القيمة المضافة';
+    } else if (
+      lower.includes('رسوم') ||
+      lower.includes('طوابع') ||
+      lower.includes('مكوس')
+    ) {
+      detectedCategory = 'رسوم ومكوس';
+    }
+
+    // 2. Fast AI refinement if Gemini is available (sending small text sample, <15KB)
+    try {
+      const ai = getGemini();
+      const sampleText = text.slice(0, 12000);
+      const prompt = `أنت مستشار قانوني وتشريعي فلسطيني. بناءً على هذا النص المستخرج من وثيقة قانونية باسم "${cleanTitle}":
+المطلوب إخراج كائن JSON فقط بالخصائص التالية:
+1. title: العنوان الرسمي الدقيق للقانون أو التشريع أو القرار.
+2. category: التصنيف الأنسب بدقة من بين ("جمارك"، "ضريبة دخل"، "ضريبة القيمة المضافة"، "رسوم ومكوس").
+3. summary: ملخص تشريعي موجز ودقيق (2-3 أسطر).
+
+نص الوثيقة:
+"""
+${sampleText}
+"""`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING },
+              category: { type: Type.STRING },
+              summary: { type: Type.STRING },
+            },
+            required: ['title', 'category'],
+          },
+        },
+      });
+
+      if (response?.text) {
+        const parsed = JSON.parse(response.text);
+        return res.json({
+          title: parsed.title || detectedTitle,
+          category: parsed.category || detectedCategory,
+          summary: parsed.summary || `تم استخراج وتصنيف نصوص ${detectedTitle} بنجاح.`,
+        });
+      }
+    } catch (aiErr) {
+      console.warn('[AI-Structure] AI refinement fallback to heuristic:', aiErr);
+    }
+
+    return res.json({
+      title: detectedTitle,
+      category: detectedCategory,
+      summary: `تم استخراج وتصنيف نصوص ${detectedTitle} بنجاح.`,
+    });
+  } catch (err: any) {
+    console.error('[AI-Structure] Error:', err);
+    return res.status(500).json({ error: err?.message || 'خطأ أثناء تحليل النص' });
+  }
+});
+
 // Get all laws
 app.get('/api/laws', (req, res) => {
   res.json({ laws: db.laws });
@@ -2571,14 +2694,24 @@ app.post('/api/laws/batch', async (req, res) => {
 
       createdLaws.push(newLaw);
       db.laws.unshift(newLaw);
-      // Persist to Cloud Firestore
-      saveLawToFirestore(newLaw).catch((err) =>
-        console.error(`[Firestore] Error saving batch law ${newLaw.id}:`, err)
-      );
     }
 
     cachedIndexedChunks = null;
     saveDB();
+
+    // CRITICAL FOR VERCEL & CLOUD RUN: Explicitly await Firestore persistence before returning response
+    try {
+      await Promise.all(
+        createdLaws.map((newLaw) =>
+          saveLawToFirestore(newLaw).catch((err) => {
+            console.error(`[Firestore] Error saving batch law ${newLaw.id}:`, err);
+            return false;
+          })
+        )
+      );
+    } catch (firestoreErr) {
+      console.error('[Firestore] Batch laws commit error:', firestoreErr);
+    }
 
     res.status(201).json({
       message: `تمت إضافة ${createdLaws.length} تشريعات إلى قاعدة المعرفة بنجاح`,

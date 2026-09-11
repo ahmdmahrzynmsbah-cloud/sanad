@@ -1178,33 +1178,42 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
     setBatchSuccessMessage(null);
 
     try {
-      const payload = readyLaws.map((item) => ({
-        title: item.title.trim(),
-        category: item.category || 'جمارك',
-        content: item.content.trim(),
-        sourceFileName: item.fileName,
-        sourceFileSize: item.fileSizeFormatted,
-        pageCount: item.pageCount,
-      }));
+      // Chunk laws into safe micro-batches (2 laws per batch) to prevent Vercel 4.5MB payload & timeout limits
+      const chunkSize = 2;
+      let totalSaved = 0;
 
-      const res = await fetch('/api/laws/batch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ laws: payload }),
-      });
+      for (let i = 0; i < readyLaws.length; i += chunkSize) {
+        const chunk = readyLaws.slice(i, i + chunkSize);
+        const chunkPayload = chunk.map((item) => ({
+          title: item.title.trim(),
+          category: item.category || 'جمارك',
+          content: item.content.trim(),
+          sourceFileName: item.fileName,
+          sourceFileSize: item.fileSizeFormatted,
+          pageCount: item.pageCount,
+        }));
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'فشل حفظ دفعة القوانين.');
+        const res = await fetch('/api/laws/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ laws: chunkPayload }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || 'فشل حفظ دفعة القوانين.');
+        }
+
+        totalSaved += data.laws ? data.laws.length : chunk.length;
+
+        // Immediately remove saved items from queue so user sees real-time progress
+        const chunkIds = new Set(chunk.map((item) => item.id));
+        setQueuedLaws((prev) => prev.filter((l) => !chunkIds.has(l.id)));
       }
 
       setBatchSuccessMessage(
-        `تمت بنجاح إضافة ${readyLaws.length} تشريعات وقوانين إلى قاعدة المعرفة وتحديث مستشار الذكاء الاصطناعي فورياً!`
+        `تمت بنجاح إضافة ${totalSaved} تشريعات وقوانين إلى قاعدة المعرفة وتحديث مستشار الذكاء الاصطناعي فورياً!`
       );
-
-      // Remove successfully saved items from queue
-      const readyIds = new Set(readyLaws.map((l) => l.id));
-      setQueuedLaws((prev) => prev.filter((l) => !readyIds.has(l.id)));
 
       // Refresh laws list
       await fetchLaws();
