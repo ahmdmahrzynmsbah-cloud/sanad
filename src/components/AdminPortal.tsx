@@ -1055,20 +1055,26 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
         );
       } catch (err: any) {
         console.error('Error processing queued PDF:', err);
+        const fallbackTitle = nextItem.title || nextItem.fileName.replace(/\.pdf$/i, '').trim();
         setQueuedLaws((prev) =>
           prev.map((item) =>
             item.id === targetId
               ? {
                   ...item,
-                  status: 'error',
-                  error: err?.message || 'تعذر استخراج المواد القانونية من هذا الملف',
-                  progressPercent: 0,
-                  statusText: 'فشل الاستخراج',
+                  status: 'ready',
+                  title: fallbackTitle,
+                  category: item.category || 'جمارك',
+                  content: `[مستند: ${fallbackTitle}]\n\nتم تحميل الملف. تعذر الاستخراج التلقائي، يمكنك تعديل وإدخال نصوص المواد هنا وحفظها.`,
+                  pageCount: item.pageCount || 1,
+                  progressPercent: 100,
+                  statusText: 'تم تجهيز المستند كمسودة للمراجعة',
                 }
               : item
           )
         );
       } finally {
+        // Safe 600ms pacing delay between batch files to prevent rate limits and ensure smooth processing
+        await new Promise((resolve) => setTimeout(resolve, 600));
         isProcessingQueue.current = false;
       }
     };

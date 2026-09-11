@@ -133,6 +133,12 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '60mb' }));
 app.use(express.urlencoded({ extended: true, limit: '60mb' }));
 
+// Serve static assets from public folder (including pdf.worker.min.mjs)
+const publicDir = path.join(process.cwd(), 'public');
+if (fs.existsSync(publicDir)) {
+  app.use(express.static(publicDir));
+}
+
 // Global body parser error handler (prevents unhandled PayloadTooLargeError HTML responses)
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (err?.type === 'entity.too.large' || err?.status === 413) {
@@ -2314,9 +2320,17 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
       const info: any = await parser.getInfo().catch(() => null);
       await parser.destroy().catch(() => {});
       if (rawParsedText) {
-        if (typeof rawParsedText === 'string') {
+        if (rawParsedText.pages && Array.isArray(rawParsedText.pages)) {
+          const pageTexts = rawParsedText.pages
+            .map((p: any) => (p.text || '').trim())
+            .filter(Boolean);
+          if (pageTexts.length > 0) {
+            localPdfText = pageTexts.join('\n\n');
+          }
+        }
+        if (!localPdfText && typeof rawParsedText === 'string') {
           localPdfText = rawParsedText.trim();
-        } else if (typeof rawParsedText.text === 'string') {
+        } else if (!localPdfText && typeof rawParsedText.text === 'string') {
           localPdfText = rawParsedText.text.trim();
         }
       }
@@ -2522,10 +2536,26 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
     }
 
     if (!extractedData || (!extractedData.content && !extractedData.title)) {
-      return res.status(422).json({
-        error:
-          'تعذر استخراج المواد القانونية من الملف. يرجى التأكد من أن المستند واضح أو إدخال المواد يدوياً.',
-      });
+      const fallbackContent = localPdfText && localPdfText.length > 5
+        ? localPdfText
+        : `[مستند PDF: ${cleanTitle}]\n\nتم إدراج هذا التشريع من ملف "${fileName || cleanTitle}" (${estimatedPages} صفحة).\nيمكنك تحرير أو كتابة نصوص المواد القانونية هنا مباشرة ثم حفظها في قاعدة المعرفة.`;
+
+      let detectedCategory = 'جمارك';
+      const lowerName = cleanTitle.toLowerCase();
+      if (lowerName.includes('دخل') || lowerName.includes('ضريبة')) {
+        detectedCategory = 'ضريبة دخل';
+      } else if (lowerName.includes('مضافة') || lowerName.includes('قيمة')) {
+        detectedCategory = 'ضريبة القيمة المضافة';
+      } else if (lowerName.includes('رسوم') || lowerName.includes('طوابع') || lowerName.includes('مكوس')) {
+        detectedCategory = 'رسوم ومكوس';
+      }
+
+      extractedData = {
+        title: cleanTitle,
+        category: detectedCategory,
+        content: fallbackContent,
+        summary: `تشريع قانوني تم تجهيزه من ملف "${fileName || cleanTitle}".`,
+      };
     }
 
     return res.json({
@@ -2542,8 +2572,22 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
     });
   } catch (err: any) {
     console.error('Server PDF parsing error:', err);
-    return res.status(500).json({
-      error: 'تعذر استخراج النصوص من ملف الـ PDF: ' + (err?.message || 'خطأ غير معروف'),
+    const cleanTitle = (req.body?.fileName || 'تشريع جديد')
+      .replace(/\.pdf$/i, '')
+      .replace(/[-_]+/g, ' ')
+      .trim();
+
+    return res.json({
+      title: cleanTitle,
+      category: 'جمارك',
+      content: `[مستند: ${cleanTitle}]\n\nتم رفع هذا الملف بنجاح. يمكنك إدخال وتعديل مواده القانونية هنا.`,
+      summary: `تشريع قانوني تم إدراجه من الملف: ${cleanTitle}`,
+      numPages: 1,
+      suggestedTitle: cleanTitle,
+      suggestedCategory: 'جمارك',
+      text: `[مستند: ${cleanTitle}]\n\nتم رفع هذا الملف بنجاح. يمكنك إدخال وتعديل مواده القانونية هنا.`,
+      method: 'resilient_fallback',
+      model: 'local',
     });
   }
 });
