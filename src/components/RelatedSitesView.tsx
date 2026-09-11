@@ -10,7 +10,8 @@ import {
   Building2,
   BookOpen,
   Sparkles,
-  Link2
+  Link2,
+  Tag
 } from 'lucide-react';
 import { RelatedSite } from '../types';
 import { useSync } from '../utils/sync';
@@ -135,19 +136,31 @@ export const RelatedSitesView: React.FC<RelatedSitesViewProps> = ({
           >
             جميع المواقع ({sites.length})
           </button>
-          {categories.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                selectedCategory === cat
-                  ? 'bg-blue-800 text-white shadow-xs'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
+          {categories.map((cat) => {
+            const count = sites.filter((s) => s.category === cat).length;
+            return (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+                  selectedCategory === cat
+                    ? 'bg-blue-800 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                <span>{cat}</span>
+                <span
+                  className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                    selectedCategory === cat
+                      ? 'bg-blue-700 text-white'
+                      : 'bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -187,9 +200,15 @@ export const RelatedSitesView: React.FC<RelatedSitesViewProps> = ({
               <div className="p-6 space-y-3">
                 {/* Badge Row */}
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-200">
-                    {site.category || 'موقع رسمي'}
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCategory(site.category || 'موقع رسمي')}
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 transition-colors cursor-pointer flex items-center gap-1"
+                    title={`تصفية حسب: ${site.category || 'موقع رسمي'}`}
+                  >
+                    <Tag className="w-2.5 h-2.5 text-blue-600" />
+                    <span>{site.category || 'موقع رسمي'}</span>
+                  </button>
                   {site.isOfficial !== false && (
                     <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 flex items-center gap-1">
                       <ShieldCheck className="w-3 h-3 text-emerald-600" />

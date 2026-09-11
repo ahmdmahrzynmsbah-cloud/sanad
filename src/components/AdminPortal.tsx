@@ -60,6 +60,23 @@ import { ContactAdminTab } from './admin/ContactAdminTab';
 import { UserDetailsModal } from './admin/UserDetailsModal';
 import { useSync } from '../utils/sync';
 
+export interface QueuedLawItem {
+  id: string;
+  file: File;
+  fileName: string;
+  fileSizeFormatted: string;
+  pageCount: number;
+  status: 'pending' | 'parsing' | 'ready' | 'error';
+  progressPercent: number;
+  statusText?: string;
+  error?: string;
+  title: string;
+  category: string;
+  content: string;
+  summary?: string;
+  isExpanded?: boolean;
+}
+
 interface AdminPortalProps {
   onLawsUpdated?: () => void;
   onBrandingUpdated?: (branding: SystemBranding) => void;
@@ -179,17 +196,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
   const [lawFormError, setLawFormError] = useState<string | null>(null);
   const [lawFormSuccess, setLawFormSuccess] = useState<string | null>(null);
 
-  // PDF Upload & Extraction state
+  // PDF Upload & Batch Extraction state
   const [inputMode, setInputMode] = useState<'pdf' | 'manual'>('pdf');
-  const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const [pdfFileName, setPdfFileName] = useState<string>('');
-  const [pdfFileSize, setPdfFileSize] = useState<string>('');
-  const [pdfPageCount, setPdfPageCount] = useState<number>(0);
-  const [isParsingPDF, setIsParsingPDF] = useState(false);
-  const [pdfProgress, setPdfProgress] = useState<PDFProgress | null>(null);
-  const [pdfParseError, setPdfParseError] = useState<string | null>(null);
+  const [queuedLaws, setQueuedLaws] = useState<QueuedLawItem[]>([]);
+  const [isSubmittingBatch, setIsSubmittingBatch] = useState(false);
+  const [batchSuccessMessage, setBatchSuccessMessage] = useState<string | null>(null);
+  const [batchErrorMessage, setBatchErrorMessage] = useState<string | null>(null);
+  const [batchGlobalCategory, setBatchGlobalCategory] = useState<string>('جمارك');
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isProcessingQueue = useRef(false);
 
   // Edit Law state
   const [editingLaw, setEditingLaw] = useState<Law | null>(null);
@@ -911,83 +927,208 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
     }
   };
 
-  // PDF Processing and Drag-and-Drop Handlers
-  const processSelectedPDF = async (file: File) => {
-    if (!file) return;
-    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-      setPdfParseError('الملف المرفق ليس بصيغة PDF صالحة. يرجى اختيار ملف PDF تشريعي.');
-      return;
-    }
+  // Category Matcher Helper
+  const matchCategory = (suggestedCat: string | undefined): string => {
+    if (!suggestedCat) return 'جمارك';
+    const rawCat = suggestedCat.trim();
+    const exactMatch = categories.find((c) => c.name === rawCat);
+    if (exactMatch) return exactMatch.name;
+    const partialMatch = categories.find(
+      (c) =>
+        rawCat.includes(c.name) ||
+        c.name.includes(rawCat) ||
+        (rawCat.includes('جمرك') && c.name.includes('جمارك')) ||
+        (rawCat.includes('دخل') && c.name.includes('دخل')) ||
+        (rawCat.includes('مضافة') && c.name.includes('مضافة')) ||
+        (rawCat.includes('مكوس') && c.name.includes('مكوس'))
+    );
+    if (partialMatch) return partialMatch.name;
+    return categories[0]?.name || 'جمارك';
+  };
 
-    // Proactive file size validation (max 35MB)
-    if (file.size > 35 * 1024 * 1024) {
-      setPdfParseError(
-        `حجم ملف الـ PDF (${formatBytes(file.size)}) كبير جداً ويتجاوز الحد الأقصى (35 ميجابايت). يرجى اختيار ملف أصغر حجماً لتسريع المعالجة بواسطة الذكاء الاصطناعي.`
-      );
-      return;
-    }
+  // Add multiple files to batch queue
+  const addFilesToQueue = (fileList: FileList | File[]) => {
+    const files = Array.from(fileList);
+    if (files.length === 0) return;
 
-    setPdfFile(file);
-    setPdfFileName(file.name);
-    setPdfFileSize(formatBytes(file.size));
-    setIsParsingPDF(true);
-    setPdfParseError(null);
-    setPdfProgress({
-      currentPage: 1,
-      totalPages: 1,
-      percent: 20,
-      statusText: 'جاري قراءة وتجهيز ملف الـ PDF للمعالجة الذكية...',
-    });
+    const newItems: QueuedLawItem[] = [];
+    let invalidCount = 0;
 
-    try {
-      const result = await extractTextFromPDF(file, (progress) => {
-        setPdfProgress(progress);
+    for (const file of files) {
+      if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+        invalidCount++;
+        continue;
+      }
+
+      const cleanTitle = file.name
+        .replace(/\.pdf$/i, '')
+        .replace(/[-_]+/g, ' ')
+        .trim();
+
+      const isTooBig = file.size > 35 * 1024 * 1024;
+
+      newItems.push({
+        id: `pdf-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        file,
+        fileName: file.name,
+        fileSizeFormatted: formatBytes(file.size),
+        pageCount: 1,
+        status: isTooBig ? 'error' : 'pending',
+        error: isTooBig ? 'حجم الملف يتجاوز الحد الأقصى (35 ميجابايت)' : undefined,
+        progressPercent: 0,
+        statusText: isTooBig ? 'حجم الملف كبير جداً' : 'في انتظار بدء الاستخراج...',
+        title: cleanTitle,
+        category: 'جمارك',
+        content: '',
+        summary: '',
+        isExpanded: false,
       });
+    }
 
-      setPdfPageCount(result.numPages);
-      setPdfFileSize(result.fileSizeFormatted);
-      setNewContent(result.text);
+    if (invalidCount > 0) {
+      setBatchErrorMessage(`تم تخطي ${invalidCount} ملفات لأنها ليست بصيغة PDF صالحة.`);
+    }
 
-      // Auto-populate Title
-      if (result.suggestedTitle) {
-        setNewTitle(result.suggestedTitle);
-      }
+    if (newItems.length > 0) {
+      setQueuedLaws((prev) => [...prev, ...newItems]);
+      setBatchSuccessMessage(null);
+    }
 
-      // Auto-populate and match Category
-      if (result.suggestedCategory) {
-        const rawCat = result.suggestedCategory.trim();
-        const exactMatch = categories.find((c) => c.name === rawCat);
-        if (exactMatch) {
-          setNewCategory(exactMatch.name);
-        } else {
-          const partialMatch = categories.find(
-            (c) =>
-              rawCat.includes(c.name) ||
-              c.name.includes(rawCat) ||
-              (rawCat.includes('جمرك') && c.name.includes('جمارك')) ||
-              (rawCat.includes('دخل') && c.name.includes('دخل')) ||
-              (rawCat.includes('مضافة') && c.name.includes('مضافة')) ||
-              (rawCat.includes('مكوس') && c.name.includes('مكوس'))
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  // Sequential Queue Processor for Batch PDFs
+  useEffect(() => {
+    const processQueue = async () => {
+      if (isProcessingQueue.current) return;
+      const nextItem = queuedLaws.find((item) => item.status === 'pending');
+      if (!nextItem) return;
+
+      isProcessingQueue.current = true;
+      const targetId = nextItem.id;
+
+      setQueuedLaws((prev) =>
+        prev.map((item) =>
+          item.id === targetId
+            ? {
+                ...item,
+                status: 'parsing',
+                progressPercent: 25,
+                statusText: 'جاري قراءة واستخراج النصوص والمواد القانونية...',
+              }
+            : item
+        )
+      );
+
+      try {
+        const result = await extractTextFromPDF(nextItem.file, (prog) => {
+          setQueuedLaws((prev) =>
+            prev.map((item) =>
+              item.id === targetId
+                ? { ...item, progressPercent: prog.percent, statusText: prog.statusText }
+                : item
+            )
           );
-          if (partialMatch) {
-            setNewCategory(partialMatch.name);
-          } else if (rawCat) {
-            setNewCategory(rawCat);
-          }
-        }
-      }
+        });
 
-      setLawFormSuccess(
-        `تم بنجاح قراءة واستخراج كافة المواد والبنود القانونية بواسطة الذكاء الاصطناعي (Gemini AI)! تم ملء العنوان والتصنيف ونصوص المواد تلقائياً أدناه لمراجعتها وحفظها.`
-      );
-      setTimeout(() => setLawFormSuccess(null), 9000);
-    } catch (err: any) {
-      console.error('PDF AI parsing error:', err);
-      setPdfParseError(
-        err?.message || 'تعذر استخراج المواد القانونية من ملف الـ PDF عبر الذكاء الاصطناعي. يرجى التأكد من وضوح الملف أو كتابة المواد يدوياً.'
-      );
-    } finally {
-      setIsParsingPDF(false);
+        const detectedCategory = matchCategory(result.suggestedCategory);
+
+        setQueuedLaws((prev) =>
+          prev.map((item) =>
+            item.id === targetId
+              ? {
+                  ...item,
+                  status: 'ready',
+                  title: result.suggestedTitle || item.title,
+                  category: detectedCategory,
+                  content: result.text,
+                  pageCount: result.numPages || item.pageCount,
+                  fileSizeFormatted: result.fileSizeFormatted || item.fileSizeFormatted,
+                  summary: result.summary,
+                  progressPercent: 100,
+                  statusText: 'تم استخراج المواد بنجاح',
+                }
+              : item
+          )
+        );
+      } catch (err: any) {
+        console.error('Error processing queued PDF:', err);
+        setQueuedLaws((prev) =>
+          prev.map((item) =>
+            item.id === targetId
+              ? {
+                  ...item,
+                  status: 'error',
+                  error: err?.message || 'تعذر استخراج المواد القانونية من هذا الملف',
+                  progressPercent: 0,
+                  statusText: 'فشل الاستخراج',
+                }
+              : item
+          )
+        );
+      } finally {
+        isProcessingQueue.current = false;
+      }
+    };
+
+    processQueue();
+  }, [queuedLaws, categories]);
+
+  const handleUpdateQueuedTitle = (id: string, title: string) => {
+    setQueuedLaws((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, title } : item))
+    );
+  };
+
+  const handleUpdateQueuedCategory = (id: string, category: string) => {
+    setQueuedLaws((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, category } : item))
+    );
+  };
+
+  const handleApplyCategoryToAll = (targetCategory: string) => {
+    setBatchGlobalCategory(targetCategory);
+    setQueuedLaws((prev) =>
+      prev.map((item) => ({ ...item, category: targetCategory }))
+    );
+  };
+
+  const handleRemoveQueuedItem = (id: string) => {
+    setQueuedLaws((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const handleRetryQueuedItem = (id: string) => {
+    setQueuedLaws((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              status: 'pending',
+              error: undefined,
+              progressPercent: 0,
+              statusText: 'في انتظار بدء الاستخراج...',
+            }
+          : item
+      )
+    );
+  };
+
+  const handleTogglePreview = (id: string) => {
+    setQueuedLaws((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, isExpanded: !item.isExpanded } : item
+      )
+    );
+  };
+
+  const handleClearAllQueued = () => {
+    setQueuedLaws([]);
+    setBatchErrorMessage(null);
+    setBatchSuccessMessage(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
@@ -1008,27 +1149,73 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
     e.stopPropagation();
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const file = e.dataTransfer.files[0];
-      processSelectedPDF(file);
+      addFilesToQueue(e.dataTransfer.files);
     }
   };
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
-      processSelectedPDF(file);
+      addFilesToQueue(e.target.files);
     }
   };
 
-  const handleClearPDF = () => {
-    setPdfFile(null);
-    setPdfFileName('');
-    setPdfFileSize('');
-    setPdfPageCount(0);
-    setPdfProgress(null);
-    setPdfParseError(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+  // Submit all ready laws to knowledge base at once
+  const handleBatchSubmit = async () => {
+    const readyLaws = queuedLaws.filter((l) => l.status === 'ready' && l.content.trim());
+    if (readyLaws.length === 0) {
+      setBatchErrorMessage('لا توجد قوانين مكتملة الاستخراج وجاهزة للإضافة.');
+      return;
+    }
+
+    const missingTitle = readyLaws.some((l) => !l.title.trim());
+    if (missingTitle) {
+      setBatchErrorMessage('يرجى التأكد من كتابة أو مراجعة عنوان كل قانون قبل الإضافة.');
+      return;
+    }
+
+    setIsSubmittingBatch(true);
+    setBatchErrorMessage(null);
+    setBatchSuccessMessage(null);
+
+    try {
+      const payload = readyLaws.map((item) => ({
+        title: item.title.trim(),
+        category: item.category || 'جمارك',
+        content: item.content.trim(),
+        sourceFileName: item.fileName,
+        sourceFileSize: item.fileSizeFormatted,
+        pageCount: item.pageCount,
+      }));
+
+      const res = await fetch('/api/laws/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ laws: payload }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'فشل حفظ دفعة القوانين.');
+      }
+
+      setBatchSuccessMessage(
+        `تمت بنجاح إضافة ${readyLaws.length} تشريعات وقوانين إلى قاعدة المعرفة وتحديث مستشار الذكاء الاصطناعي فورياً!`
+      );
+
+      // Remove successfully saved items from queue
+      const readyIds = new Set(readyLaws.map((l) => l.id));
+      setQueuedLaws((prev) => prev.filter((l) => !readyIds.has(l.id)));
+
+      // Refresh laws list
+      await fetchLaws();
+
+      setTimeout(() => {
+        setBatchSuccessMessage(null);
+      }, 7000);
+    } catch (err: any) {
+      setBatchErrorMessage(err?.message || 'تعذر حفظ دفعة القوانين. يرجى المحاولة لاحقاً.');
+    } finally {
+      setIsSubmittingBatch(false);
     }
   };
 
@@ -1052,9 +1239,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
           title: newTitle.trim(),
           category: newCategory,
           content: newContent.trim(),
-          sourceFileName: pdfFileName || undefined,
-          sourceFileSize: pdfFileSize || undefined,
-          pageCount: pdfPageCount || undefined,
         }),
       });
 
@@ -1067,7 +1251,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
       setLawFormSuccess('تم حفظ القانون في قاعدة البيانات بنجاح وتحديث قاعدة معرفة البوت فورياً.');
       setNewTitle('');
       setNewContent('');
-      handleClearPDF();
       fetchLaws();
       setTimeout(() => setLawFormSuccess(null), 4000);
     } catch (err) {
@@ -1949,254 +2132,477 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
               </button>
             </div>
 
-            {/* Drag & Drop PDF Box (Visible in PDF Mode) */}
+            {/* BATCH PDF MODE */}
             {inputMode === 'pdf' && (
-              <div className="mb-5">
+              <div className="mb-5 space-y-4">
                 <input
                   ref={fileInputRef}
                   type="file"
                   id="pdf-file-hidden-input"
+                  multiple
                   accept=".pdf,application/pdf"
                   onChange={handleFileInputChange}
                   className="hidden"
                 />
 
-                {!pdfFile ? (
+                {/* Batch Success / Error Banners */}
+                {batchSuccessMessage && (
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-2 shadow-xs">
+                    <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-600" />
+                    <span className="flex-1">{batchSuccessMessage}</span>
+                    <button
+                      type="button"
+                      onClick={() => setBatchSuccessMessage(null)}
+                      className="text-emerald-700 hover:text-emerald-900 p-1"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+
+                {batchErrorMessage && (
+                  <div className="p-4 bg-red-50 border border-red-200 text-red-800 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-between gap-2 shadow-xs">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="w-5 h-5 shrink-0 text-red-600" />
+                      <span>{batchErrorMessage}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setBatchErrorMessage(null)}
+                      className="text-red-700 hover:text-red-900 p-1"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Dropzone when no files are queued */}
+                {queuedLaws.length === 0 ? (
                   <div
                     id="pdf-dropzone"
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
                     onClick={() => fileInputRef.current?.click()}
-                    className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all ${
+                    className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${
                       isDragging
                         ? 'border-[#1b5e3a] bg-[#f0f7f3] scale-[1.01]'
-                        : 'border-gray-300 bg-gray-50/70 hover:bg-gray-50 hover:border-gray-400'
+                        : 'border-slate-300 bg-slate-50/70 hover:bg-slate-50 hover:border-emerald-500'
                     }`}
                   >
-                    <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center mx-auto mb-3 text-[#1b5e3a]">
-                      <UploadCloud className="w-6 h-6" />
+                    <div className="w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center mx-auto mb-3 text-[#1b5e3a] shadow-xs">
+                      <UploadCloud className="w-8 h-8" />
                     </div>
-                    <h4 className="text-sm font-bold text-gray-900 mb-1">
-                      اسحب وأفلت ملف PDF التشريعي هنا، أو انقر للاختيار
+                    <h4 className="text-base font-bold text-slate-900 mb-1.5">
+                      اسحب وأفلت ملفات PDF التشريعية هنا، أو انقر لاختيار عدة ملفات معاً
                     </h4>
-                    <p className="text-xs text-gray-500 mb-3 max-w-md mx-auto">
-                      يدعم قراءة واستخراج نصوص المواد والقرارات الوزارية والجمركية تلقائياً مع معالجة اللغة العربية بدقة عالية.
+                    <p className="text-xs sm:text-sm text-slate-500 mb-4 max-w-lg mx-auto leading-relaxed">
+                      يدعم رفع عدة ملفات قوانين دفعة واحدة. سيقوم الذكاء الاصطناعي باستخراج نصوص المواد والقرارات وكتابة اسم كل ملف واقتراح تصنيفه، لتراجعه وتضيف كافة القوانين إلى قاعدة المعرفة بنقرة واحدة.
                     </p>
-                    <div className="inline-flex items-center gap-1.5 px-4 py-2 bg-white border border-gray-300 rounded-lg text-xs font-bold text-gray-700 shadow-xs hover:bg-gray-100 transition-colors">
-                      <FileUp className="w-3.5 h-3.5 text-[#1b5e3a]" />
-                      استعراض ملفات الجهاز (PDF)
+                    <div className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#12281e] text-white rounded-xl text-xs sm:text-sm font-bold shadow-sm hover:bg-[#1c3e2f] transition-all">
+                      <FileUp className="w-4 h-4" />
+                      استعراض واختيار عدة ملفات PDF دفعة واحدة
+                    </div>
+                    <div className="mt-3 text-[11px] text-slate-400 font-medium">
+                      الصيغة المدعومة: PDF تشريعي حتى 35 ميجابايت لكل ملف
                     </div>
                   </div>
                 ) : (
-                  <div className="border border-emerald-200 bg-emerald-50/50 rounded-xl p-4 transition-all">
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-red-100 border border-red-200 flex items-center justify-center shrink-0 text-red-600">
-                          <FileType className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h4 className="text-xs sm:text-sm font-bold text-gray-900 truncate max-w-xs sm:max-w-md">
-                              {pdfFileName}
-                            </h4>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                              PDF
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-3 text-[11px] text-gray-500 mt-0.5">
-                            <span>الحجم: {pdfFileSize}</span>
-                            {pdfPageCount > 0 && <span>عدد الصفحات: {pdfPageCount} صفحة</span>}
-                          </div>
-                        </div>
+                  /* Batch Queue View when files are present */
+                  <div className="space-y-4">
+                    {/* Queue Header Controls */}
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center flex-wrap gap-2 text-xs font-bold">
+                        <span className="text-slate-800 bg-white border border-slate-200 px-3 py-1.5 rounded-lg shadow-2xs">
+                          إجمالي الملفات: <span className="font-mono text-slate-900 font-black">{queuedLaws.length}</span>
+                        </span>
+                        <span className="text-emerald-800 bg-emerald-100/80 border border-emerald-200 px-2.5 py-1.5 rounded-lg">
+                          جاهز للإضافة: {queuedLaws.filter((l) => l.status === 'ready').length}
+                        </span>
+                        {queuedLaws.some((l) => l.status === 'parsing') && (
+                          <span className="text-amber-800 bg-amber-100/80 border border-amber-200 px-2.5 py-1.5 rounded-lg flex items-center gap-1.5">
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            قيد الاستخراج: {queuedLaws.filter((l) => l.status === 'parsing').length}
+                          </span>
+                        )}
+                        {queuedLaws.some((l) => l.status === 'pending') && (
+                          <span className="text-slate-600 bg-slate-200/70 border border-slate-300 px-2.5 py-1.5 rounded-lg">
+                            في الانتظار: {queuedLaws.filter((l) => l.status === 'pending').length}
+                          </span>
+                        )}
+                        {queuedLaws.some((l) => l.status === 'error') && (
+                          <span className="text-red-700 bg-red-100 border border-red-200 px-2.5 py-1.5 rounded-lg">
+                            أخطاء: {queuedLaws.filter((l) => l.status === 'error').length}
+                          </span>
+                        )}
                       </div>
 
-                      <div className="flex items-center gap-2 self-end sm:self-center">
+                      <div className="flex items-center flex-wrap gap-2">
+                        {/* Quick Category Setter for all */}
+                        <div className="hidden sm:flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs">
+                          <Tag className="w-3.5 h-3.5 text-slate-400" />
+                          <span className="text-slate-500 text-[11px]">تصنيف موحد:</span>
+                          <select
+                            value={batchGlobalCategory}
+                            onChange={(e) => handleApplyCategoryToAll(e.target.value)}
+                            className="bg-transparent text-slate-800 font-bold focus:outline-none text-xs cursor-pointer"
+                            title="تطبيق هذا التصنيف على كافة الملفات في القائمة"
+                          >
+                            {categories.map((c) => (
+                              <option key={c.id} value={c.name}>
+                                {c.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
                         <button
                           type="button"
-                          id="change-pdf-btn"
                           onClick={() => fileInputRef.current?.click()}
-                          disabled={isParsingPDF}
-                          className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                          className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-100 shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
                         >
-                          تغيير الملف
+                          <Plus className="w-3.5 h-3.5 text-[#1b5e3a]" />
+                          إضافة ملفات أخرى
                         </button>
                         <button
                           type="button"
-                          id="clear-pdf-btn"
-                          onClick={handleClearPDF}
-                          disabled={isParsingPDF}
-                          className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
-                          title="إزالة الملف"
+                          onClick={handleClearAllQueued}
+                          className="px-2.5 py-1.5 text-slate-500 hover:text-red-600 rounded-lg text-xs hover:bg-red-50 transition-colors flex items-center gap-1 cursor-pointer"
                         >
-                          <X className="w-4 h-4" />
+                          <Trash2 className="w-3.5 h-3.5" />
+                          إفراغ القائمة
                         </button>
                       </div>
                     </div>
 
-                    {/* Progress or Status indicator */}
-                    {isParsingPDF && (
-                      <div className="mt-3 pt-3 border-t border-emerald-200/60 bg-emerald-50/70 -mx-4 -mb-4 p-4 rounded-b-xl">
-                        <div className="flex items-center justify-between text-xs text-[#12281e] font-bold mb-2">
-                          <span className="flex items-center gap-2">
-                            <span className="relative flex h-2 w-2">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#1b5e3a] opacity-75"></span>
-                              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#1b5e3a]"></span>
-                            </span>
-                            <Sparkles className="w-4 h-4 text-[#1b5e3a] animate-pulse" />
-                            <span>{pdfProgress?.statusText || 'جاري قراءة واستخراج المواد القانونية من الملف بواسطة الذكاء الاصطناعي...'}</span>
-                          </span>
-                          <span className="font-mono text-emerald-800 bg-emerald-100/90 border border-emerald-200 px-2 py-0.5 rounded text-[11px] font-bold">
-                            {pdfProgress?.percent || 50}%
-                          </span>
-                        </div>
-                        <div className="w-full h-2 bg-emerald-200/60 rounded-full overflow-hidden shadow-inner">
-                          <div
-                            className="h-full bg-gradient-to-r from-emerald-600 via-[#1b5e3a] to-teal-600 transition-all duration-300 rounded-full"
-                            style={{ width: `${pdfProgress?.percent || 50}%` }}
-                          />
-                        </div>
-                        <div className="flex items-center justify-between text-[11px] text-emerald-700 mt-2 font-medium">
-                          <span>نظام الاستخراج الذكي يتعرف على المواد والبنود والقرارات الوزارية والممسوحة ضوئياً.</span>
-                          <span className="text-[10px] bg-white px-2 py-0.5 rounded border border-emerald-200 text-emerald-800 font-bold">
-                            Gemini AI
-                          </span>
-                        </div>
-                      </div>
-                    )}
+                    {/* Files List Cards */}
+                    <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
+                      {queuedLaws.map((item, index) => (
+                        <div
+                          key={item.id}
+                          className={`border rounded-xl p-4 transition-all ${
+                            item.status === 'ready'
+                              ? 'border-emerald-200 bg-emerald-50/30'
+                              : item.status === 'parsing'
+                              ? 'border-amber-300 bg-amber-50/40'
+                              : item.status === 'error'
+                              ? 'border-red-200 bg-red-50/40'
+                              : 'border-slate-200 bg-white'
+                          }`}
+                        >
+                          {/* File Header */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200/70 mb-3">
+                            <div className="flex items-center gap-2.5">
+                              <span className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 text-xs font-black flex items-center justify-center font-mono shrink-0">
+                                {index + 1}
+                              </span>
+                              <div className="w-8 h-8 rounded-lg bg-red-100 border border-red-200 flex items-center justify-center shrink-0 text-red-600">
+                                <FileType className="w-4 h-4" />
+                              </div>
+                              <div className="truncate max-w-xs sm:max-w-md">
+                                <div className="text-xs sm:text-sm font-bold text-slate-800 truncate" title={item.fileName}>
+                                  {item.fileName}
+                                </div>
+                                <div className="text-[11px] text-slate-500 flex items-center gap-2">
+                                  <span>{item.fileSizeFormatted}</span>
+                                  {item.pageCount > 0 && <span>• {item.pageCount} صفحة</span>}
+                                </div>
+                              </div>
+                            </div>
 
-                    {/* Extracted success status */}
-                    {!isParsingPDF && newContent.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-emerald-200/60 flex items-center justify-between text-xs text-emerald-800">
-                        <span className="flex items-center gap-1.5 font-semibold">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                          <span>تم استخراج المواد وتعبئة الحقول بنجاح بواسطة الذكاء الاصطناعي، ويمكنك مراجعتها وتعديلها أدناه.</span>
-                        </span>
-                        <span className="text-[11px] text-gray-500 font-mono shrink-0 mr-2">
-                          {newContent.length} حرف
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                )}
+                            <div className="flex items-center gap-2 self-end sm:self-center">
+                              {/* Status Badges */}
+                              {item.status === 'ready' && (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2.5 py-1 rounded-full">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                  جاهز ({item.content.length} حرف)
+                                </span>
+                              )}
+                              {item.status === 'parsing' && (
+                                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-800 bg-amber-100 border border-amber-300 px-2.5 py-1 rounded-full">
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                                  {item.progressPercent}% {item.statusText || 'جاري الاستخراج...'}
+                                </span>
+                              )}
+                              {item.status === 'pending' && (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
+                                  <Clock className="w-3 h-3" />
+                                  في الانتظار...
+                                </span>
+                              )}
+                              {item.status === 'error' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRetryQueuedItem(item.id)}
+                                  className="inline-flex items-center gap-1 text-[11px] font-bold text-red-700 bg-red-100 hover:bg-red-200 border border-red-300 px-2 py-1 rounded-lg transition-colors cursor-pointer"
+                                  title="إعادة المحاولة"
+                                >
+                                  <RotateCcw className="w-3 h-3" />
+                                  إعادة المحاولة
+                                </button>
+                              )}
 
-                {/* Parsing error notification */}
-                {pdfParseError && (
-                  <div className="mt-2 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-xs flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
-                      <span>{pdfParseError}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveQueuedItem(item.id)}
+                                className="p-1 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                                title="إزالة هذا الملف من القائمة"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Progress bar during parsing */}
+                          {item.status === 'parsing' && (
+                            <div className="mb-3">
+                              <div className="w-full h-2 bg-amber-100 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-gradient-to-r from-amber-500 to-emerald-600 transition-all duration-300"
+                                  style={{ width: `${item.progressPercent}%` }}
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Error banner */}
+                          {item.status === 'error' && (
+                            <div className="mb-3 p-2.5 bg-red-100/70 border border-red-200 text-red-800 rounded-lg text-xs flex items-center gap-2">
+                              <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+                              <span>{item.error || 'تعذر استخراج المواد القانونية من هذا الملف.'}</span>
+                            </div>
+                          )}
+
+                          {/* Editable Title & Category Inputs */}
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div className="md:col-span-2">
+                              <label className="block text-xs font-bold text-slate-700 mb-1">
+                                اسم القانون أو القرار التشريعي <span className="text-red-500">*</span>
+                              </label>
+                              <input
+                                type="text"
+                                value={item.title}
+                                onChange={(e) => handleUpdateQueuedTitle(item.id, e.target.value)}
+                                placeholder="اكتب أو عدّل اسم القانون هنا..."
+                                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#12281e]"
+                                required
+                              />
+                            </div>
+
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="block text-xs font-bold text-slate-700">
+                                  التصنيف <span className="text-red-500">*</span>
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCategoryModalError(null);
+                                    setCategoryModalSuccess(null);
+                                    setCategoryToDelete(null);
+                                    setShowCategoryModal(true);
+                                  }}
+                                  className="text-[10px] font-bold text-emerald-800 hover:underline cursor-pointer"
+                                >
+                                  + تصنيف جديد
+                                </button>
+                              </div>
+                              <select
+                                value={item.category}
+                                onChange={(e) => {
+                                  if (e.target.value === '__add_new__') {
+                                    setCategoryModalError(null);
+                                    setCategoryModalSuccess(null);
+                                    setCategoryToDelete(null);
+                                    setShowCategoryModal(true);
+                                  } else {
+                                    handleUpdateQueuedCategory(item.id, e.target.value);
+                                  }
+                                }}
+                                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs sm:text-sm text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-[#12281e]"
+                              >
+                                {categories.map((c) => (
+                                  <option key={c.id} value={c.name}>
+                                    {c.name}
+                                  </option>
+                                ))}
+                                <option value="__add_new__" className="text-emerald-700 font-bold bg-emerald-50">
+                                  ➕ إضافة تصنيف جديد...
+                                </option>
+                              </select>
+                            </div>
+                          </div>
+
+                          {/* Extracted Content Preview Toggle */}
+                          {item.status === 'ready' && item.content && (
+                            <div className="mt-3 pt-2.5 border-t border-slate-200/70">
+                              <button
+                                type="button"
+                                onClick={() => handleTogglePreview(item.id)}
+                                className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
+                              >
+                                <Eye className="w-3.5 h-3.5 text-[#1b5e3a]" />
+                                <span>
+                                  {item.isExpanded ? 'إخفاء معاينة المواد القانونية' : 'معاينة نصوص المواد القانونية المستخرجة'}
+                                </span>
+                                {item.isExpanded ? (
+                                  <ChevronUp className="w-3.5 h-3.5" />
+                                ) : (
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+
+                              {item.isExpanded && (
+                                <div className="mt-2 p-3 bg-white border border-slate-200 rounded-lg max-h-48 overflow-y-auto text-xs text-slate-700 font-sans whitespace-pre-wrap leading-relaxed">
+                                  {item.content}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setPdfParseError(null)}
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
+
+                    {/* Batch Action Submit Footer */}
+                    <div className="p-4 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900">
+                          جاهز للحفظ في قاعدة المعرفة
+                        </h4>
+                        <p className="text-xs text-slate-600">
+                          سيتم حفظ كافة القوانين المكتملة وتحديث المستشار الذكي RAG فورياً.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        id="batch-submit-laws-btn"
+                        onClick={handleBatchSubmit}
+                        disabled={
+                          isSubmittingBatch ||
+                          queuedLaws.filter((l) => l.status === 'ready' && l.content.trim()).length === 0
+                        }
+                        className="w-full sm:w-auto px-6 py-3 bg-[#12281e] hover:bg-[#1c3e2f] text-white text-xs sm:text-sm font-bold rounded-xl shadow-sm transition-all flex items-center justify-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                      >
+                        {isSubmittingBatch ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin text-white" />
+                            جاري حفظ وإضافة القوانين دفعة واحدة...
+                          </>
+                        ) : (
+                          <>
+                            <Database className="w-4 h-4 text-emerald-400" />
+                            إضافة كافة القوانين ({queuedLaws.filter((l) => l.status === 'ready').length}) إلى قاعدة المعرفة دفعة واحدة
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
             )}
 
-            <form onSubmit={handleCreateLaw} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="md:col-span-2">
+            {/* MANUAL ENTRY MODE */}
+            {inputMode === 'manual' && (
+              <form onSubmit={handleCreateLaw} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-bold text-gray-700 mb-1">
+                      عنوان القانون أو التشريع <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      id="law-title-input"
+                      type="text"
+                      value={newTitle}
+                      onChange={(e) => setNewTitle(e.target.value)}
+                      placeholder="مثال: قرار بقانون رقم (8) لسنة 2011م بشأن ضريبة الدخل وتعديلاته"
+                      className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-xs sm:text-sm text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-gray-700">
+                        التصنيف القانوني <span className="text-red-500">*</span>
+                      </label>
+                      <button
+                        id="manage-categories-btn"
+                        type="button"
+                        onClick={() => {
+                          setCategoryModalError(null);
+                          setCategoryModalSuccess(null);
+                          setCategoryToDelete(null);
+                          setShowCategoryModal(true);
+                        }}
+                        className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-50 hover:bg-emerald-100/90 px-2.5 py-0.5 rounded-md border border-emerald-200 transition-colors cursor-pointer"
+                        title="إدارة وتخصيص وحذف التصنيفات القانونية"
+                      >
+                        <Settings className="w-3.5 h-3.5 text-emerald-700" />
+                        <span>إدارة التصنيفات</span>
+                      </button>
+                    </div>
+                    <select
+                      id="law-category-select"
+                      value={newCategory}
+                      onChange={(e) => {
+                        if (e.target.value === '__add_new__') {
+                          setCategoryModalError(null);
+                          setCategoryModalSuccess(null);
+                          setCategoryToDelete(null);
+                          setShowCategoryModal(true);
+                        } else {
+                          setNewCategory(e.target.value);
+                        }
+                      }}
+                      className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-xs sm:text-sm text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]"
+                    >
+                      {categories.map((cat) => (
+                        <option key={cat.id} value={cat.name}>
+                          {cat.name}
+                        </option>
+                      ))}
+                      <option value="__add_new__" className="text-emerald-700 font-bold bg-emerald-50">
+                        ➕ إضافة تصنيف جديد...
+                      </option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
                   <label className="block text-xs font-bold text-gray-700 mb-1">
-                    عنوان القانون أو التشريع <span className="text-red-500">*</span>
+                    نص المواد الكامل والبنود القانونية <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    id="law-title-input"
-                    type="text"
-                    value={newTitle}
-                    onChange={(e) => setNewTitle(e.target.value)}
-                    placeholder="مثال: قرار بقانون رقم (8) لسنة 2011م بشأن ضريبة الدخل وتعديلاته"
-                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-xs sm:text-sm text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]"
+                  <textarea
+                    id="law-content-textarea"
+                    rows={6}
+                    value={newContent}
+                    onChange={(e) => setNewContent(e.target.value)}
+                    placeholder="أدخل نصوص المواد القانونية، الأرقام، النسب، الإعفاءات، وشروط التطبيق بالتفصيل..."
+                    className="w-full p-4 bg-slate-50/70 border border-slate-200 rounded-xl text-sm text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e] font-sans leading-relaxed transition-all"
                     required
                   />
                 </div>
 
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-bold text-gray-700">
-                      التصنيف القانوني <span className="text-red-500">*</span>
-                    </label>
-                    <button
-                      id="manage-categories-btn"
-                      type="button"
-                      onClick={() => {
-                        setCategoryModalError(null);
-                        setCategoryModalSuccess(null);
-                        setCategoryToDelete(null);
-                        setShowCategoryModal(true);
-                      }}
-                      className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-50 hover:bg-emerald-100/90 px-2.5 py-0.5 rounded-md border border-emerald-200 transition-colors cursor-pointer"
-                      title="إدارة وتخصيص وحذف التصنيفات القانونية"
-                    >
-                      <Settings className="w-3.5 h-3.5 text-emerald-700" />
-                      <span>إدارة التصنيفات</span>
-                    </button>
-                  </div>
-                  <select
-                    id="law-category-select"
-                    value={newCategory}
-                    onChange={(e) => {
-                      if (e.target.value === '__add_new__') {
-                        setCategoryModalError(null);
-                        setCategoryModalSuccess(null);
-                        setCategoryToDelete(null);
-                        setShowCategoryModal(true);
-                      } else {
-                        setNewCategory(e.target.value);
-                      }
-                    }}
-                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-xs sm:text-sm text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]"
+                <div className="flex justify-end">
+                  <button
+                    id="law-submit-btn"
+                    type="submit"
+                    disabled={submittingLaw}
+                    className="px-5 py-2.5 bg-[#12281e] hover:bg-[#1c3e2f] text-white text-xs sm:text-sm font-bold rounded-lg shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50"
                   >
-                    {categories.map((cat) => (
-                      <option key={cat.id} value={cat.name}>
-                        {cat.name}
-                      </option>
-                    ))}
-                    <option value="__add_new__" className="text-emerald-700 font-bold bg-emerald-50">
-                      ➕ إضافة تصنيف جديد...
-                    </option>
-                  </select>
+                    {submittingLaw ? (
+                      'جاري الحفظ في قاعدة البيانات...'
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4" />
+                        إضافة القانون إلى قاعدة المعرفة
+                      </>
+                    )}
+                  </button>
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">
-                  نص المواد الكامل والبنود القانونية <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  id="law-content-textarea"
-                  rows={6}
-                  value={newContent}
-                  onChange={(e) => setNewContent(e.target.value)}
-                  placeholder="أدخل نصوص المواد القانونية، الأرقام، النسب، الإعفاءات، وشروط التطبيق بالتفصيل..."
-                  className="w-full p-4 bg-slate-50/70 border border-slate-200 rounded-xl text-sm text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e] font-sans leading-relaxed transition-all"
-                  required
-                />
-              </div>
-
-              <div className="flex justify-end">
-                <button
-                  id="law-submit-btn"
-                  type="submit"
-                  disabled={submittingLaw}
-                  className="px-5 py-2.5 bg-[#12281e] hover:bg-[#1c3e2f] text-white text-xs sm:text-sm font-bold rounded-lg shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50"
-                >
-                  {submittingLaw ? (
-                    'جاري الحفظ في قاعدة البيانات...'
-                  ) : (
-                    <>
-                      <Plus className="w-4 h-4" />
-                      إضافة القانون إلى قاعدة المعرفة
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
+              </form>
+            )}
           </div>
 
           {/* Laws List & Management */}

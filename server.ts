@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 // Vite is dynamically imported in local dev mode
 import { GoogleGenAI, Type } from '@google/genai';
+import { PDFParse } from 'pdf-parse';
 import dotenv from 'dotenv';
 import {
   initFirestore,
@@ -390,6 +391,7 @@ interface DBData {
   settings?: DBSettings;
   supervisors?: StoredSupervisor[];
   relatedSites?: StoredRelatedSite[];
+  relatedSiteCategories?: string[];
   partners?: StoredPartner[];
   platformAbout?: StoredPlatformAbout;
   contactInfo?: StoredContactInfo;
@@ -494,6 +496,11 @@ function initDB(): DBData {
       }
       if (!data.relatedSites || data.relatedSites.length === 0) {
         data.relatedSites = [...DEFAULT_RELATED_SITES];
+      }
+      if (!data.relatedSiteCategories || data.relatedSiteCategories.length === 0) {
+        data.relatedSiteCategories = Array.from(
+          new Set((data.relatedSites || DEFAULT_RELATED_SITES).map((s) => s.category).filter(Boolean))
+        );
       }
       if (!data.platformAbout) {
         data.platformAbout = { ...DEFAULT_PLATFORM_ABOUT };
@@ -1417,6 +1424,128 @@ app.get('/api/related-sites', (req, res) => {
   res.json({ relatedSites: db.relatedSites });
 });
 
+// Get all related site categories with counts
+app.get('/api/related-sites/categories', (req, res) => {
+  if (!db.relatedSites) {
+    db.relatedSites = [...DEFAULT_RELATED_SITES];
+  }
+  if (!db.relatedSiteCategories) {
+    db.relatedSiteCategories = Array.from(
+      new Set(db.relatedSites.map((s) => s.category).filter(Boolean))
+    );
+  }
+
+  const counts: Record<string, number> = {};
+  db.relatedSites.forEach((site) => {
+    const cat = (site.category && site.category.trim()) || 'عام';
+    counts[cat] = (counts[cat] || 0) + 1;
+  });
+
+  const allNames = new Set<string>([...db.relatedSiteCategories, ...Object.keys(counts)]);
+  const categories = Array.from(allNames)
+    .filter(Boolean)
+    .map((name) => ({
+      name,
+      count: counts[name] || 0,
+    }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ar'));
+
+  res.json({ categories });
+});
+
+// Add new related site category
+app.post('/api/admin/related-sites/categories', async (req, res) => {
+  const { name } = req.body;
+  if (!name || !String(name).trim()) {
+    return res.status(400).json({ error: 'يرجى إدخال اسم التصنيف' });
+  }
+  const cleanName = String(name).trim();
+
+  if (!db.relatedSiteCategories) {
+    db.relatedSiteCategories = Array.from(
+      new Set((db.relatedSites || DEFAULT_RELATED_SITES).map((s) => s.category).filter(Boolean))
+    );
+  }
+
+  if (db.relatedSiteCategories.includes(cleanName)) {
+    return res.status(400).json({ error: 'هذا التصنيف موجود مسبقاً' });
+  }
+
+  db.relatedSiteCategories.push(cleanName);
+  saveDB();
+
+  res.status(201).json({
+    success: true,
+    message: `تمت إضافة تصنيف "${cleanName}" بنجاح`,
+    category: cleanName,
+    categories: db.relatedSiteCategories,
+  });
+});
+
+// Rename related site category (updates all sites in this category)
+app.put('/api/admin/related-sites/categories/rename', async (req, res) => {
+  const { oldName, newName } = req.body;
+  if (!oldName || !newName || !String(newName).trim()) {
+    return res.status(400).json({ error: 'الاسم الحالي والاسم الجديد كلاهما مطلوبان' });
+  }
+
+  const cleanOld = String(oldName).trim();
+  const cleanNew = String(newName).trim();
+
+  if (!db.relatedSites) {
+    db.relatedSites = [...DEFAULT_RELATED_SITES];
+  }
+  if (!db.relatedSiteCategories) {
+    db.relatedSiteCategories = Array.from(
+      new Set(db.relatedSites.map((s) => s.category).filter(Boolean))
+    );
+  }
+
+  let updatedCount = 0;
+  for (let i = 0; i < db.relatedSites.length; i++) {
+    if (db.relatedSites[i].category === cleanOld) {
+      db.relatedSites[i].category = cleanNew;
+      updatedCount++;
+      await saveRelatedSiteToFirestore(db.relatedSites[i]);
+    }
+  }
+
+  db.relatedSiteCategories = db.relatedSiteCategories.map((c) => (c === cleanOld ? cleanNew : c));
+  if (!db.relatedSiteCategories.includes(cleanNew)) {
+    db.relatedSiteCategories.push(cleanNew);
+  }
+
+  saveDB();
+
+  res.json({
+    success: true,
+    message: `تم تغيير مسمى التصنيف إلى "${cleanNew}" وتحديث ${updatedCount} موقع مرتبط به بنجاح`,
+    updatedCount,
+    relatedSites: db.relatedSites,
+  });
+});
+
+// Delete related site category
+app.delete('/api/admin/related-sites/categories/:name', async (req, res) => {
+  const { name } = req.params;
+  const decodedName = decodeURIComponent(name).trim();
+
+  if (!db.relatedSiteCategories) {
+    db.relatedSiteCategories = Array.from(
+      new Set((db.relatedSites || DEFAULT_RELATED_SITES).map((s) => s.category).filter(Boolean))
+    );
+  }
+
+  db.relatedSiteCategories = db.relatedSiteCategories.filter((c) => c !== decodedName);
+  saveDB();
+
+  res.json({
+    success: true,
+    message: `تم حذف التصنيف "${decodedName}" بنجاح`,
+    categories: db.relatedSiteCategories,
+  });
+});
+
 app.post('/api/admin/related-sites', async (req, res) => {
   const { title, description, url, category, iconType, isOfficial } = req.body;
   if (!title || !String(title).trim() || !url || !String(url).trim()) {
@@ -1426,13 +1555,23 @@ app.post('/api/admin/related-sites', async (req, res) => {
   if (!db.relatedSites) {
     db.relatedSites = [...DEFAULT_RELATED_SITES];
   }
+  if (!db.relatedSiteCategories) {
+    db.relatedSiteCategories = Array.from(
+      new Set(db.relatedSites.map((s) => s.category).filter(Boolean))
+    );
+  }
+
+  const assignedCategory = String(category || 'خدمات حكومية').trim();
+  if (assignedCategory && !db.relatedSiteCategories.includes(assignedCategory)) {
+    db.relatedSiteCategories.push(assignedCategory);
+  }
 
   const newSite: StoredRelatedSite = {
     id: `site-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
     title: String(title).trim(),
     description: String(description || '').trim(),
     url: String(url).trim(),
-    category: String(category || 'خدمات حكومية').trim(),
+    category: assignedCategory,
     iconType: String(iconType || 'globe').trim(),
     isOfficial: isOfficial !== false,
     createdAt: new Date().toISOString(),
@@ -1457,10 +1596,20 @@ app.put('/api/admin/related-sites/:id', async (req, res) => {
   if (!db.relatedSites) {
     db.relatedSites = [...DEFAULT_RELATED_SITES];
   }
+  if (!db.relatedSiteCategories) {
+    db.relatedSiteCategories = Array.from(
+      new Set(db.relatedSites.map((s) => s.category).filter(Boolean))
+    );
+  }
 
   const index = db.relatedSites.findIndex((s) => s.id === id);
   if (index === -1) {
     return res.status(404).json({ error: 'الموقع غير موجود' });
+  }
+
+  const assignedCategory = category !== undefined ? String(category).trim() : db.relatedSites[index].category;
+  if (assignedCategory && !db.relatedSiteCategories.includes(assignedCategory)) {
+    db.relatedSiteCategories.push(assignedCategory);
   }
 
   const existing = db.relatedSites[index];
@@ -1469,7 +1618,7 @@ app.put('/api/admin/related-sites/:id', async (req, res) => {
     title: title !== undefined ? String(title).trim() : existing.title,
     description: description !== undefined ? String(description).trim() : existing.description,
     url: url !== undefined ? String(url).trim() : existing.url,
-    category: category !== undefined ? String(category).trim() : existing.category,
+    category: assignedCategory,
     iconType: iconType !== undefined ? String(iconType).trim() : existing.iconType,
     isOfficial: isOfficial !== undefined ? Boolean(isOfficial) : existing.isOfficial,
   };
@@ -2131,7 +2280,7 @@ app.delete('/api/admin/users/:id', async (req, res) => {
 
 // --- Laws Management Endpoints ---
 
-// PDF Parsing & AI Legal Extraction endpoint powered directly by Gemini
+// PDF Parsing & AI Legal Extraction endpoint powered directly by Gemini and local PDFParse engine
 app.post('/api/admin/parse-pdf', async (req, res) => {
   try {
     const { base64Data, fileName } = req.body;
@@ -2145,19 +2294,37 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
       .replace(/[-_]+/g, ' ')
       .trim();
 
-    // Determine estimated page count if possible via quick buffer check
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    // 1. Direct, robust text extraction via PDFParse (works offline and parses all text streams)
+    let localPdfText = '';
     let estimatedPages = 1;
     try {
-      const buffer = Buffer.from(base64Data, 'base64');
-      const matches = buffer.toString('binary').match(/\/Type\s*\/Page[^s]/g);
-      if (matches && matches.length > 0) {
-        estimatedPages = matches.length;
+      const parser: any = new (PDFParse as any)({ data: buffer });
+      await parser.load();
+      const rawParsedText: any = await parser.getText();
+      const info: any = await parser.getInfo().catch(() => null);
+      await parser.destroy().catch(() => {});
+      if (rawParsedText && typeof rawParsedText === 'string') {
+        localPdfText = (rawParsedText as string).trim();
       }
-    } catch {
-      // Non-blocking if buffer parsing fails
+      if (info && info.total) {
+        estimatedPages = info.total;
+      }
+    } catch (parserErr) {
+      console.warn('[AI-PDF] PDFParse direct buffer parse warning:', parserErr);
     }
 
-    // 1. Dedicated AI extraction via Gemini
+    if (estimatedPages === 1) {
+      try {
+        const matches = buffer.toString('binary').match(/\/Type\s*\/Page[^s]/g);
+        if (matches && matches.length > 0) {
+          estimatedPages = matches.length;
+        }
+      } catch {}
+    }
+
+    // 2. Structured AI extraction via Gemini
     const prompt = `قم بقراءة واستخراج كافة المواد والبنود والقرارات القانونية الواردة في هذا الملف بالكامل وباللغة العربية، مادة بمادة وبنداً ببند، وتجاهل أرقام الصفحات والترويسات المتكررة، ونظم النصوص المستخرجة بشكل رسمي وواضح.
 
 المطلوب بدقة في النتيجة:
@@ -2176,12 +2343,11 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
    - رتب ونظم النصوص بشكل رسمي ومنسق وواضح ومريح للقراءة والمطالعة القانونية.
 4. ملخص موجز (summary): نبذة موجزة وشاملة توضح الغرض ونطاق تطبيق هذا القانون أو القرار.`;
 
-    const ai = getGemini();
     const modelsToTry = [
-      'gemini-2.5-flash',
-      'gemini-flash-latest',
       'gemini-3.8-flash',
       'gemini-3.1-flash-lite',
+      'gemini-flash-latest',
+      'gemini-2.5-flash',
     ];
 
     let extractedData: {
@@ -2191,106 +2357,153 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
       summary?: string;
     } | null = null;
     let usedModel: string = '';
-    let lastError: any = null;
 
-    for (const model of modelsToTry) {
-      try {
-        console.log(`[AI-PDF] Extracting legal document via Gemini model: ${model}`);
-        const response = await ai.models.generateContent({
-          model,
-          contents: [
-            {
-              inlineData: {
-                mimeType: 'application/pdf',
-                data: base64Data,
+    const hasDirectText = localPdfText.length > 80;
+
+    try {
+      const ai = getGemini();
+
+      for (const model of modelsToTry) {
+        try {
+          console.log(`[AI-PDF] Extracting legal document via Gemini model: ${model} (directText: ${hasDirectText})`);
+          
+          let contentsPayload: any;
+          if (hasDirectText) {
+            // Trim text safely if excessively long (e.g. 100k chars) to avoid quota blowouts
+            const safeText = localPdfText.length > 100000 
+              ? localPdfText.slice(0, 100000) + '\n[...تم اختصار باقي المرفقات القانونية...]' 
+              : localPdfText;
+            contentsPayload = [
+              {
+                text: `${prompt}\n\nالنصوص القانونية المستخرجة من المستند:\n"""\n${safeText}\n"""`,
               },
-            },
-            {
-              text: prompt,
-            },
-          ],
-          config: {
-            systemInstruction:
-              'أنت خبير قانوني وتشريعي متخصص في استخراج وهيكلة القوانين والأنظمة والقرارات الفلسطينية من وثائق PDF الرسمية والممسوحة ضوئياً.',
-            responseMimeType: 'application/json',
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                title: {
-                  type: Type.STRING,
-                  description: 'عنوان القانون أو التشريع الرسمي المستخرج بالكامل.',
-                },
-                category: {
-                  type: Type.STRING,
-                  description: 'التصنيف التشريعي الأنسب (جمارك، ضريبة دخل، ضريبة القيمة المضافة، رسوم ومكوس، إلخ).',
-                },
-                content: {
-                  type: Type.STRING,
-                  description:
-                    'النص الكامل والشامل لكافة المواد والبنود والقرارات القانونية مادة بمادة وبنداً ببند.',
-                },
-                summary: {
-                  type: Type.STRING,
-                  description: 'ملخص موجز لنطاق وأهداف التشريع.',
+            ];
+          } else {
+            contentsPayload = [
+              {
+                inlineData: {
+                  mimeType: 'application/pdf',
+                  data: base64Data,
                 },
               },
-              required: ['title', 'category', 'content'],
-            },
-          },
-        });
-
-        if (response?.text) {
-          try {
-            const parsed = JSON.parse(response.text);
-            if (parsed && typeof parsed === 'object') {
-              extractedData = {
-                title: (parsed.title || cleanTitle).trim(),
-                category: (parsed.category || 'جمارك').trim(),
-                content: (parsed.content || '').trim(),
-                summary: (parsed.summary || '').trim(),
-              };
-              usedModel = model;
-              console.log(`[AI-PDF] Successfully extracted using ${model}: ${extractedData.title}`);
-              break;
-            }
-          } catch (jsonErr) {
-            console.warn(`[AI-PDF] JSON parse issue with model ${model}:`, jsonErr);
+              {
+                text: prompt,
+              },
+            ];
           }
+
+          let response = null;
+          let retryCount = 0;
+          while (retryCount < 2) {
+            try {
+              response = await ai.models.generateContent({
+                model,
+                contents: contentsPayload,
+                config: {
+                  systemInstruction:
+                    'أنت خبير قانوني وتشريعي متخصص في استخراج وهيكلة القوانين والأنظمة والقرارات الفلسطينية من وثائق PDF الرسمية والممسوحة ضوئياً.',
+                  responseMimeType: 'application/json',
+                  responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                      title: {
+                        type: Type.STRING,
+                        description: 'عنوان القانون أو التشريع الرسمي المستخرج بالكامل.',
+                      },
+                      category: {
+                        type: Type.STRING,
+                        description: 'التصنيف التشريعي الأنسب (جمارك، ضريبة دخل، ضريبة القيمة المضافة، رسوم ومكوس، إلخ).',
+                      },
+                      content: {
+                        type: Type.STRING,
+                        description:
+                          'النص الكامل والشامل لكافة المواد والبنود والقرارات القانونية مادة بمادة وبنداً ببند.',
+                      },
+                      summary: {
+                        type: Type.STRING,
+                        description: 'ملخص موجز لنطاق وأهداف التشريع.',
+                      },
+                    },
+                    required: ['title', 'category', 'content'],
+                  },
+                },
+              });
+              break;
+            } catch (err: any) {
+              const isTransient =
+                err?.status === 503 ||
+                err?.message?.includes('503') ||
+                err?.message?.includes('UNAVAILABLE') ||
+                err?.message?.includes('high demand');
+              if (isTransient && retryCount === 0) {
+                console.log(`[AI-PDF] Model ${model} 503 spike, waiting 800ms to retry...`);
+                await new Promise((resolve) => setTimeout(resolve, 800));
+                retryCount++;
+                continue;
+              }
+              throw err;
+            }
+          }
+
+          if (response?.text) {
+            try {
+              const parsed = JSON.parse(response.text);
+              if (parsed && typeof parsed === 'object') {
+                extractedData = {
+                  title: (parsed.title || cleanTitle).trim(),
+                  category: (parsed.category || 'جمارك').trim(),
+                  content: (parsed.content || '').trim(),
+                  summary: (parsed.summary || '').trim(),
+                };
+                usedModel = model;
+                console.log(`[AI-PDF] Successfully extracted using ${model}: ${extractedData.title}`);
+                break;
+              }
+            } catch (jsonErr) {
+              console.warn(`[AI-PDF] JSON parse issue with model ${model}:`, jsonErr);
+            }
+          }
+        } catch (err: any) {
+          console.warn(`[AI-PDF] Gemini call failed with model ${model}:`, err?.message || err);
         }
-      } catch (err: any) {
-        lastError = err;
-        console.warn(`[AI-PDF] Gemini call failed with model ${model}:`, err?.message || err);
       }
+    } catch (aiInitErr) {
+      console.warn('[AI-PDF] Gemini client initialization error:', aiInitErr);
     }
 
-    // 2. Fallback to basic text stream extraction from buffer if Gemini models failed
+    // 3. Resilient fallback to local extracted text if Gemini quota/503 prevented AI extraction
     if (!extractedData || !extractedData.content) {
-      console.warn('[AI-PDF] Gemini models unavailable or quota exceeded, attempting text stream fallback...');
-      try {
-        const buffer = Buffer.from(base64Data, 'base64');
-        const binaryStr = buffer.toString('latin1');
-        const textBlocks: string[] = [];
-        const textRegex = /BT\s*([\s\S]*?)\s*ET/g;
-        let m;
-        while ((m = textRegex.exec(binaryStr)) !== null) {
-          const rawBlock = m[1];
-          const strMatches = rawBlock.match(/\(([^)]+)\)/g);
-          if (strMatches) {
-            const cleanStr = strMatches.map((s) => s.slice(1, -1)).join(' ');
-            if (cleanStr.trim()) textBlocks.push(cleanStr);
+      if (localPdfText && localPdfText.length > 20) {
+        console.log('[AI-PDF] Using local extracted text fallback (guaranteeing zero failure)...');
+        const lines = localPdfText.split('\n').map((l) => l.trim()).filter(Boolean);
+        let detectedTitle = cleanTitle;
+        for (const line of lines.slice(0, 8)) {
+          if (
+            line.length > 5 &&
+            line.length < 120 &&
+            (line.includes('قانون') || line.includes('قرار') || line.includes('نظام') || line.includes('تعليمات') || line.includes('مرسوم'))
+          ) {
+            detectedTitle = line;
+            break;
           }
         }
-        if (textBlocks.length > 0) {
-          const rawText = textBlocks.join('\n');
-          extractedData = {
-            title: cleanTitle,
-            category: 'جمارك',
-            content: rawText.slice(0, 50000).trim(),
-            summary: 'تم استخراج النصوص التشريعية المتاحة من الملف.',
-          };
+
+        let detectedCategory = 'جمارك';
+        const lowerText = localPdfText.toLowerCase();
+        if (lowerText.includes('ضريبة دخل') || lowerText.includes('الدخل الخاضع') || lowerText.includes('ضريبة الدخل')) {
+          detectedCategory = 'ضريبة دخل';
+        } else if (lowerText.includes('قيمة مضافة') || lowerText.includes('القيمة المضافة') || lowerText.includes('فواتير ضريبية')) {
+          detectedCategory = 'ضريبة القيمة المضافة';
+        } else if (lowerText.includes('رسوم') || lowerText.includes('طوابع') || lowerText.includes('مكوس')) {
+          detectedCategory = 'رسوم ومكوس';
         }
-      } catch (fallbackErr) {
-        console.error('[AI-PDF] Fallback extractor error:', fallbackErr);
+
+        extractedData = {
+          title: detectedTitle,
+          category: detectedCategory,
+          content: localPdfText,
+          summary: `تم استخراج نصوص هذا التشريع (${detectedTitle}) بنجاح من الملف المرفق.`,
+        };
       }
     }
 
@@ -2310,8 +2523,8 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
       suggestedTitle: extractedData.title || cleanTitle,
       suggestedCategory: extractedData.category || 'جمارك',
       text: extractedData.content || '',
-      method: usedModel ? 'gemini_ai' : 'fallback_parser',
-      model: usedModel,
+      method: usedModel ? 'gemini_ai' : 'pdf_parser',
+      model: usedModel || 'local_parser',
     });
   } catch (err: any) {
     console.error('Server PDF parsing error:', err);
@@ -2324,6 +2537,58 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
 // Get all laws
 app.get('/api/laws', (req, res) => {
   res.json({ laws: db.laws });
+});
+
+// Create multiple laws in batch
+app.post('/api/laws/batch', async (req, res) => {
+  try {
+    const { laws } = req.body;
+    if (!Array.isArray(laws) || laws.length === 0) {
+      return res.status(400).json({ error: 'يرجى إرسال قائمة القوانين والتشريعات المطلوب إضافتها' });
+    }
+
+    const createdLaws: StoredLaw[] = [];
+    const errors: string[] = [];
+
+    for (let i = 0; i < laws.length; i++) {
+      const item = laws[i];
+      if (!item.title || !String(item.title).trim() || !item.content || !String(item.content).trim()) {
+        errors.push(`الملف رقم ${i + 1} يفتقد إلى العنوان أو نص المواد القانونية`);
+        continue;
+      }
+
+      const newLaw: StoredLaw = {
+        id: 'law-' + (Date.now() + i) + '-' + Math.random().toString(36).substring(2, 6),
+        title: String(item.title).trim(),
+        category: item.category ? String(item.category).trim() : 'جمارك',
+        content: String(item.content).trim(),
+        sourceFileName: item.sourceFileName ? String(item.sourceFileName).trim() : undefined,
+        sourceFileSize: item.sourceFileSize ? String(item.sourceFileSize).trim() : undefined,
+        pageCount: item.pageCount ? Number(item.pageCount) : undefined,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      createdLaws.push(newLaw);
+      db.laws.unshift(newLaw);
+      // Persist to Cloud Firestore
+      saveLawToFirestore(newLaw).catch((err) =>
+        console.error(`[Firestore] Error saving batch law ${newLaw.id}:`, err)
+      );
+    }
+
+    cachedIndexedChunks = null;
+    saveDB();
+
+    res.status(201).json({
+      message: `تمت إضافة ${createdLaws.length} تشريعات إلى قاعدة المعرفة بنجاح`,
+      laws: createdLaws,
+      errors: errors.length > 0 ? errors : undefined,
+    });
+  } catch (err: any) {
+    console.error('Batch laws save error:', err);
+    res.status(500).json({ error: 'تعذر حفظ دفعة القوانين: ' + (err?.message || 'خطأ غير متوقع') });
+  }
 });
 
 // Create new law
@@ -2346,6 +2611,7 @@ app.post('/api/laws', async (req, res) => {
   };
 
   db.laws.unshift(newLaw);
+  cachedIndexedChunks = null;
   saveDB();
   await saveLawToFirestore(newLaw);
 
@@ -2543,47 +2809,42 @@ app.post('/api/chat', async (req, res) => {
     ? { prioritizedContext: '', fullCatalog: '' } 
     : buildStructuredLegalContext(message, laws);
 
-  // 2. Comprehensive, warm, and highly capable system instruction
-  const systemInstruction = `أنت "سَنَد"، المستشار الذكي التفاعلي المتخصص في القوانين والأنظمة الفلسطينية والضرائب والجمارك، والمساعد الشخصي الودود والمفيد للمستخدم.
+  // 2. Focused, concise, direct system instruction (on-point, no filler or bloat)
+  const systemInstruction = `أنت "سَنَد"، المستشار القانوني والضريبي والجمركي الذكي في دولة فلسطين.
 
-تتمتع بشخصية ذكية، لبقة، راقية، ومرنة في الحديث، وتلتزم بالقواعد التالية بدقة:
+القاعدة الذهبية الصارمة (أهم توجيه على الإطلاق):
+★ أجب دائماً على قدر السؤال تماماً؛ باختصار، ودقة، وتركيز مباشر في صلب الموضوع دون إطالة أو حشو أو كلام زائد حتى لا يمل القارئ.
 
-1. التحية والتفاعل الإنساني الطبيعي والدردشة الاجتماعية:
-- إذا بدأ المستخدم بالتحية (مثل: "السلام عليكم"، "أهلاً وسهلاً"، "مرحبا"، "صباح الخير"، "مساء الخير")، رد عليه بتحية تفيض بالود والترحاب واللطف.
-- إذا سألك عن حالك (مثل: "عامل ايه"، "كيف حالك"، "شخبارك"، "إزيك"، "كيفك"): أجب بعفوية ولباقة ودودة (مثل: "الحمد لله بخير ونعمة، تسلم على سؤالك ولطفك! كيف حالك أنت؟ أتمنى أن تكون بأفضل صحة وعافية. كيف أقدر أساعدك اليوم؟").
-- تفاعل بود وتقدير مع عبارات الشكر أو أي كلام اجتماعي لطيف.
+القواعد السلوكية والتنفيذية:
+1. الإيجاز المباشر والدخول في صلب الموضوع:
+- ادخل فوراً في الإجابة بدون مقدمات إنشائية مكررة، وبدون تكرار السؤال، وبدون تمهيد طويل.
+- تجنب تماماً الحشو الإنشائي والخواتم الروتينية الطويلة في نهاية كل رسالة.
 
-2. الإجابة على أي سؤال وموضوع دون قيود أو رفض:
-- أجب عن أي سؤال أو استفسار يطرحه المستخدم بذكاء ورحابة صدر ووضوح، حتى لو كان سؤالاً عاماً، علمياً، حسابياً، لغوياً، تقنياً، أو خارج إطار القوانين.
-- إياك أن ترفض الإجابة أو تقول "هذا خارج تخصصي ولا يمكنني الإجابة" أو "أنا مخصص فقط للجمارك". كن دائماً مساعداً ذكياً ومفيداً في كل ما يطرحه المستخدم.
+2. في الأسئلة القانونية والضريبية والجمركية (فلسطين):
+- إذا سأل المستخدم عن نسبة أو رقم أو رسم جمركي: أعطه النسبة أو الرسم والناتج فوراً بوضوح ودون لف ودوران.
+- إذا سأل عن مادة قانونية أو حكم تشريعي: اذكر الخلاصة المباشرة للحكم مع ذكر اسم القانون ورقم المادة باختصار شديد.
+- في الحسابات: اعرض المعادلة والناتج النهائي بالشيكل ₪ باختصار وفي أسطر معدودة.
+- لا تسرد نصوصاً أو مواد جانبية غير مطلوبة، فقط ما يُجيب عن سؤال المستخدم بدقة.
+- إذا لم تكن المعلومة متوفرة في قاعدة المعرفة، بيّن ذلك في سطر واحد دون إسهاب.
 
-3. الاستشارات والأسئلة القانونية والضريبية والجمركية (مجال التخصص الرئيسي):
-- عندما يخص سؤال المستخدم القوانين أو التشريعات أو الجمارك أو الضرائب أو الرسوم في دولة فلسطين:
-  * استند باحترافية ودقة متناهية إلى نصوص المواد والقرارات المتاحة في "قاعدة المعرفة" أدناه.
-  * اذكر اسم القانون أو القرار ورقم المادة إن وجد في النصوص.
-  * عند حساب ضريبة أو رسم، اعرض خطوات الحساب رقمياً بوضوح واذكر الناتج النهائي بالشيكل ₪ بخط بارز.
-  * إن كان هناك تفصيل تشريعي محدد جداً لم يرد بنصه الصريح في قاعدة المعرفة، قدّم التوضيح العام المفيد وانصح بمراجعة جهة الاختصاص الرسمية للإفادة القانونية النهائية.
-
-4. أسلوب الصياغة والتنسيق:
-- نسق إجاباتك باستخدام عناوين واضحة ونقاط محددة وفقرات مريحة للقراءة.
-- تحدث باللغة العربية الواضحة والسلسة دائماً، وكن إيجابياً ومستعداً للمساعدة.
+3. في الأسئلة العامة أو الدردشة:
+- أجب بذكاء ولطف ووضوح، على قدر ما طُلب منك وبأقل عدد من الكلمات الشافية والكافية.
 ${prioritizedContext ? `\n${prioritizedContext}\n` : ''}
 ${fullCatalog ? `\nقاعدة المعرفة (المرجعية التشريعية المتاحة):\n${fullCatalog}` : ''}`;
 
   try {
     const ai = getGemini();
-    // High-speed low-latency models with thinkingBudget: 0 to eliminate 6-10s reasoning delays
+    // High-speed low-latency models with proper hierarchy and fallback
     const candidateConfigs = [
       {
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3.8-flash',
         config: {
           systemInstruction,
           temperature: 0.3,
-          thinkingConfig: { thinkingBudget: 0 },
         },
       },
       {
-        model: 'gemini-3.5-flash-lite',
+        model: 'gemini-3.1-flash-lite',
         config: {
           systemInstruction,
           temperature: 0.3,
@@ -2594,6 +2855,14 @@ ${fullCatalog ? `\nقاعدة المعرفة (المرجعية التشريعي�
         config: {
           systemInstruction,
           temperature: 0.3,
+        },
+      },
+      {
+        model: 'gemini-2.5-flash',
+        config: {
+          systemInstruction,
+          temperature: 0.3,
+          thinkingConfig: { thinkingBudget: 0 },
         },
       },
     ];
@@ -2643,43 +2912,57 @@ ${fullCatalog ? `\nقاعدة المعرفة (المرجعية التشريعي�
     const contentsToSend = multiTurnContents.length > 1 ? multiTurnContents : message;
 
     for (const candidate of candidateConfigs) {
-      try {
-        response = await ai.models.generateContent({
-          model: candidate.model,
-          contents: contentsToSend,
-          config: candidate.config,
-        });
-        if (response?.text) {
+      let retryCount = 0;
+      while (retryCount < 2) {
+        try {
+          response = await ai.models.generateContent({
+            model: candidate.model,
+            contents: contentsToSend,
+            config: candidate.config,
+          });
+          if (response?.text) {
+            break;
+          }
+        } catch (e: any) {
+          lastErr = e;
+          const isQuotaError =
+            e?.status === 429 ||
+            e?.message?.includes('429') ||
+            e?.message?.includes('quota') ||
+            e?.message?.includes('RESOURCE_EXHAUSTED');
+          const isUnavailable =
+            e?.status === 503 ||
+            e?.message?.includes('503') ||
+            e?.message?.includes('UNAVAILABLE') ||
+            e?.message?.includes('high demand');
+
+          if (isUnavailable && retryCount === 0) {
+            console.log(`[AI Model] ${candidate.model} 503 spike, waiting 600ms retry...`);
+            await new Promise((r) => setTimeout(r, 600));
+            retryCount++;
+            continue;
+          }
+
+          console.log(`[AI Model] ${candidate.model} note: ${isQuotaError ? 'Quota limit' : isUnavailable ? 'Unavailable 503' : 'Fallback'}, trying next...`);
+          
+          // If it failed possibly due to multi-turn contents structure, retry once with simple message
+          if (typeof contentsToSend !== 'string') {
+            try {
+              response = await ai.models.generateContent({
+                model: candidate.model,
+                contents: message,
+                config: candidate.config,
+              });
+              if (response?.text) {
+                break;
+              }
+            } catch {}
+          }
           break;
         }
-      } catch (e: any) {
-        lastErr = e;
-        const isQuotaError =
-          e?.status === 429 ||
-          e?.message?.includes('429') ||
-          e?.message?.includes('quota') ||
-          e?.message?.includes('RESOURCE_EXHAUSTED');
-        const isUnavailable =
-          e?.status === 503 ||
-          e?.message?.includes('503') ||
-          e?.message?.includes('UNAVAILABLE');
-
-        console.log(`[AI Model] ${candidate.model} note: ${isQuotaError ? 'Quota limit' : isUnavailable ? 'Unavailable 503' : 'Fallback'}, trying next...`);
-        
-        // If it failed possibly due to multi-turn contents structure, retry once with simple message
-        if (typeof contentsToSend !== 'string') {
-          try {
-            response = await ai.models.generateContent({
-              model: candidate.model,
-              contents: message,
-              config: candidate.config,
-            });
-            if (response?.text) {
-              break;
-            }
-          } catch {}
-        }
-        continue;
+      }
+      if (response?.text) {
+        break;
       }
     }
 
@@ -3032,21 +3315,16 @@ function generateKnowledgeFallback(query: string, laws: StoredLaw[]): string {
   }
 
   allChunks.sort((a, b) => (b.score || 0) - (a.score || 0));
-  const bestChunks = allChunks.slice(0, 3);
+  const topChunk = allChunks[0];
 
-  if (bestChunks.length > 0) {
-    let result = `### ⚖️ إجابة استرشادية مستندة إلى نصوص التشريعات المعتمدة:\n\n`;
-    for (const chunk of bestChunks) {
-      result += `#### 📜 ${chunk.lawTitle} (${chunk.category})\n`;
-      result += `**${chunk.sectionHeader}**\n\n`;
-      result += `${chunk.text}\n\n`;
-      result += `**المصدر**: نصوص المواد المعتمدة في ${chunk.lawTitle} - التشريعات الرسمية في دولة فلسطين.\n\n`;
-    }
-    result += `\n---\n*ملاحظة: هذه إجابة استرشادية مستخرجة مباشرة من قاعدة المعرفة القانونية، وليست استشارة رسمية ملزمة.*`;
+  if (topChunk && (topChunk.score || 0) > 0) {
+    let result = `**${topChunk.lawTitle}** [${topChunk.sectionHeader}]:\n\n`;
+    result += `${topChunk.text}\n\n`;
+    result += `*(المرجع: ${topChunk.lawTitle} - التشريعات الرسمية في فلسطين)*`;
     return result;
   }
 
-  return `أهلاً بك! أنا مستعد للإجابة على جميع أسئلتك واستفساراتك.\n\nإذا كان سؤالك يخص مادة أو قانوناً أو سلعة جمركية أو ضريبية معينة، يرجى كتابة تفاصيلها لأستخرج لك نصوصها وحساباتها مباشرة، أو اسألني أي سؤال تريده وسأساعدك فوراً.`;
+  return `لم يتم العثور على نص صريح ومباشر لهذا الاستفسار في قاعدة القوانين المحفوظة حالياً. يمكنك تحديد رقم المادة أو اسم القانون بدقة.`;
 }
 
 // Vite middleware & Static serving
