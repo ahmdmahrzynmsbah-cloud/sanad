@@ -28,7 +28,7 @@ export async function safeFetchJson<T = any>(res: Response): Promise<{ ok: boole
     if (text.includes('FUNCTION_INVOCATION_FAILED') || text.includes('A server error')) {
       return {
         ok: false,
-        error: 'تعذر تنفيذ الطلب على الخادم السحابي (FUNCTION_INVOCATION_FAILED).',
+        error: 'تعذر تنفيذ الطلب (تفاصيل: ' + text.substring(0, 100) + ')',
       };
     }
     return {

@@ -36,7 +36,7 @@ export const compressImageClientSide = (file: File, maxWidth: number, maxHeight:
           ctx.drawImage(img, 0, 0, width, height);
           
           // Use JPEG to guarantee small payload size
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.4);
           resolve(dataUrl);
         } else {
           resolve(img.src);
