@@ -69,25 +69,31 @@ app.use((req, res, next) => {
 
 // 2. Normalize API path if stripped by Vercel serverless functions
 app.use((req, res, next) => {
-  if (
-    !req.url.startsWith('/api') && (
-      req.url.startsWith('/auth') ||
-      req.url.startsWith('/laws') ||
-      req.url.startsWith('/categories') ||
-      req.url.startsWith('/settings') ||
-      req.url.startsWith('/admin') ||
-      req.url.startsWith('/ask') ||
-      req.url.startsWith('/export') ||
-      req.url.startsWith('/supervisors') ||
-      req.url.startsWith('/related-sites') ||
-      req.url.startsWith('/partners') ||
-      req.url.startsWith('/contact-info') ||
-      req.url.startsWith('/platform-about')
-    )
-  ) {
-    req.url = '/api' + req.url;
+  const url = req.url || '';
+  if (!url.startsWith('/api') && (
+    url.startsWith('/auth') ||
+    url.startsWith('/laws') ||
+    url.startsWith('/categories') ||
+    url.startsWith('/settings') ||
+    url.startsWith('/admin') ||
+    url.startsWith('/ask') ||
+    url.startsWith('/export') ||
+    url.startsWith('/supervisors') ||
+    url.startsWith('/related-sites') ||
+    url.startsWith('/partners') ||
+    url.startsWith('/contact-info') ||
+    url.startsWith('/platform-about') ||
+    url.startsWith('/health') ||
+    url.startsWith('/sync')
+  )) {
+    req.url = '/api' + url;
   }
   next();
+});
+
+// Quick health check endpoint (essential for Vercel/Cloud diagnostics)
+app.get(['/api/health', '/health'], (req, res) => {
+  res.status(200).json({ status: 'ok', time: new Date().toISOString() });
 });
 
 // --- Vercel & Firebase Sync Middleware ---
@@ -108,16 +114,20 @@ async function ensureDbSynced() {
     });
   }
 
-  // Bounded wait of 2500ms max so that Vercel serverless functions never timeout
+  // Bounded wait of 2000ms max so that Vercel serverless functions never timeout
   await Promise.race([
     syncPromise,
-    new Promise((resolve) => setTimeout(resolve, 2500)),
+    new Promise((resolve) => setTimeout(resolve, 2000)),
   ]);
 }
 
 app.use(async (req, res, next) => {
-  if (req.path.startsWith('/api/') && req.path !== '/api/admin/login') {
-    await ensureDbSynced();
+  if (req.path.startsWith('/api/') && req.path !== '/api/admin/login' && req.path !== '/api/health') {
+    try {
+      await ensureDbSynced();
+    } catch (err) {
+      console.error('ensureDbSynced error:', err);
+    }
   }
   next();
 });
@@ -544,7 +554,11 @@ function initDB(): DBData {
     laws: INITIAL_LAWS,
   };
 
-  fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2), 'utf-8');
+  try {
+    fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2), 'utf-8');
+  } catch (err) {
+    // Read-only filesystem or serverless ephemeral environment
+  }
   return initialData;
 }
 
@@ -2709,7 +2723,7 @@ app.get('/api/laws', (req, res) => {
 // Create multiple laws in batch
 app.post('/api/laws/batch', async (req, res) => {
   try {
-    const { laws } = req.body;
+    const { laws } = req.body || {};
     if (!Array.isArray(laws) || laws.length === 0) {
       return res.status(400).json({ error: 'يرجى إرسال قائمة القوانين والتشريعات المطلوب إضافتها' });
     }
@@ -3504,45 +3518,58 @@ function generateKnowledgeFallback(query: string, laws: StoredLaw[]): string {
   return `لم يتم العثور على نص صريح ومباشر لهذا الاستفسار في قاعدة القوانين المحفوظة حالياً. يمكنك تحديد رقم المادة أو اسم القانون بدقة.`;
 }
 
-// Vite middleware & Static serving
-
-// Vite middleware & Static serving
+// Vite middleware & Static serving (Standalone execution only)
 async function startServer() {
-  if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
-    const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else if (!process.env.VERCEL) {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-  }
-
   const isServerless = Boolean(
     process.env.VERCEL || 
+    process.env.VERCEL_ENV ||
+    process.env.NOW_REGION ||
     process.env.AWS_LAMBDA_FUNCTION_NAME || 
     process.env.NETLIFY ||
     process.env.FUNCTION_NAME
   );
 
-  if (!isServerless && process.env.NODE_ENV !== 'test') {
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`⚡ Server listening on port ${PORT} (immediate readiness)`);
-      // Non-blocking background sync with Firestore Cloud Database
-      syncWithFirestore().catch((err) => {
-        console.error('Background Firestore sync error:', err);
+  // In serverless environments, Vercel/Cloud functions invoke Express app directly
+  if (isServerless) {
+    return;
+  }
+
+  try {
+    if (process.env.NODE_ENV !== 'production') {
+      try {
+        const { createServer: createViteServer } = await import('vite');
+        const vite = await createViteServer({
+          server: { middlewareMode: true },
+          appType: 'spa',
+        });
+        app.use(vite.middlewares);
+      } catch (viteErr) {
+        console.warn('Vite dev middleware not loaded:', viteErr);
+      }
+    } else {
+      const distPath = path.join(process.cwd(), 'dist');
+      app.use(express.static(distPath));
+      app.get('*', (req, res) => {
+        res.sendFile(path.join(distPath, 'index.html'));
       });
-    });
+    }
+
+    if (process.env.NODE_ENV !== 'test') {
+      app.listen(PORT, '0.0.0.0', () => {
+        console.log(`⚡ Server listening on port ${PORT} (immediate readiness)`);
+        // Non-blocking background sync with Firestore Cloud Database
+        syncWithFirestore().catch((err) => {
+          console.error('Background Firestore sync error:', err);
+        });
+      });
+    }
+  } catch (err) {
+    console.error('Failed to start server:', err);
   }
 }
 
-startServer();
-
-
+startServer().catch((err) => {
+  console.error('Unhandled error in startServer:', err);
+});
 
 export default app;

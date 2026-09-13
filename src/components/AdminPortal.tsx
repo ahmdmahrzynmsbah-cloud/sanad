@@ -51,7 +51,7 @@ import {
   Handshake
 } from 'lucide-react';
 import { User, Law, LawCategory, LegalCategory, SystemBranding, PlatformAboutData, ContactInfo } from '../types';
-import { extractTextFromPDF, formatBytes, PDFProgress } from '../utils/pdfParser';
+import { extractTextFromPDF, formatBytes, sanitizeLawTitle, PDFProgress } from '../utils/pdfParser';
 import { SupervisorsAdminTab } from './admin/SupervisorsAdminTab';
 import { RelatedSitesAdminTab } from './admin/RelatedSitesAdminTab';
 import { PartnersAdminTab } from './admin/PartnersAdminTab';
@@ -59,6 +59,13 @@ import { AboutPlatformAdminTab } from './admin/AboutPlatformAdminTab';
 import { ContactAdminTab } from './admin/ContactAdminTab';
 import { UserDetailsModal } from './admin/UserDetailsModal';
 import { useSync } from '../utils/sync';
+import { safeFetchJson } from '../utils/safeApi';
+import {
+  directSaveLawToFirestore,
+  directSaveLawsBatchToFirestore,
+  directFetchLawsFromFirestore,
+  directDeleteLawFromFirestore,
+} from '../services/clientFirestore';
 
 export interface QueuedLawItem {
   id: string;
@@ -75,6 +82,7 @@ export interface QueuedLawItem {
   content: string;
   summary?: string;
   isExpanded?: boolean;
+  isScanned?: boolean;
 }
 
 interface AdminPortalProps {
@@ -265,18 +273,31 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
   // Fetch Laws
   const fetchLaws = async () => {
     setLawsLoading(true);
+    let loaded = false;
     try {
       const res = await fetch('/api/laws');
-      const data = await res.json();
-      if (res.ok && data.laws) {
-        setLaws(data.laws);
+      const result = await safeFetchJson<{ laws?: Law[] }>(res);
+      if (result.ok && result.data && result.data.laws) {
+        setLaws(result.data.laws);
         if (onLawsUpdated) onLawsUpdated();
+        loaded = true;
       }
     } catch (err) {
-      console.warn('Failed to fetch laws:', err);
-    } finally {
-      setLawsLoading(false);
+      console.warn('Failed to fetch laws from API, falling back to direct Firestore:', err);
     }
+
+    if (!loaded) {
+      try {
+        const firestoreLaws = await directFetchLawsFromFirestore();
+        if (firestoreLaws && firestoreLaws.length > 0) {
+          setLaws(firestoreLaws);
+          if (onLawsUpdated) onLawsUpdated();
+        }
+      } catch (fErr) {
+        console.warn('Failed to fetch laws from direct Firestore:', fErr);
+      }
+    }
+    setLawsLoading(false);
   };
 
   // Fetch Dynamic Legal Categories
@@ -960,10 +981,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
         continue;
       }
 
-      const cleanTitle = file.name
-        .replace(/\.pdf$/i, '')
-        .replace(/[-_]+/g, ' ')
-        .trim();
+      const cleanTitle = sanitizeLawTitle(file.name);
 
       const isTooBig = file.size > 35 * 1024 * 1024;
 
@@ -978,10 +996,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
         progressPercent: 0,
         statusText: isTooBig ? 'حجم الملف كبير جداً' : 'في انتظار بدء الاستخراج...',
         title: cleanTitle,
-        category: 'جمارك',
+        category: categories[0]?.name || 'جمارك',
         content: '',
         summary: '',
-        isExpanded: false,
+        isExpanded: true,
       });
     }
 
@@ -1034,6 +1052,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
         });
 
         const detectedCategory = matchCategory(result.suggestedCategory);
+        const isScanned = result.method === 'resilient_fallback' || (!result.text || result.text.length < 50);
+        const resolvedTitle = sanitizeLawTitle(result.suggestedTitle || nextItem.title || nextItem.fileName);
 
         setQueuedLaws((prev) =>
           prev.map((item) =>
@@ -1041,21 +1061,24 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
               ? {
                   ...item,
                   status: 'ready',
-                  title: result.suggestedTitle || item.title,
+                  title: resolvedTitle,
                   category: detectedCategory,
-                  content: result.text,
+                  content: result.text || `[مستند تشريعي: ${resolvedTitle}]\n\nالمادة (1):\n\nالمادة (2):`,
                   pageCount: result.numPages || item.pageCount,
                   fileSizeFormatted: result.fileSizeFormatted || item.fileSizeFormatted,
                   summary: result.summary,
                   progressPercent: 100,
-                  statusText: 'تم استخراج المواد بنجاح',
+                  statusText: isScanned ? 'مستند ممسوح ضوئياً - تم التجهيز كمسودة' : 'تم استخراج المواد بنجاح',
+                  isExpanded: true,
+                  isScanned,
+                  error: undefined,
                 }
               : item
           )
         );
       } catch (err: any) {
-        console.error('Error processing queued PDF:', err);
-        const fallbackTitle = nextItem.title || nextItem.fileName.replace(/\.pdf$/i, '').trim();
+        console.warn('Error processing queued PDF, falling back to editable draft:', err);
+        const fallbackTitle = sanitizeLawTitle(nextItem.title || nextItem.fileName);
         setQueuedLaws((prev) =>
           prev.map((item) =>
             item.id === targetId
@@ -1063,11 +1086,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
                   ...item,
                   status: 'ready',
                   title: fallbackTitle,
-                  category: item.category || 'جمارك',
-                  content: `[مستند: ${fallbackTitle}]\n\nتم تحميل الملف. تعذر الاستخراج التلقائي، يمكنك تعديل وإدخال نصوص المواد هنا وحفظها.`,
+                  category: item.category || categories[0]?.name || 'جمارك',
+                  content: `[مستند تشريعي: ${fallbackTitle}]\n\nالمادة (1):\n\nالمادة (2):`,
                   pageCount: item.pageCount || 1,
                   progressPercent: 100,
-                  statusText: 'تم تجهيز المستند كمسودة للمراجعة',
+                  statusText: 'مستند ممسوح ضوئياً - تم التجهيز كمسودة',
+                  isExpanded: true,
+                  isScanned: true,
+                  error: undefined,
                 }
               : item
           )
@@ -1091,6 +1117,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
   const handleUpdateQueuedCategory = (id: string, category: string) => {
     setQueuedLaws((prev) =>
       prev.map((item) => (item.id === id ? { ...item, category } : item))
+    );
+  };
+
+  const handleUpdateQueuedContent = (id: string, content: string) => {
+    setQueuedLaws((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, content } : item))
     );
   };
 
@@ -1190,27 +1222,50 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
 
       for (let i = 0; i < readyLaws.length; i += chunkSize) {
         const chunk = readyLaws.slice(i, i + chunkSize);
-        const chunkPayload = chunk.map((item) => ({
+        const chunkPayload = chunk.map((item, idx) => ({
+          id: 'law-' + (Date.now() + i + idx) + '-' + Math.random().toString(36).substring(2, 6),
           title: item.title.trim(),
           category: item.category || 'جمارك',
           content: item.content.trim(),
           sourceFileName: item.fileName,
           sourceFileSize: item.fileSizeFormatted,
           pageCount: item.pageCount,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         }));
 
-        const res = await fetch('/api/laws/batch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ laws: chunkPayload }),
-        });
+        let savedThisChunk = false;
 
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.error || 'فشل حفظ دفعة القوانين.');
+        // Try API endpoint first
+        try {
+          const res = await fetch('/api/laws/batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ laws: chunkPayload }),
+          });
+
+          const result = await safeFetchJson<{ laws?: Law[] }>(res);
+          if (result.ok && result.data) {
+            totalSaved += result.data.laws ? result.data.laws.length : chunk.length;
+            savedThisChunk = true;
+          } else {
+            console.warn('[Batch API] Server returned error, using direct Firestore fallback:', result.error);
+          }
+        } catch (apiErr) {
+          console.warn('[Batch API] Network error, using direct Firestore fallback:', apiErr);
         }
 
-        totalSaved += data.laws ? data.laws.length : chunk.length;
+        // Direct Firestore Fallback if serverless API failed
+        if (!savedThisChunk) {
+          console.log('[Direct Firestore] Saving batch chunk directly to Cloud Firestore...');
+          const firestoreRes = await directSaveLawsBatchToFirestore(chunkPayload as Law[]);
+          if (firestoreRes.success.length > 0) {
+            totalSaved += firestoreRes.success.length;
+            savedThisChunk = true;
+          } else {
+            throw new Error('تعذر حفظ دفعة القوانين عبر الخادم أو قاعدة البيانات المباشرة. يرجى مراجعة اتصال الإنترنت.');
+          }
+        }
 
         // Immediately remove saved items from queue so user sees real-time progress
         const chunkIds = new Set(chunk.map((item) => item.id));
@@ -1246,33 +1301,50 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
     }
 
     setSubmittingLaw(true);
+    const newLawPayload: Law = {
+      id: 'law-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+      title: newTitle.trim(),
+      category: newCategory,
+      content: newContent.trim(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    let saved = false;
     try {
       const res = await fetch('/api/laws', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: newTitle.trim(),
-          category: newCategory,
-          content: newContent.trim(),
-        }),
+        body: JSON.stringify(newLawPayload),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        setLawFormError(data.error || 'فشل حفظ القانون.');
-        return;
+      const result = await safeFetchJson(res);
+      if (result.ok) {
+        saved = true;
+      } else {
+        console.warn('[API Law Save] Server error, falling back to direct Firestore:', result.error);
       }
+    } catch (err) {
+      console.warn('[API Law Save] Fetch error, falling back to direct Firestore:', err);
+    }
 
+    if (!saved) {
+      const directOk = await directSaveLawToFirestore(newLawPayload);
+      if (directOk) {
+        saved = true;
+      }
+    }
+
+    if (saved) {
       setLawFormSuccess('تم حفظ القانون في قاعدة البيانات بنجاح وتحديث قاعدة معرفة البوت فورياً.');
       setNewTitle('');
       setNewContent('');
-      fetchLaws();
+      await fetchLaws();
       setTimeout(() => setLawFormSuccess(null), 4000);
-    } catch (err) {
-      setLawFormError('تعذر الاتصال بالخادم.');
-    } finally {
-      setSubmittingLaw(false);
+    } else {
+      setLawFormError('تعذر حفظ القانون. يرجى التحقق من اتصال الإنترنت.');
     }
+    setSubmittingLaw(false);
   };
 
   // Start Edit Law
@@ -1322,41 +1394,53 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
     setDeletingLawId(law.id);
     setDeleteLawError(null);
 
+    let deleted = false;
     try {
       const res = await fetch(`/api/laws/${encodeURIComponent(law.id)}`, {
         method: 'DELETE',
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'تعذر حذف القانون من قاعدة البيانات.');
+      const result = await safeFetchJson(res);
+      if (result.ok) {
+        deleted = true;
       }
-
-      // If currently editing this law, cancel edit
-      if (editingLaw?.id === law.id) {
-        setEditingLaw(null);
-      }
-
-      // Close modal
-      setLawToDelete(null);
-
-      // Refresh list & stats
-      await fetchLaws();
-      fetchSystemStatus();
-      if (onLawsUpdated) {
-        onLawsUpdated();
-      }
-
-      setLawListFeedback({
-        type: 'success',
-        message: `تم حذف القانون "${law.title}" بنجاح من قاعدة البيانات السحابية (Cloud Firestore).`,
-      });
-      setTimeout(() => setLawListFeedback(null), 5000);
-    } catch (err: any) {
-      console.error('Failed to delete law:', err);
-      setDeleteLawError(err?.message || 'حدث خطأ أثناء محاولة حذف القانون.');
-    } finally {
-      setDeletingLawId(null);
+    } catch (err) {
+      console.warn('API delete law failed, falling back to direct Firestore:', err);
     }
+
+    if (!deleted) {
+      const directOk = await directDeleteLawFromFirestore(law.id);
+      if (directOk) {
+        deleted = true;
+      }
+    }
+
+    if (!deleted) {
+      setDeleteLawError('تعذر حذف القانون من قاعدة البيانات. يرجى مراجعة اتصال الإنترنت.');
+      setDeletingLawId(null);
+      return;
+    }
+
+    // If currently editing this law, cancel edit
+    if (editingLaw?.id === law.id) {
+      setEditingLaw(null);
+    }
+
+    // Close modal
+    setLawToDelete(null);
+
+    // Refresh list & stats
+    await fetchLaws();
+    fetchSystemStatus();
+    if (onLawsUpdated) {
+      onLawsUpdated();
+    }
+
+    setLawListFeedback({
+      type: 'success',
+      message: `تم حذف القانون "${law.title}" بنجاح من قاعدة البيانات السحابية (Cloud Firestore).`,
+    });
+    setTimeout(() => setLawListFeedback(null), 5000);
+    setDeletingLawId(null);
   };
 
   // Filtered Users
@@ -2328,10 +2412,17 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
                             <div className="flex items-center gap-2 self-end sm:self-center">
                               {/* Status Badges */}
                               {item.status === 'ready' && (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2.5 py-1 rounded-full">
-                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                                  جاهز ({item.content.length} حرف)
-                                </span>
+                                item.isScanned ? (
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100/90 border border-amber-300 px-2.5 py-1 rounded-full">
+                                    <FileText className="w-3.5 h-3.5 text-amber-600" />
+                                    مستند ممسوح ضوئياً (مسودة)
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2.5 py-1 rounded-full">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                    جاهز ({item.content.length} حرف)
+                                  </span>
+                                )
                               )}
                               {item.status === 'parsing' && (
                                 <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-800 bg-amber-100 border border-amber-300 px-2.5 py-1 rounded-full">
@@ -2376,6 +2467,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
                                   className="h-full bg-gradient-to-r from-amber-500 to-emerald-600 transition-all duration-300"
                                   style={{ width: `${item.progressPercent}%` }}
                                 />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Scanned document informative banner */}
+                          {item.isScanned && (
+                            <div className="mb-3 p-2.5 bg-amber-50/90 border border-amber-200 text-amber-900 rounded-lg text-xs flex items-start gap-2">
+                              <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+                              <div className="leading-relaxed">
+                                <strong>مستند ممسوح ضوئياً (صورة):</strong> تم تجهيز هذا الملف بنجاح كمسودة تشريعية جاهزة للحفظ. يمكنك كتابة أو مراجعة نصوص المواد أدناه ثم النقر على زر الإضافة إلى قاعدة المعرفة.
                               </div>
                             </div>
                           )}
@@ -2448,28 +2549,45 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
                             </div>
                           </div>
 
-                          {/* Extracted Content Preview Toggle */}
-                          {item.status === 'ready' && item.content && (
+                          {/* Extracted / Editable Legal Content */}
+                          {(item.status === 'ready' || item.status === 'error') && (
                             <div className="mt-3 pt-2.5 border-t border-slate-200/70">
-                              <button
-                                type="button"
-                                onClick={() => handleTogglePreview(item.id)}
-                                className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
-                              >
-                                <Eye className="w-3.5 h-3.5 text-[#1b5e3a]" />
-                                <span>
-                                  {item.isExpanded ? 'إخفاء معاينة المواد القانونية' : 'معاينة نصوص المواد القانونية المستخرجة'}
-                                </span>
-                                {item.isExpanded ? (
-                                  <ChevronUp className="w-3.5 h-3.5" />
-                                ) : (
-                                  <ChevronDown className="w-3.5 h-3.5" />
+                              <div className="flex items-center justify-between mb-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleTogglePreview(item.id)}
+                                  className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-slate-900 transition-colors cursor-pointer"
+                                >
+                                  <FileText className="w-3.5 h-3.5 text-[#1b5e3a]" />
+                                  <span>
+                                    {item.isExpanded ? 'إخفاء نصوص المواد القانونية' : 'معاينة وتحرير نصوص المواد القانونية'}
+                                  </span>
+                                  {item.isExpanded ? (
+                                    <ChevronUp className="w-3.5 h-3.5" />
+                                  ) : (
+                                    <ChevronDown className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
+
+                                {item.content && (
+                                  <span className="text-[11px] text-slate-400 font-mono">
+                                    {item.content.length} حرف
+                                  </span>
                                 )}
-                              </button>
+                              </div>
 
                               {item.isExpanded && (
-                                <div className="mt-2 p-3 bg-white border border-slate-200 rounded-lg max-h-48 overflow-y-auto text-xs text-slate-700 font-sans whitespace-pre-wrap leading-relaxed">
-                                  {item.content}
+                                <div className="mt-2 space-y-1.5">
+                                  <textarea
+                                    value={item.content}
+                                    onChange={(e) => handleUpdateQueuedContent(item.id, e.target.value)}
+                                    placeholder="أدخل أو عدّل نصوص المواد القانونية هنا..."
+                                    rows={5}
+                                    className="w-full p-3 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 font-sans leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#12281e]"
+                                  />
+                                  <div className="text-[11px] text-slate-500">
+                                    يمكنك تعديل المواد المستخرجة أو كتابة بنود جديدة مباشرة قبل الحفظ النهائي في قاعدة المعرفة.
+                                  </div>
                                 </div>
                               )}
                             </div>

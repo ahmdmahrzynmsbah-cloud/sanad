@@ -66,16 +66,37 @@ export function fileToBase64(file: File): Promise<string> {
 }
 
 /**
+ * Sanitize and humanize raw document filenames into clean legal titles
+ * Filters out raw unix timestamps, hashes, scanner auto-names like 1770533622639-9zesgdxhgr8
+ */
+export function sanitizeLawTitle(rawTitle: string): string {
+  let title = (rawTitle || '')
+    .replace(/\.pdf$/i, '')
+    .replace(/[-_]+/g, ' ')
+    .trim();
+
+  // If the title starts with or consists mostly of a long timestamp/hash
+  // e.g. "1770533622639 9zesgdxhgr8 (1)" or "scan 001" or random letters/digits
+  const hasLeadingTimestamp = /^\d{9,}/.test(title);
+  const isHashPattern = /^[a-z0-9]{8,}/i.test(title);
+  const isGenericScanner = /^(scan|img|document|doc|file|pdf|image)[0-9\s\-_()]/i.test(title);
+  const isTooShortOrGarbled = title.length < 3;
+
+  if (hasLeadingTimestamp || isHashPattern || isGenericScanner || isTooShortOrGarbled) {
+    return 'تشريع قانوني جديد';
+  }
+
+  return title;
+}
+
+/**
  * Local heuristic metadata detection from raw Palestinian legal text
  */
 export function detectLawMetadataLocally(
   text: string,
   fileName: string
 ): { title: string; category: string; summary: string } {
-  const cleanName = fileName
-    .replace(/\.pdf$/i, '')
-    .replace(/[-_]+/g, ' ')
-    .trim();
+  const cleanName = sanitizeLawTitle(fileName);
 
   const lines = text
     .split('\n')
@@ -194,7 +215,7 @@ export async function extractTextFromPDF(
   file: File,
   onProgress?: (progress: PDFProgress) => void
 ): Promise<PDFExtractionResult> {
-  const cleanName = file.name.replace(/\.pdf$/i, '').replace(/[-_]+/g, ' ').trim();
+  const cleanName = sanitizeLawTitle(file.name);
   const fileSizeFormatted = formatBytes(file.size);
 
   // Step 1: Attempt Client-Side Extraction (Ultra fast & zero network payload limit)
@@ -279,11 +300,11 @@ export async function extractTextFromPDF(
     });
   }
 
-  // File size validation for base64 transmission (Vercel payload constraint is ~4.5MB)
-  if (file.size > 20 * 1024 * 1024) {
+  // File size validation for base64 transmission (Vercel payload constraint is ~4.5MB, base64 expands ~33%)
+  if (file.size > 3.5 * 1024 * 1024) {
     const localMeta = detectLawMetadataLocally('', file.name);
     return {
-      text: `[مستند PDF: ${cleanName}]\n\nتم إرفاق المستند بحجم (${fileSizeFormatted}). حجم الملف كبير للمعالجة السحابية، يمكنك تحرير نصوص المواد هنا وحفظها.`,
+      text: `[مستند PDF: ${cleanName}]\n\nتم إرفاق المستند بحجم (${fileSizeFormatted}). نظراً لأن حجم الملف الممسوح ضوئياً يتجاوز الحد الأقصى للمعالجة السحابية المباشرة، يمكنك تحرير نصوص المواد القانونية هنا مباشرة ثم النقر على حفظ.`,
       numPages: 1,
       fileName: file.name,
       fileSizeBytes: file.size,
@@ -330,12 +351,17 @@ export async function extractTextFromPDF(
   }
 
   try {
+    const controller = new AbortController();
+    const timeoutTimer = setTimeout(() => controller.abort(), 20000);
+
     const res = await fetch('/api/admin/parse-pdf', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ base64Data, fileName: file.name }),
+      signal: controller.signal,
     });
 
+    clearTimeout(timeoutTimer);
     if (progressInterval) clearInterval(progressInterval);
 
     if (!res.ok) {
