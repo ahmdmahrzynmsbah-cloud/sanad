@@ -18,10 +18,12 @@ import {
   Layers,
 } from 'lucide-react';
 import Markdown from 'react-markdown';
-import { User, ChatMessage, Conversation, SystemBranding } from '../types';
+import { User, ChatMessage, Conversation, SystemBranding, Law } from '../types';
 import { ChatSidebar } from './ChatSidebar';
 import { SanadServicesSidebar } from './SanadServicesSidebar';
 import { useSync } from '../utils/sync';
+import { directFetchLawsFromFirestore } from '../services/clientFirestore';
+import { generateClientKnowledgeFallback } from '../utils/localLegalSearch';
 
 interface ChatPortalProps {
   currentUser: User;
@@ -356,15 +358,46 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
           message: query,
           conversationHistory: updatedMessagesWithUser.slice(-10),
           userId: currentUser.id,
+          username: currentUser.username,
         }),
       });
 
-      if (!res.ok) {
-        throw new Error('فشل الاتصال بخدمة المستشار الذكي');
-      }
+      let botResponseText = '';
 
-      const data = await res.json();
-      const botResponseText = data.reply || 'عذراً، لم أتمكن من استرجاع إجابة مطابقة في الوقت الحالي.';
+      if (res.ok) {
+        const data = await res.json();
+        botResponseText = data.reply || 'عذراً، لم أتمكن من استرجاع إجابة مطابقة في الوقت الحالي.';
+      } else {
+        // Parse error response if provided by backend
+        let serverError = '';
+        let isFrozen = false;
+        let isPending = false;
+        try {
+          const errData = await res.json();
+          serverError = errData.error || '';
+          if (errData.status === 'frozen' || errData.isFrozen) isFrozen = true;
+          if (errData.status === 'pending') isPending = true;
+        } catch {}
+
+        if (res.status === 403) {
+          if (isFrozen || serverError.includes('تجميد') || serverError.includes('الفترة التجريبية')) {
+            botResponseText = '⚠️ عذراً، تم تجميد حسابك لانتهاء الفترة التجريبية المحددة. يرجى التواصل مع الإدارة أو الاشتراك لتفعيل الحساب ومتابعة الاستخدام.';
+          } else if (isPending || serverError.includes('المراجعة')) {
+            botResponseText = '⚠️ حسابك ما زال قيد المراجعة الإدارية. يرجى الانتظار لحين اعتماد حسابك من قبل الإدارة.';
+          } else {
+            botResponseText = serverError || '⚠️ ليس لديك صلاحية استخدام المساعد الذكي حالياً.';
+          }
+        } else {
+          // Fallback: If server is down or Vercel function timed out, search laws directly via Firestore
+          console.warn('[Chat] Backend returned status:', res.status, 'Attempting direct client legal knowledge search...');
+          const directLaws = await directFetchLawsFromFirestore();
+          if (directLaws && directLaws.length > 0) {
+            botResponseText = generateClientKnowledgeFallback(query, directLaws);
+          } else {
+            botResponseText = serverError || '⚠️ تعذر الوصول إلى قاعدة المعرفة السحابية حالياً. يرجى التحقق من اتصال الإنترنت والمحاولة مرة أخرى.';
+          }
+        }
+      }
 
       const botMessage: ChatMessage = {
         id: 'bot-' + Date.now(),
@@ -386,10 +419,23 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
       };
       persistConversation(completedConv);
     } catch (err: any) {
+      console.warn('[Chat] Network error, attempting direct client legal knowledge search...', err);
+      let fallbackText = '';
+      try {
+        const directLaws = await directFetchLawsFromFirestore();
+        if (directLaws && directLaws.length > 0) {
+          fallbackText = generateClientKnowledgeFallback(query, directLaws);
+        }
+      } catch {}
+
+      if (!fallbackText) {
+        fallbackText = '⚠️ تعذر الاتصال بالخادم حالياً. يرجى التحقق من اتصالك بالإنترنت والمحاولة مجدداً.';
+      }
+
       const errorMessage: ChatMessage = {
         id: 'err-' + Date.now(),
         sender: 'bot',
-        text: '⚠️ تعذر الوصول إلى قاعدة المعرفة حالياً. يرجى المحاولة مرة أخرى لاحقاً.',
+        text: fallbackText,
         timestamp: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
       };
       const finalMessages = [...updatedMessagesWithUser, errorMessage];

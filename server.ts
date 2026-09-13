@@ -80,6 +80,8 @@ app.use((req, res, next) => {
       url.startsWith('/categories') ||
       url.startsWith('/settings') ||
       url.startsWith('/admin') ||
+      url.startsWith('/chat') ||
+      url.startsWith('/conversations') ||
       url.startsWith('/ask') ||
       url.startsWith('/export') ||
       url.startsWith('/supervisors') ||
@@ -3043,41 +3045,46 @@ app.get('/api/system/status', (req, res) => {
 // --- Chat Endpoint for Approved Users ---
 
 app.post('/api/chat', async (req, res) => {
-  const { message, username } = req.body;
+  const { message, username, userId } = req.body;
 
   if (!message || typeof message !== 'string') {
     return res.status(400).json({ error: 'نص السؤال مطلوب' });
   }
 
-  // Verify that the user is approved and not frozen/expired
-  if (username) {
-    const user = db.users.find((u) => u.username.toLowerCase() === username.toLowerCase());
-    if (user) {
-      if (user.status === 'pending') {
-        return res.status(403).json({
-          error: 'حسابك ما زال قيد المراجعة الإدارية. يرجى الانتظار لحين اعتماد حسابك.',
-          status: 'pending',
-        });
-      }
-      if (user.status === 'rejected') {
-        return res.status(403).json({
-          error: 'تم رفض طلب الحساب. لا يمكنك استخدام الشات.',
-          status: 'rejected',
-        });
-      }
+  // Verify that the user is approved and not frozen/expired (by username or userId)
+  const identifier = (username || '').trim().toLowerCase();
+  const uid = (userId || '').trim();
+  const user = db.users.find(
+    (u) =>
+      (identifier && u.username.toLowerCase() === identifier) ||
+      (uid && (u.id === uid || String(u.id) === uid))
+  );
 
-      // Check trial status in real-time
-      const trialCheck = checkAndUpdateUserTrialStatus(user, true);
-      if (trialCheck.isFrozen) {
-        return res.status(403).json({
-          error: 'عذراً، تم تجميد حسابك لانتهاء الفترة التجريبية المحددة دون اشتراك. يرجى الاشتراك لتفعيل الحساب ومتابعة الاستخدام.',
-          status: 'frozen',
-          isFrozen: true,
-          subscriptionStatus: 'frozen',
-          freezeReason: user.freezeReason,
-          trialEndsAt: user.trialEndsAt,
-        });
-      }
+  if (user) {
+    if (user.status === 'pending') {
+      return res.status(403).json({
+        error: 'حسابك ما زال قيد المراجعة الإدارية. يرجى الانتظار لحين اعتماد حسابك من قبل الإدارة.',
+        status: 'pending',
+      });
+    }
+    if (user.status === 'rejected') {
+      return res.status(403).json({
+        error: 'تم رفض طلب الحساب. لا يمكنك استخدام الشات.',
+        status: 'rejected',
+      });
+    }
+
+    // Check trial status in real-time
+    const trialCheck = checkAndUpdateUserTrialStatus(user, true);
+    if (trialCheck.isFrozen) {
+      return res.status(403).json({
+        error: 'عذراً، تم تجميد حسابك لانتهاء الفترة التجريبية المحددة دون اشتراك. يرجى التواصل مع الإدارة أو الاشتراك لتفعيل الحساب ومتابعة الاستخدام.',
+        status: 'frozen',
+        isFrozen: true,
+        subscriptionStatus: 'frozen',
+        freezeReason: user.freezeReason,
+        trialEndsAt: user.trialEndsAt,
+      });
     }
   }
 
