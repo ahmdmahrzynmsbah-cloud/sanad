@@ -585,6 +585,10 @@ function initDB(): DBData {
 let db = initDB();
 
 function saveDB() {
+  if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+    // Skip saving to local disk on Vercel to prevent OOM crashes and EROFS errors
+    return;
+  }
   try {
     fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf-8');
   } catch (err) {

@@ -238,7 +238,9 @@ export async function saveSettingsToFirestore(settings: StoredSettings): Promise
 
   try {
     const settingsRef = doc(db, 'system_settings', 'general');
-    await setDoc(settingsRef, settings, { merge: true });
+    // Strip undefined values to prevent Firestore errors
+    const cleanSettings = Object.fromEntries(Object.entries(settings).filter(([_, v]) => v !== undefined));
+    await setDoc(settingsRef, cleanSettings, { merge: true });
     return true;
   } catch (err) {
     console.error('Error saving settings to Firestore:', err);
