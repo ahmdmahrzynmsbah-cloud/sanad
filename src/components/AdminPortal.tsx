@@ -88,13 +88,16 @@ export interface QueuedLawItem {
 }
 
 interface AdminPortalProps {
+  currentAdmin?: { username: string; role: string; fullName?: string };
   onLawsUpdated?: () => void;
   onBrandingUpdated?: (branding: SystemBranding) => void;
   onAboutUpdated?: (about: PlatformAboutData) => void;
   onContactUpdated?: (contact: ContactInfo) => void;
 }
 
-export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrandingUpdated, onAboutUpdated, onContactUpdated }) => {
+export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUpdated, onBrandingUpdated, onAboutUpdated, onContactUpdated }) => {
+  const isSupervisor = currentAdmin?.role === 'supervisor';
+
   const [activeTab, setActiveTab] = useState<'requests' | 'laws' | 'supervisors' | 'related-sites' | 'partners' | 'about' | 'contact' | 'settings'>('requests');
 
   // Users state
@@ -1628,6 +1631,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
           </span>
         </button>
 
+        {!isSupervisor && (
         <button
           id="admin-tab-supervisors"
           onClick={() => setActiveTab('supervisors')}
@@ -1640,7 +1644,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
           <Users className="w-4 h-4" />
           هيئة المشرفين
         </button>
+        )}
 
+        {!isSupervisor && (
         <button
           id="admin-tab-related-sites"
           onClick={() => setActiveTab('related-sites')}
@@ -1653,7 +1659,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
           <Globe className="w-4 h-4" />
           مواقع ذات صلة
         </button>
+        )}
 
+        {!isSupervisor && (
         <button
           id="admin-tab-partners"
           onClick={() => setActiveTab('partners')}
@@ -1666,7 +1674,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
           <Handshake className="w-4 h-4 text-[#d4af37]" />
           شركاؤنا
         </button>
+        )}
 
+        {!isSupervisor && (
         <button
           id="admin-tab-about"
           onClick={() => setActiveTab('about')}
@@ -1679,7 +1689,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
           <Target className="w-4 h-4 text-[#d4af37]" />
           عن المنصة (الرؤية والرسالة)
         </button>
+        )}
 
+        {!isSupervisor && (
         <button
           id="admin-tab-contact"
           onClick={() => setActiveTab('contact')}
@@ -1692,7 +1704,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
           <PhoneCall className="w-4 h-4 text-emerald-600" />
           بيانات التواصل (اتصل بنا)
         </button>
+        )}
 
+        {!isSupervisor && (
         <button
           id="admin-tab-settings"
           onClick={() => setActiveTab('settings')}
@@ -1705,6 +1719,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
           <Settings className="w-4 h-4" />
           إعدادات المنظومة
         </button>
+        )}
       </div>
 
       {/* ======================================================== */}
@@ -2000,8 +2015,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
                                 {(user.fullName || user.username).slice(0, 2)}
                               </div>
                               <div>
-                                <div className="text-gray-900 font-bold">
+                                <div className="text-gray-900 font-bold flex items-center gap-2">
                                   {user.fullName || user.username}
+                                  {user.role === 'supervisor' && (
+                                    <span className="bg-purple-100 text-purple-800 text-[10px] px-1.5 py-0.5 rounded font-bold">
+                                      مشرف
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="text-[11px] text-gray-400 font-normal font-mono">
                                   @{user.username}

@@ -55,6 +55,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   // Common fields
   const [username, setUsername] = useState('');
+  const [requestedRole, setRequestedRole] = useState<'user' | 'supervisor'>('user');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
@@ -217,6 +218,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             username: username.trim(),
             password,
             recoveryCode: recoveryCode.trim(),
+            role: requestedRole,
           }),
         });
 
@@ -694,6 +696,37 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             {/* ================= MODE 2: REGISTER FORM ================= */}
             {mode === 'register' && (
               <form onSubmit={handleRegister} className="space-y-3.5">
+                {/* Account Type (Role) */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-2">نوع الحساب <span className="text-red-500">*</span></label>
+                  <div className="flex gap-4 p-2 bg-slate-50/70 rounded-xl border border-slate-200">
+                    <label className="flex items-center gap-2 cursor-pointer flex-1">
+                      <input 
+                        type="radio" 
+                        className="text-emerald-600 focus:ring-emerald-500"
+                        checked={requestedRole === 'user'} 
+                        onChange={() => {
+                          setRequestedRole('user');
+                          setUsername('');
+                        }} 
+                      />
+                      <span className="text-sm font-medium text-slate-700">مستفيد (باحث / مخلص)</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer flex-1">
+                      <input 
+                        type="radio" 
+                        className="text-emerald-600 focus:ring-emerald-500"
+                        checked={requestedRole === 'supervisor'} 
+                        onChange={() => {
+                          setRequestedRole('supervisor');
+                          setUsername(`sup_${Math.random().toString(36).substr(2, 4)}@sanadtax.com`);
+                        }} 
+                      />
+                      <span className="text-sm font-medium text-slate-700">مشرف نظام</span>
+                    </label>
+                  </div>
+                </div>
+
                 {/* Full Name */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">

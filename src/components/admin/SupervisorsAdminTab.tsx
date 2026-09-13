@@ -179,9 +179,9 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
 
       setFeedback({
         type: 'success',
-        message: editingSupervisor
+        message: data.message || (editingSupervisor
           ? `تم تحديث بيانات المشرف "${name}" بنجاح.`
-          : `تمت إضافة المشرف "${name}" بنجاح.`,
+          : `تمت إضافة المشرف "${name}" بنجاح.`),
       });
       setShowModal(false);
       setTimeout(() => setFeedback(null), 4000);

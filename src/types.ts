@@ -9,7 +9,7 @@ export interface User {
   phone?: string;
   password?: string;
   recoveryCode?: string;
-  role: 'user' | 'admin';
+  role: 'user' | 'admin' | 'supervisor';
   status: UserStatus;
   createdAt: string;
   reviewedAt?: string;

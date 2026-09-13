@@ -175,8 +175,16 @@ export default function App() {
   const handleUserLoginSuccess = (user: User) => {
     setCurrentUser(user);
     localStorage.setItem('pal_tax_user', JSON.stringify(user));
+    
     if (user.status === 'approved') {
-      setActiveView('chat');
+      if (user.role === 'supervisor') {
+        const adminData = { username: user.username, role: 'supervisor', fullName: user.fullName };
+        setCurrentAdmin(adminData);
+        localStorage.setItem('pal_tax_admin', JSON.stringify(adminData));
+        setActiveView('admin-portal');
+      } else {
+        setActiveView('chat');
+      }
     } else {
       setActiveView('auth');
     }
@@ -337,6 +345,7 @@ export default function App() {
           <div>
             {currentAdmin ? (
               <AdminPortal
+                currentAdmin={currentAdmin}
                 onLawsUpdated={fetchLawsCount}
                 onBrandingUpdated={(newBranding) => {
                   setBranding(newBranding);
