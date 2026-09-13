@@ -1,9 +1,23 @@
 const fs = require('fs');
 let code = fs.readFileSync('server.ts', 'utf8');
 
-code = code.replace(
-  "    branding: {\n      ...db.settings\n    }\n  });\n  } catch (err: any) {\n    console.error('Branding route error:', err);\n    res.status(500).json({ error: 'Server crashed: ' + err?.message });\n  }\n});",
-  "    branding: {\n      ...db.settings\n    }\n  });\n} catch (err: any) {\n  console.error('Branding route error:', err);\n  res.status(500).json({ error: 'Server crashed: ' + err?.message });\n}\n});"
-);
+const target = `      siteOverview: db.settings.siteOverview,
+    },
+  });
+});`;
 
-fs.writeFileSync('server.ts', code);
+const replacement = `      siteOverview: db.settings.siteOverview,
+    },
+  });
+  } catch (err) {
+    next(err);
+  }
+});`;
+
+if (code.includes(target)) {
+  code = code.replace(target, replacement);
+  fs.writeFileSync('server.ts', code);
+  console.log("Fixed!");
+} else {
+  console.log("Not found.");
+}

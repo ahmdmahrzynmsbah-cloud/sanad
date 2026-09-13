@@ -1336,8 +1336,9 @@ app.get('/api/admin/settings', (req, res) => {
 });
 
 // Update System Branding & Founder Profile
-app.post('/api/admin/settings/branding', async (req, res) => {
-  const {
+app.post('/api/admin/settings/branding', async (req, res, next) => {
+  try {
+    const {
     systemName,
     systemSubtitle,
     systemBadge,
@@ -1433,6 +1434,9 @@ app.post('/api/admin/settings/branding', async (req, res) => {
       siteOverview: db.settings.siteOverview,
     },
   });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // ----------------------------------------------------
@@ -3625,7 +3629,17 @@ function generateKnowledgeFallback(query: string, laws: StoredLaw[]): string {
   return `لم يتم العثور على نص صريح ومباشر لهذا الاستفسار في قاعدة القوانين المحفوظة حالياً. يمكنك تحديد رقم المادة أو اسم القانون بدقة.`;
 }
 
-// Vite middleware & Static serving (Standalone execution only)
+
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error('Express Error:', err.message);
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    return res.status(400).json({ error: 'حجم البيانات كبير جداً أو التنسيق غير صحيح. يرجى اختيار صورة أصغر حجماً.' });
+  }
+  res.status(500).json({ error: 'خطأ داخلي في الخادم: ' + err.message });
+});
+
+  // Vite middleware & Static serving (Standalone execution only)
 async function startServer() {
   const isServerless = Boolean(
     process.env.VERCEL || 
