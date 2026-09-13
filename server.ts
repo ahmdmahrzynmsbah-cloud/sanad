@@ -1381,6 +1381,15 @@ app.post('/api/admin/settings/branding', async (req, res, next) => {
   if (logoUrl !== undefined) {
     db.settings.logoUrl = String(logoUrl);
   }
+  // SAFETY CHECK: If string is way too large, truncate it or reject it before saving
+  if (db.settings.logoUrl && db.settings.logoUrl.length > 500000) {
+     return res.status(400).json({ error: 'حجم الصورة ضخم جداً، يرجى رفع صورة أصغر أو استخدام رابط.' });
+  }
+  if (founderPhotoUrl !== undefined) {
+      if (String(founderPhotoUrl).length > 500000) {
+          return res.status(400).json({ error: 'حجم صورة المؤسس ضخم جداً.' });
+      }
+  }
   if (logoAccentColor) {
     db.settings.logoAccentColor = String(logoAccentColor).trim();
   }

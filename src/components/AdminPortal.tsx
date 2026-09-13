@@ -576,6 +576,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
 
     const payloadStr = JSON.stringify(payload);
     // NGINX limit is usually 1MB (1,048,576 bytes). We check for ~900KB to be safe with headers.
+    // ALSO check for 4.5MB Vercel limit just in case
+    if (payloadStr.length > 500000) { // STRICTER LIMIT FOR VERCEL
+      setBrandingFeedback({
+        type: 'error',
+        message: 'حجم الصور المرفوعة يتجاوز الحد المسموح (نصف ميغا). يرجى مسح الصور ورفع حجم أصغر، أو استخدام رابط بدلاً من الرفع المباشر.',
+      });
+      setSavingBranding(false);
+      return;
+    }
     if (payloadStr.length > 900000) {
       setBrandingFeedback({
         type: 'error',
