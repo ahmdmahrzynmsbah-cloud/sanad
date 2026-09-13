@@ -142,7 +142,10 @@ async function ensureDbSynced() {
 // 5. Ensure DB synced for heavy API queries, excluding auth endpoints for instant response
 app.use(async (req, res, next) => {
   const p = req.path || '';
+  // Only trigger massive DB sync on GET requests, avoid doing this on POST/PUT/DELETE
+  // which can cause Vercel OOM crashes or maxDuration timeouts during cold starts.
   if (
+    req.method === 'GET' &&
     p.startsWith('/api/') &&
     !p.startsWith('/api/auth/') &&
     p !== '/api/admin/login' &&
@@ -215,7 +218,7 @@ interface StoredUser {
   fullName?: string;
   phone?: string;
   recoveryCode?: string;
-  role: 'user' | 'admin';
+  role: 'user' | 'admin' | 'supervisor';
   status: 'pending' | 'approved' | 'rejected' | 'frozen';
   createdAt: string;
   reviewedAt?: string;
@@ -3691,7 +3694,7 @@ function generateKnowledgeFallback(query: string, laws: StoredLaw[]): string {
 // Global error handler
 app.use((err, req, res, next) => {
   console.error('Express Error:', err.message);
-  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+  if (err instanceof SyntaxError && (err as any).status === 400 && 'body' in err) {
     return res.status(400).json({ error: 'حجم البيانات كبير جداً أو التنسيق غير صحيح. يرجى اختيار صورة أصغر حجماً.' });
   }
   res.status(500).json({ error: 'خطأ داخلي في الخادم: ' + err.message });

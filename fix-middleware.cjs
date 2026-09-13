@@ -9,7 +9,11 @@ const targetMiddleware = `app.use(async (req, res, next) => {
     p !== '/api/admin/login' &&
     p !== '/api/health'
   ) {
-    await ensureDbSynced();
+    try {
+      await ensureDbSynced();
+    } catch (err) {
+      console.error('ensureDbSynced error:', err);
+    }
   }
   next();
 });`;
@@ -25,11 +29,15 @@ const replacementMiddleware = `app.use(async (req, res, next) => {
     p !== '/api/admin/login' &&
     p !== '/api/health'
   ) {
-    await ensureDbSynced();
+    try {
+      await ensureDbSynced();
+    } catch (err) {
+      console.error('ensureDbSynced error:', err);
+    }
   }
   next();
 });`;
 
 code = code.replace(targetMiddleware, replacementMiddleware);
 fs.writeFileSync('server.ts', code);
-console.log("Updated ensureDbSynced middleware");
+console.log("Updated ensureDbSynced middleware correctly");

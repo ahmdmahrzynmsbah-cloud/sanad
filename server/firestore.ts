@@ -16,6 +16,24 @@ import {
 export type ChangeCallback = (collectionName: string) => void;
 const changeListeners: ChangeCallback[] = [];
 
+// Recursive helper to remove undefined values before saving to Firestore
+function cleanUndefined(obj: any): any {
+  if (obj === null || obj === undefined) return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(cleanUndefined).filter(v => v !== undefined);
+  }
+  if (typeof obj === 'object') {
+    const cleaned: any = {};
+    for (const key in obj) {
+      if (obj[key] !== undefined) {
+        cleaned[key] = cleanUndefined(obj[key]);
+      }
+    }
+    return cleaned;
+  }
+  return obj;
+}
+
 export function onDatabaseChange(callback: ChangeCallback) {
   changeListeners.push(callback);
 }
@@ -25,13 +43,15 @@ function notifyChange(collectionName: string) {
 }
 
 async function setDoc(docRef: DocumentReference<any, any>, data: any, options?: any) {
-  const result = options ? await firebaseSetDoc(docRef, data, options) : await firebaseSetDoc(docRef, data);
+  const cleanData = cleanUndefined(data);
+  const result = options ? await firebaseSetDoc(docRef, cleanData, options) : await firebaseSetDoc(docRef, cleanData);
   notifyChange(docRef.parent.id);
   return result;
 }
 
 async function updateDoc(docRef: DocumentReference<any, any>, data: any) {
-  const result = await firebaseUpdateDoc(docRef, data);
+  const cleanData = cleanUndefined(data);
+  const result = await firebaseUpdateDoc(docRef, cleanData);
   notifyChange(docRef.parent.id);
   return result;
 }
@@ -49,7 +69,7 @@ export interface StoredUser {
   phone?: string;
   recoveryCode?: string;
   password: string;
-  role: 'user' | 'admin';
+  role: 'user' | 'admin' | 'supervisor';
   status: 'pending' | 'approved' | 'rejected' | 'frozen';
   createdAt: string;
   reviewedAt?: string;
