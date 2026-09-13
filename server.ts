@@ -1029,7 +1029,7 @@ app.post('/api/auth/register', async (req, res) => {
     db.users.push(newUser);
     saveDB();
     try {
-      await saveUserToFirestore(newUser);
+      saveUserToFirestore(newUser).catch(e => console.error('Firestore save error:', e));
     } catch (saveErr) {
       console.error('Failed to sync new user to Firestore cloud:', saveErr);
     }
@@ -1432,7 +1432,7 @@ app.post('/api/admin/settings/branding', async (req, res, next) => {
 
   saveDB();
 
-  await saveSettingsToFirestore({
+  saveSettingsToFirestore({
     autoApproveNewUsers: db.settings.autoApproveNewUsers !== false,
     defaultTrialDays: db.settings.defaultTrialDays || 7,
     trialPolicyEnabled: true,
@@ -1450,7 +1450,7 @@ app.post('/api/admin/settings/branding', async (req, res, next) => {
     founderPhotoUrl: db.settings.founderPhotoUrl,
     founderQuote: db.settings.founderQuote,
     siteOverview: db.settings.siteOverview,
-  });
+  }).catch(e => console.error('Firestore save error:', e));
 
   res.json({
     success: true,
@@ -1536,8 +1536,8 @@ app.post('/api/admin/supervisors', async (req, res) => {
   db.users.push(newSupervisorUser);
   saveDB();
   
-  await saveSupervisorToFirestore(newSupervisor);
-  await saveUserToFirestore(newSupervisorUser);
+  saveSupervisorToFirestore(newSupervisor).catch(e => console.error('Firestore save error:', e));
+  saveUserToFirestore(newSupervisorUser).catch(e => console.error('Firestore save error:', e));
 
   res.status(201).json({
     success: true,
@@ -1576,7 +1576,7 @@ app.put('/api/admin/supervisors/:id', async (req, res) => {
 
   db.supervisors[index] = updated;
   saveDB();
-  await saveSupervisorToFirestore(updated);
+  saveSupervisorToFirestore(updated).catch(e => console.error('Firestore save error:', e));
 
   res.json({
     success: true,
@@ -1702,7 +1702,7 @@ app.put('/api/admin/related-sites/categories/rename', async (req, res) => {
     if (db.relatedSites[i].category === cleanOld) {
       db.relatedSites[i].category = cleanNew;
       updatedCount++;
-      await saveRelatedSiteToFirestore(db.relatedSites[i]);
+      saveRelatedSiteToFirestore(db.relatedSites[i]).catch(e => console.error('Firestore save error:', e));
     }
   }
 
@@ -1742,7 +1742,8 @@ app.delete('/api/admin/related-sites/categories/:name', async (req, res) => {
   });
 });
 
-app.post('/api/admin/related-sites', async (req, res) => {
+app.post('/api/admin/related-sites', async (req, res, next) => {
+  try {
   const { title, description, url, category, iconType, isOfficial } = req.body;
   if (!title || !String(title).trim() || !url || !String(url).trim()) {
     return res.status(400).json({ error: 'اسم الموقع ورابطه مطلوبان' });
@@ -1775,7 +1776,7 @@ app.post('/api/admin/related-sites', async (req, res) => {
 
   db.relatedSites.push(newSite);
   saveDB();
-  await saveRelatedSiteToFirestore(newSite);
+  saveRelatedSiteToFirestore(newSite).catch(e => console.error('Firestore save error:', e));
 
   res.status(201).json({
     success: true,
@@ -1783,8 +1784,8 @@ app.post('/api/admin/related-sites', async (req, res) => {
     site: newSite,
     relatedSites: db.relatedSites,
   });
+  } catch (err: any) { next(err); }
 });
-
 app.put('/api/admin/related-sites/:id', async (req, res) => {
   const { id } = req.params;
   const { title, description, url, category, iconType, isOfficial } = req.body;
@@ -1821,7 +1822,7 @@ app.put('/api/admin/related-sites/:id', async (req, res) => {
 
   db.relatedSites[index] = updated;
   saveDB();
-  await saveRelatedSiteToFirestore(updated);
+  saveRelatedSiteToFirestore(updated).catch(e => console.error('Firestore save error:', e));
 
   res.json({
     success: true,
@@ -1865,7 +1866,8 @@ app.get('/api/partners', (req, res) => {
   res.json({ partners: db.partners });
 });
 
-app.post('/api/admin/partners', async (req, res) => {
+app.post('/api/admin/partners', async (req, res, next) => {
+  try {
   const { name, description, category, partnershipType, logoUrl, websiteUrl, order, isActive } = req.body;
   if (!name || !String(name).trim()) {
     return res.status(400).json({ error: 'اسم المؤسسة أو الشريك مطلوب' });
@@ -1890,7 +1892,7 @@ app.post('/api/admin/partners', async (req, res) => {
 
   db.partners.push(newPartner);
   saveDB();
-  await savePartnerToFirestore(newPartner);
+  savePartnerToFirestore(newPartner).catch(e => console.error('Firestore save error:', e));
 
   res.status(201).json({
     success: true,
@@ -1898,8 +1900,8 @@ app.post('/api/admin/partners', async (req, res) => {
     partner: newPartner,
     partners: db.partners,
   });
+  } catch (err: any) { next(err); }
 });
-
 app.put('/api/admin/partners/:id', async (req, res) => {
   const { id } = req.params;
   const { name, description, category, partnershipType, logoUrl, websiteUrl, order, isActive } = req.body;
@@ -1928,7 +1930,7 @@ app.put('/api/admin/partners/:id', async (req, res) => {
 
   db.partners[index] = updated;
   saveDB();
-  await savePartnerToFirestore(updated);
+  savePartnerToFirestore(updated).catch(e => console.error('Firestore save error:', e));
 
   res.json({
     success: true,
@@ -1976,12 +1978,12 @@ app.post('/api/admin/settings/branding/reset', async (req, res) => {
   Object.assign(db.settings, DEFAULT_BRANDING);
   saveDB();
 
-  await saveSettingsToFirestore({
+  saveSettingsToFirestore({
     autoApproveNewUsers: db.settings.autoApproveNewUsers !== false,
     defaultTrialDays: db.settings.defaultTrialDays || 7,
     trialPolicyEnabled: true,
     ...DEFAULT_BRANDING,
-  });
+  }).catch(e => console.error('Firestore save error:', e));
 
   res.json({
     success: true,
@@ -2120,7 +2122,8 @@ app.post('/api/admin/settings/contact/reset', async (req, res) => {
 });
 
 // Update default trial days setting
-app.post('/api/admin/settings/trial', async (req, res) => {
+app.post('/api/admin/settings/trial', async (req, res, next) => {
+  try {
   const { defaultTrialDays } = req.body;
   const days = parseInt(String(defaultTrialDays), 10);
   if (isNaN(days) || days < 1) {
@@ -2133,21 +2136,23 @@ app.post('/api/admin/settings/trial', async (req, res) => {
   db.settings.defaultTrialDays = days;
   saveDB();
 
-  await saveSettingsToFirestore({
+  saveSettingsToFirestore({
     autoApproveNewUsers: db.settings.autoApproveNewUsers !== false,
     defaultTrialDays: days,
     trialPolicyEnabled: true,
-  });
+  }).catch(e => console.error('Firestore save error:', e));
 
   res.json({
     success: true,
     defaultTrialDays: days,
     message: `تم تحديد الفترة التجريبية الافتراضية للحسابات الجديدة إلى ${days} أيام بنجاح وحفظها سحابياً.`,
   });
+  } catch (err: any) { next(err); }
 });
 
 // Update auto-approve setting
-app.post('/api/admin/settings/auto-approve', (req, res) => {
+app.post('/api/admin/settings/auto-approve', (req, res, next) => {
+  try {
   const { enabled } = req.body;
   if (!db.settings) {
     db.settings = { autoApproveNewUsers: true, defaultTrialDays: 7, trialPolicyEnabled: true };
@@ -2168,6 +2173,7 @@ app.post('/api/admin/settings/auto-approve', (req, res) => {
       ? 'تم تفعيل نظام القبول التلقائي للحسابات الجديدة بنجاح'
       : 'تم إيقاف نظام القبول التلقائي (الموافقة اليدوية مطلوبة للحسابات الجديدة)',
   });
+  } catch (err: any) { next(err); }
 });
 
 // Auto-Approve ALL Pending Users at once
@@ -2986,7 +2992,7 @@ app.post('/api/laws', async (req, res) => {
   db.laws.unshift(newLaw);
   cachedIndexedChunks = null;
   saveDB();
-  await saveLawToFirestore(newLaw);
+  saveLawToFirestore(newLaw).catch(e => console.error('Firestore save error:', e));
 
   res.status(201).json({ message: 'تمت إضافة القانون بنجاح', law: newLaw });
 });
@@ -3077,7 +3083,7 @@ app.post('/api/categories', async (req, res) => {
 
   db.categories.push(newCategory);
   saveDB();
-  await saveCategoryToFirestore(newCategory);
+  saveCategoryToFirestore(newCategory).catch(e => console.error('Firestore save error:', e));
 
   res.status(201).json({
     message: `تمت إضافة التصنيف "${newCategory.name}" بنجاح`,
@@ -3467,7 +3473,7 @@ app.put('/api/conversations/:id/title', async (req, res) => {
     if (cloudConv) {
       cloudConv.title = title.trim();
       cloudConv.updatedAt = new Date().toISOString();
-      await saveConversationToFirestore(cloudConv);
+      saveConversationToFirestore(cloudConv).catch(e => console.error('Firestore save error:', e));
       db.conversations.unshift(cloudConv);
       saveDB();
       return res.json({ success: true, conversation: cloudConv });
