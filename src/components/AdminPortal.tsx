@@ -574,25 +574,37 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
       siteOverview: siteOverviewInput.trim(),
     };
 
+    const payloadStr = JSON.stringify(payload);
+    // NGINX limit is usually 1MB (1,048,576 bytes). We check for ~900KB to be safe with headers.
+    if (payloadStr.length > 900000) {
+      setBrandingFeedback({
+        type: 'error',
+        message: 'تعذر الحفظ: إجمالي حجم الصور والنصوص يتجاوز 1 ميغابايت. يرجى اختيار صور أصغر حجماً (أو مسح الصور الحالية ورفعها من جديد).',
+      });
+      setSavingBranding(false);
+      return;
+    }
+
     try {
       const res = await fetch('/api/admin/settings/branding', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const jsonRes = await safeFetchJson(res);
+      
+      if (jsonRes.ok && jsonRes.data?.success) {
         setBrandingFeedback({
           type: 'success',
-          message: 'تم حفظ وتطبيق لوجو واسم السيستم بنجاح وحفظها سحابياً في Google Cloud Firestore.',
+          message: 'تم حفظ وتطبيق الإعدادات بنجاح وحفظها سحابياً.',
         });
         if (onBrandingUpdated) {
-          onBrandingUpdated(data.branding);
+          onBrandingUpdated(jsonRes.data.branding);
         }
       } else {
         setBrandingFeedback({
           type: 'error',
-          message: data.error || 'حدث خطأ أثناء حفظ الإعدادات.',
+          message: jsonRes.error || jsonRes.data?.error || 'حدث خطأ أثناء حفظ الإعدادات. قد يكون حجم الصورة كبيراً جداً.',
         });
       }
     } catch {

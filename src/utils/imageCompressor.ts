@@ -30,8 +30,13 @@ export const compressImageClientSide = (file: File, maxWidth: number, maxHeight:
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         if (ctx) {
+          // Fill background with white (in case it's a transparent PNG converted to JPEG)
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, width, height);
           ctx.drawImage(img, 0, 0, width, height);
-          const dataUrl = canvas.toDataURL('image/webp', 0.8) || canvas.toDataURL('image/jpeg', 0.8);
+          
+          // Use JPEG to guarantee small payload size
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
           resolve(dataUrl);
         } else {
           resolve(img.src);
