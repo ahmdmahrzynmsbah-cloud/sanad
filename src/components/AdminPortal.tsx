@@ -51,7 +51,8 @@ import {
   Handshake
 } from 'lucide-react';
 import { User, Law, LawCategory, LegalCategory, SystemBranding, PlatformAboutData, ContactInfo } from '../types';
-import { extractTextFromPDF, formatBytes, sanitizeLawTitle, PDFProgress } from '../utils/pdfParser';
+import { formatBytes, sanitizeLawTitle, PDFProgress } from '../utils/pdfParser';
+import { extractTextFromAnyDocument } from '../utils/documentParser';
 import { SupervisorsAdminTab } from './admin/SupervisorsAdminTab';
 import { RelatedSitesAdminTab } from './admin/RelatedSitesAdminTab';
 import { PartnersAdminTab } from './admin/PartnersAdminTab';
@@ -976,7 +977,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
     let invalidCount = 0;
 
     for (const file of files) {
-      if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      const lowerName = file.name.toLowerCase();
+      const isValidExt = lowerName.endsWith('.pdf') || lowerName.endsWith('.docx') || lowerName.endsWith('.doc') || lowerName.endsWith('.pptx') || lowerName.endsWith('.ppt');
+      const isValidType = file.type === 'application/pdf' || 
+                          file.type === 'application/msword' || 
+                          file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+                          file.type === 'application/vnd.ms-powerpoint' ||
+                          file.type === 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+
+      if (!isValidExt && !isValidType) {
         invalidCount++;
         continue;
       }
@@ -1004,7 +1013,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
     }
 
     if (invalidCount > 0) {
-      setBatchErrorMessage(`تم تخطي ${invalidCount} ملفات لأنها ليست بصيغة PDF صالحة.`);
+      setBatchErrorMessage(`تم تخطي ${invalidCount} ملفات لأنها بصيغة غير مدعومة (فقط PDF، Word، PPT).`);
     }
 
     if (newItems.length > 0) {
@@ -1041,7 +1050,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
       );
 
       try {
-        const result = await extractTextFromPDF(nextItem.file, (prog) => {
+        const result = await extractTextFromAnyDocument(nextItem.file, (prog) => {
           setQueuedLaws((prev) =>
             prev.map((item) =>
               item.id === targetId
@@ -2214,7 +2223,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
                 }`}
               >
                 <UploadCloud className="w-3.5 h-3.5 text-[#1b5e3a]" />
-                استيراد وقراءة ملف PDF قانوني
+                استيراد ملف مستند (PDF/Word/PPT)
               </button>
               <button
                 type="button"
@@ -2239,7 +2248,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
                   type="file"
                   id="pdf-file-hidden-input"
                   multiple
-                  accept=".pdf,application/pdf"
+                  accept=".pdf,application/pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.ppt,.pptx,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
                   onChange={handleFileInputChange}
                   className="hidden"
                 />
@@ -2293,17 +2302,17 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
                       <UploadCloud className="w-8 h-8" />
                     </div>
                     <h4 className="text-base font-bold text-slate-900 mb-1.5">
-                      اسحب وأفلت ملفات PDF التشريعية هنا، أو انقر لاختيار عدة ملفات معاً
+                      اسحب وأفلت ملفات (PDF، Word، PowerPoint) التشريعية هنا، أو انقر لاختيارها معاً
                     </h4>
                     <p className="text-xs sm:text-sm text-slate-500 mb-4 max-w-lg mx-auto leading-relaxed">
                       يدعم رفع عدة ملفات قوانين دفعة واحدة. سيقوم الذكاء الاصطناعي باستخراج نصوص المواد والقرارات وكتابة اسم كل ملف واقتراح تصنيفه، لتراجعه وتضيف كافة القوانين إلى قاعدة المعرفة بنقرة واحدة.
                     </p>
                     <div className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#12281e] text-white rounded-xl text-xs sm:text-sm font-bold shadow-sm hover:bg-[#1c3e2f] transition-all">
                       <FileUp className="w-4 h-4" />
-                      استعراض واختيار عدة ملفات PDF دفعة واحدة
+                      استعراض واختيار عدة ملفات دفعة واحدة
                     </div>
                     <div className="mt-3 text-[11px] text-slate-400 font-medium">
-                      الصيغة المدعومة: PDF تشريعي حتى 35 ميجابايت لكل ملف
+                      الصيغ المدعومة: PDF, DOCX, PPTX حتى 35 ميجابايت لكل ملف
                     </div>
                   </div>
                 ) : (

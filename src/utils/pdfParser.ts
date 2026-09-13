@@ -71,7 +71,7 @@ export function fileToBase64(file: File): Promise<string> {
  */
 export function sanitizeLawTitle(rawTitle: string): string {
   let title = (rawTitle || '')
-    .replace(/\.pdf$/i, '')
+    .replace(/\.(pdf|docx|doc|pptx|ppt)$/i, '')
     .replace(/[-_]+/g, ' ')
     .trim();
 

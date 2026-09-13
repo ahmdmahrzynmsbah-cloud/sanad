@@ -2419,7 +2419,7 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
 
     // Basic cleaning of file name for fallback title
     const cleanTitle = (fileName || 'تشريع فلسطيني')
-      .replace(/\.pdf$/i, '')
+      .replace(/\.(pdf|docx|doc|pptx|ppt)$/i, '')
       .replace(/[-_]+/g, ' ')
       .trim();
 
@@ -2717,7 +2717,7 @@ app.post('/api/admin/structure-law-text', async (req, res) => {
     }
 
     const cleanTitle = (fileName || 'تشريع فلسطيني')
-      .replace(/\.pdf$/i, '')
+      .replace(/\.(pdf|docx|doc|pptx|ppt)$/i, '')
       .replace(/[-_]+/g, ' ')
       .trim();
 
