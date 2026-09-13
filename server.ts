@@ -769,18 +769,18 @@ async function syncWithFirestore() {
     }
     await seedFirestoreIfEmpty(db.users, db.laws, db.categories, db.supervisors, db.relatedSites, db.partners);
 
-    // Fetch users, laws, categories, settings, supervisors, related sites, partners, platform about, and contact concurrently in parallel
-    const [cloudUsers, cloudLaws, cloudCategories, cloudSettings, cloudSupervisors, cloudRelatedSites, cloudPartners, cloudAbout, cloudContact] = await Promise.all([
-      fetchUsersFromFirestore(),
-      fetchLawsFromFirestore(),
-      fetchCategoriesFromFirestore(),
-      fetchSettingsFromFirestore(),
-      fetchSupervisorsFromFirestore(),
-      fetchRelatedSitesFromFirestore(),
-      fetchPartnersFromFirestore(),
-      fetchPlatformAboutFromFirestore(),
-      fetchContactInfoFromFirestore(),
-    ]);
+    // Fetch collections sequentially to prevent Vercel Serverless OOM (Out of Memory) crashes
+    const cloudSettings = await fetchSettingsFromFirestore();
+    const cloudAbout = await fetchPlatformAboutFromFirestore();
+    const cloudContact = await fetchContactInfoFromFirestore();
+    const cloudCategories = await fetchCategoriesFromFirestore();
+    const cloudSupervisors = await fetchSupervisorsFromFirestore();
+    const cloudRelatedSites = await fetchRelatedSitesFromFirestore();
+    const cloudPartners = await fetchPartnersFromFirestore();
+    
+    // Fetch heavy collections last
+    const cloudUsers = await fetchUsersFromFirestore();
+    const cloudLaws = await fetchLawsFromFirestore();
 
     let changed = false;
 
