@@ -140,21 +140,23 @@ async function ensureDbSynced() {
 }
 
 // 5. Ensure DB synced for heavy API queries, excluding auth endpoints for instant response
+// Completely disable massive database sync middleware on Vercel to prevent any risk of OOM / FUNCTION_INVOCATION_FAILED.
 app.use(async (req, res, next) => {
-  const p = req.path || '';
-  // Only trigger massive DB sync on GET requests, avoid doing this on POST/PUT/DELETE
-  // which can cause Vercel OOM crashes or maxDuration timeouts during cold starts.
-  if (
-    req.method === 'GET' &&
-    p.startsWith('/api/') &&
-    !p.startsWith('/api/auth/') &&
-    p !== '/api/admin/login' &&
-    p !== '/api/health'
-  ) {
-    try {
-      await ensureDbSynced();
-    } catch (err) {
-      console.error('ensureDbSynced error:', err);
+  // Let local dev use ensureDbSynced if needed, but skip for Vercel
+  if (!process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    const p = req.path || '';
+    if (
+      req.method === 'GET' &&
+      p.startsWith('/api/') &&
+      !p.startsWith('/api/auth/') &&
+      p !== '/api/admin/login' &&
+      p !== '/api/health'
+    ) {
+      try {
+        await ensureDbSynced();
+      } catch (err) {
+        console.error('ensureDbSynced error:', err);
+      }
     }
   }
   next();
@@ -2019,7 +2021,7 @@ app.post('/api/admin/settings/about', async (req, res, next) => {
   db.platformAbout = updatedAbout;
   saveDB();
 
-  await savePlatformAboutToFirestore(updatedAbout);
+  savePlatformAboutToFirestore(updatedAbout).catch(e => console.error("Firestore about error:", e));
 
   res.json({
     success: true,
@@ -2038,7 +2040,7 @@ app.post('/api/admin/settings/about/reset', async (req, res, next) => {
   db.platformAbout = { ...DEFAULT_PLATFORM_ABOUT, updatedAt: new Date().toISOString() };
   saveDB();
 
-  await savePlatformAboutToFirestore(db.platformAbout);
+  savePlatformAboutToFirestore(db.platformAbout).catch(e => console.error("Firestore about error:", e));
 
   res.json({
     success: true,
@@ -2092,7 +2094,7 @@ app.post('/api/admin/settings/contact', async (req, res, next) => {
   db.contactInfo = updatedContact;
   saveDB();
 
-  await saveContactInfoToFirestore(updatedContact);
+  saveContactInfoToFirestore(updatedContact).catch(e => console.error("Firestore contact error:", e));
 
   res.json({
     success: true,
@@ -2108,7 +2110,7 @@ app.post('/api/admin/settings/contact', async (req, res, next) => {
 app.post('/api/admin/settings/contact/reset', async (req, res) => {
   db.contactInfo = { ...DEFAULT_CONTACT_INFO, updatedAt: new Date().toISOString() };
   saveDB();
-  await saveContactInfoToFirestore(db.contactInfo);
+  saveContactInfoToFirestore(db.contactInfo).catch(e => console.error("Firestore contact error:", e));
 
   res.json({
     success: true,
