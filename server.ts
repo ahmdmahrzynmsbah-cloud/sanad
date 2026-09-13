@@ -1989,7 +1989,8 @@ app.post('/api/admin/settings/branding/reset', async (req, res) => {
 });
 
 // Update Platform About Content (Overview, Vision, Mission, Custom Sections)
-app.post('/api/admin/settings/about', async (req, res) => {
+app.post('/api/admin/settings/about', async (req, res, next) => {
+  try {
   const {
     overviewTitle,
     overviewContent,
@@ -2025,10 +2026,15 @@ app.post('/api/admin/settings/about', async (req, res) => {
     message: 'تم حفظ وتحديث محتوى «عن المنصة والرؤية والرسالة» بنجاح في قاعدة البيانات السحابية.',
     platformAbout: updatedAbout,
   });
+  } catch (err: any) {
+    console.error('About update error:', err);
+    res.status(500).json({ error: 'خطأ داخلي في الخادم أثناء حفظ بيانات عن المنصة: ' + err.message });
+  }
 });
 
 // Reset Platform About to Default
-app.post('/api/admin/settings/about/reset', async (req, res) => {
+app.post('/api/admin/settings/about/reset', async (req, res, next) => {
+  try {
   db.platformAbout = { ...DEFAULT_PLATFORM_ABOUT, updatedAt: new Date().toISOString() };
   saveDB();
 
@@ -2039,10 +2045,14 @@ app.post('/api/admin/settings/about/reset', async (req, res) => {
     message: 'تم استعادة المحتوى الافتراضي لـ «عن المنصة والرؤية والرسالة» بنجاح.',
     platformAbout: db.platformAbout,
   });
+  } catch (err: any) {
+    next(err);
+  }
 });
 
 // Update Contact Us Info (WhatsApp numbers, Email, Phone, Address, Hours)
-app.post('/api/admin/settings/contact', async (req, res) => {
+app.post('/api/admin/settings/contact', async (req, res, next) => {
+  try {
   const {
     whatsappNumbers,
     email,
@@ -2089,6 +2099,9 @@ app.post('/api/admin/settings/contact', async (req, res) => {
     message: 'تم حفظ وتحديث بيانات التواصل وأرقام الواتساب بنجاح في قاعدة البيانات السحابية.',
     contactInfo: updatedContact,
   });
+  } catch (err: any) {
+    next(err);
+  }
 });
 
 // Reset Contact Info to Default

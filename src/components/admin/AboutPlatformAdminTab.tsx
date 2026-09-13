@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { safeFetchJson } from '../../utils/safeApi';
 import {
   Target,
   Eye,
@@ -126,9 +127,17 @@ export const AboutPlatformAdminTab: React.FC<AboutPlatformAdminTabProps> = ({ on
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      const parsed = await safeFetchJson(res);
+      
+      if (!parsed.ok) {
+        setFeedback({ type: 'error', message: parsed.error || 'خطأ غير معروف' });
+        setSaving(false);
+        return;
+      }
+      
+      const data = parsed.data;
 
-      if (res.ok && data.success) {
+      if (data.success) {
         setFeedback({
           type: 'success',
           message: 'تم حفظ وتحديث محتوى «عن المنصة والرؤية والرسالة» بنجاح في قاعدة البيانات السحابية.',
