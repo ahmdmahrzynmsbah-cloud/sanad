@@ -477,7 +477,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
       return;
     }
 
-    compressImageClientSide(file, 400, 400)
+    // Force extremely aggressive compression to ensure it never crashes Vercel
+    compressImageClientSide(file, 200, 200)
       .then((result) => {
         setUploadedLogoPreview(result);
         setLogoUrlInput(result);
@@ -575,12 +576,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
     };
 
     const payloadStr = JSON.stringify(payload);
-    // NGINX limit is usually 1MB (1,048,576 bytes). We check for ~900KB to be safe with headers.
-    // ALSO check for 4.5MB Vercel limit just in case
     // VERCEL STRICT PAYLOAD LIMIT CHECK
-    // If the combined size of the images and text is too large, it will crash Vercel.
-    // 500,000 bytes is a safe limit to prevent FUNCTION_INVOCATION_FAILED.
-    if (payloadStr.length > 500000) {
+    // Fallback safe limit to prevent Vercel 500 errors 
+    if (payloadStr.length > 200000) {
       setBrandingFeedback({
         type: 'error',
         message: 'حجم الصورة المرفوعة ضخم جداً. يرجى مسح الصورة ورفع صورة بحجم أصغر، أو استخدم رابط للصورة (URL) بدلاً من ذلك.',
