@@ -53,6 +53,7 @@ import {
 import { User, Law, LawCategory, LegalCategory, SystemBranding, PlatformAboutData, ContactInfo } from '../types';
 import { formatBytes, sanitizeLawTitle, PDFProgress } from '../utils/pdfParser';
 import { extractTextFromAnyDocument } from '../utils/documentParser';
+import { compressImageClientSide } from '../utils/imageCompressor';
 import { SupervisorsAdminTab } from './admin/SupervisorsAdminTab';
 import { RelatedSitesAdminTab } from './admin/RelatedSitesAdminTab';
 import { PartnersAdminTab } from './admin/PartnersAdminTab';
@@ -468,26 +469,30 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
       return;
     }
 
-    if (file.size > 2 * 1024 * 1024) {
+    if (file.size > 5 * 1024 * 1024) {
       setBrandingFeedback({
         type: 'error',
-        message: 'حجم ملف الصورة يتجاوز 2 ميغابايت. يرجى اختيار ملف أصغر حجماً.',
+        message: 'حجم ملف الصورة يتجاوز 5 ميغابايت. يرجى اختيار ملف أصغر حجماً.',
       });
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result as string;
-      setUploadedLogoPreview(result);
-      setLogoUrlInput(result);
-      setLogoTypeInput('upload');
-      setBrandingFeedback({
-        type: 'success',
-        message: 'تم اختيار صورة الشعار بنجاح للمعاينة. اضغط "حفظ إعدادات السيستم" لتطبيقها رسمياً.',
+    compressImageClientSide(file, 400, 400)
+      .then((result) => {
+        setUploadedLogoPreview(result);
+        setLogoUrlInput(result);
+        setLogoTypeInput('upload');
+        setBrandingFeedback({
+          type: 'success',
+          message: 'تم اختيار صورة الشعار بنجاح للمعاينة. اضغط "حفظ إعدادات السيستم" لتطبيقها رسمياً.',
+        });
+      })
+      .catch(() => {
+        setBrandingFeedback({
+          type: 'error',
+          message: 'حدث خطأ أثناء معالجة الصورة. حاول مجدداً.',
+        });
       });
-    };
-    reader.readAsDataURL(file);
   };
 
   // Helper for processing founder photo file upload
@@ -508,17 +513,21 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLawsUpdated, onBrand
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result as string;
-      setFounderPhotoUrlInput(result);
-      setFounderPhotoSource('upload');
-      setBrandingFeedback({
-        type: 'success',
-        message: 'تم اختيار صورة المؤسس من الجهاز بنجاح. اضغط "حفظ إعدادات السيستم" لتطبيقها.',
+    compressImageClientSide(file, 400, 400)
+      .then((result) => {
+        setFounderPhotoUrlInput(result);
+        setFounderPhotoSource('upload');
+        setBrandingFeedback({
+          type: 'success',
+          message: 'تم اختيار صورة المؤسس من الجهاز بنجاح. اضغط "حفظ إعدادات السيستم" لتطبيقها.',
+        });
+      })
+      .catch(() => {
+        setBrandingFeedback({
+          type: 'error',
+          message: 'حدث خطأ أثناء معالجة الصورة. حاول مجدداً.',
+        });
       });
-    };
-    reader.readAsDataURL(file);
   };
 
   const handleFounderPhotoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
