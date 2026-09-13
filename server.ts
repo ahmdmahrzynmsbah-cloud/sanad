@@ -67,31 +67,47 @@ app.use((req, res, next) => {
   next();
 });
 
-// 2. Normalize API path if stripped by Vercel serverless functions
+// 2. Normalize API path if stripped or rewritten by Vercel serverless functions
 app.use((req, res, next) => {
-  const url = req.url || '';
-  if (!url.startsWith('/api') && (
-    url.startsWith('/auth') ||
-    url.startsWith('/laws') ||
-    url.startsWith('/categories') ||
-    url.startsWith('/settings') ||
-    url.startsWith('/admin') ||
-    url.startsWith('/ask') ||
-    url.startsWith('/export') ||
-    url.startsWith('/supervisors') ||
-    url.startsWith('/related-sites') ||
-    url.startsWith('/partners') ||
-    url.startsWith('/contact-info') ||
-    url.startsWith('/platform-about') ||
-    url.startsWith('/health') ||
-    url.startsWith('/sync')
-  )) {
-    req.url = '/api' + url;
+  const matchedPath = (req.headers['x-matched-path'] || req.headers['x-vercel-matched-path'] || req.headers['x-forwarded-uri'] || req.headers['x-original-url']) as string;
+  if (matchedPath && typeof matchedPath === 'string' && matchedPath.startsWith('/api/')) {
+    req.url = matchedPath;
+  } else {
+    const url = req.url || '';
+    if (!url.startsWith('/api') && (
+      url.startsWith('/auth') ||
+      url.startsWith('/laws') ||
+      url.startsWith('/categories') ||
+      url.startsWith('/settings') ||
+      url.startsWith('/admin') ||
+      url.startsWith('/ask') ||
+      url.startsWith('/export') ||
+      url.startsWith('/supervisors') ||
+      url.startsWith('/related-sites') ||
+      url.startsWith('/partners') ||
+      url.startsWith('/contact-info') ||
+      url.startsWith('/platform-about') ||
+      url.startsWith('/health') ||
+      url.startsWith('/sync') ||
+      url.startsWith('/users')
+    )) {
+      req.url = '/api' + url;
+    }
   }
   next();
 });
 
-// Quick health check endpoint (essential for Vercel/Cloud diagnostics)
+// 3. Body parsers IMMEDIATELY mounted so POST payload streams are never stalled by async middleware
+app.use((req, res, next) => {
+  if (req.body !== undefined && typeof req.body === 'object') {
+    (req as any)._body = true;
+  }
+  next();
+});
+app.use(express.json({ limit: '60mb' }));
+app.use(express.urlencoded({ extended: true, limit: '60mb' }));
+
+// 4. Quick health check endpoint (essential for Vercel/Cloud diagnostics)
 app.get(['/api/health', '/health'], (req, res) => {
   res.status(200).json({ status: 'ok', time: new Date().toISOString() });
 });
@@ -102,7 +118,7 @@ let lastSyncTime = 0;
 
 async function ensureDbSynced() {
   const now = Date.now();
-  // Sync on cold start (lastSyncTime === 0) or refresh if older than 60 seconds (never block every 5s)
+  // Sync on cold start (lastSyncTime === 0) or refresh if older than 60 seconds
   const isStale = lastSyncTime === 0 || (now - lastSyncTime > 60000);
   
   if (!syncPromise || isStale) {
@@ -121,8 +137,15 @@ async function ensureDbSynced() {
   ]);
 }
 
+// 5. Ensure DB synced for heavy API queries, excluding auth endpoints for instant response
 app.use(async (req, res, next) => {
-  if (req.path.startsWith('/api/') && req.path !== '/api/admin/login' && req.path !== '/api/health') {
+  const p = req.path || '';
+  if (
+    p.startsWith('/api/') &&
+    !p.startsWith('/api/auth/') &&
+    p !== '/api/admin/login' &&
+    p !== '/api/health'
+  ) {
     try {
       await ensureDbSynced();
     } catch (err) {
@@ -131,17 +154,6 @@ app.use(async (req, res, next) => {
   }
   next();
 });
-
-// ----------------------------------------
-// Vercel serverless helper: if body is already parsed by Vercel runtime, mark _body to avoid stream deadlock
-app.use((req, res, next) => {
-  if (req.body !== undefined && typeof req.body === 'object') {
-    (req as any)._body = true;
-  }
-  next();
-});
-app.use(express.json({ limit: '60mb' }));
-app.use(express.urlencoded({ extended: true, limit: '60mb' }));
 
 // Serve static assets from public folder (including pdf.worker.min.mjs)
 const publicDir = path.join(process.cwd(), 'public');
@@ -179,7 +191,13 @@ app.get('/api/sync', (req, res) => {
 // Broadcast changes from Firestore to connected SSE clients
 onDatabaseChange((collectionName) => {
   syncClients.forEach(client => {
-    client.write(`data: ${JSON.stringify({ type: 'update', collection: collectionName })}\n\n`);
+    try {
+      if (!client.writableEnded) {
+        client.write(`data: ${JSON.stringify({ type: 'update', collection: collectionName })}\n\n`);
+      }
+    } catch (e) {
+      syncClients.delete(client);
+    }
   });
 });
 
@@ -906,9 +924,13 @@ function getGemini(): GoogleGenAI {
 
 // --- Auth Endpoints ---
 
-// User Registration: New accounts automatically enter "pending" state
+// User Registration: New accounts automatically enter "pending" or "approved" state based on settings
 app.post('/api/auth/register', async (req, res) => {
   try {
+    if (!Array.isArray(db.users)) {
+      db.users = [];
+    }
+
     const { username, password, fullName, phone, recoveryCode } = req.body || {};
     if (!username || !password) {
       return res.status(400).json({ error: 'اسم المستخدم وكلمة المرور مطلوبان' });
@@ -935,16 +957,33 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ error: 'اسم المستخدم هذا محجوز لإدارة النظام' });
     }
 
-    const existingUser = db.users.find(
-      (u) => u.username.toLowerCase() === trimmedUsername.toLowerCase()
+    // Check memory first
+    let existingUser = db.users.find(
+      (u) => u && u.username && u.username.toLowerCase() === trimmedUsername.toLowerCase()
     );
+
+    // If not found in memory, double check Firestore cloud
+    if (!existingUser) {
+      try {
+        const cloudUsers = await fetchUsersFromFirestore();
+        if (cloudUsers && Array.isArray(cloudUsers)) {
+          db.users = cloudUsers;
+          existingUser = db.users.find(
+            (u) => u && u.username && u.username.toLowerCase() === trimmedUsername.toLowerCase()
+          );
+        }
+      } catch (fErr) {
+        console.warn('Could not query Firestore cloud during registration check:', fErr);
+      }
+    }
+
     if (existingUser) {
       return res.status(400).json({ error: 'اسم المستخدم مستخدم بالفعل، يرجى اختيار اسم آخر' });
     }
 
     // Check if phone number is already registered
     if (trimmedPhone) {
-      const existingPhone = db.users.find((u) => u.phone && u.phone.trim() === trimmedPhone);
+      const existingPhone = db.users.find((u) => u && u.phone && u.phone.trim() === trimmedPhone);
       if (existingPhone) {
         return res.status(400).json({ error: 'رقم الجوال هذا مسجل مسبقاً بحساب آخر' });
       }
@@ -1000,103 +1039,164 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 // User Login: Checks credentials, approval status, and trial expiration
-app.post('/api/auth/login', (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) {
-    return res.status(400).json({ error: 'يرجى إدخال اسم المستخدم أو رقم الجوال وكلمة المرور' });
-  }
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    if (!Array.isArray(db.users)) {
+      db.users = [];
+    }
 
-  const trimmed = String(username).trim();
-  const user = db.users.find(
-    (u) =>
-      (u.username.toLowerCase() === trimmed.toLowerCase() ||
-        (u.phone && u.phone.trim() === trimmed)) &&
-      u.password === String(password)
-  );
+    const { username, password } = req.body || {};
+    if (!username || !password) {
+      return res.status(400).json({ error: 'يرجى إدخال اسم المستخدم أو رقم الجوال وكلمة المرور' });
+    }
 
-  if (!user) {
-    return res.status(401).json({ error: 'بيانات الدخول أو كلمة المرور غير صحيحة' });
-  }
+    const trimmed = String(username).trim();
+    let user = db.users.find(
+      (u) =>
+        u &&
+        ((u.username && u.username.toLowerCase() === trimmed.toLowerCase()) ||
+          (u.phone && u.phone.trim() === trimmed)) &&
+        u.password === String(password)
+    );
 
-  // 1. Check pending status
-  if (user.status === 'pending') {
-    return res.status(403).json({
-      error: 'حسابك قيد المراجعة الإدارية حالياً، ولا يمكنك استخدام البوت إلا بعد موافقة المسؤول.',
-      status: 'pending',
-      username: user.username,
-      fullName: user.fullName,
-    });
-  }
+    // If not found in memory, query Firestore directly (essential for Vercel serverless cold starts)
+    if (!user) {
+      try {
+        const cloudUsers = await fetchUsersFromFirestore();
+        if (cloudUsers && Array.isArray(cloudUsers)) {
+          db.users = cloudUsers;
+          user = db.users.find(
+            (u) =>
+              u &&
+              ((u.username && u.username.toLowerCase() === trimmed.toLowerCase()) ||
+                (u.phone && u.phone.trim() === trimmed)) &&
+              u.password === String(password)
+          );
+        }
+      } catch (fErr) {
+        console.warn('Firestore fallback check on login:', fErr);
+      }
+    }
 
-  // 2. Check rejected status
-  if (user.status === 'rejected') {
-    return res.status(403).json({
-      error: 'تم رفض طلب حسابك من قِبل إدارة النظام. يتعذر تسجيل الدخول.',
-      status: 'rejected',
-      username: user.username,
-      fullName: user.fullName,
-    });
-  }
+    if (!user) {
+      return res.status(401).json({ error: 'بيانات الدخول أو كلمة المرور غير صحيحة' });
+    }
 
-  // 3. Real-time trial expiration & freeze check
-  const trialCheck = checkAndUpdateUserTrialStatus(user, true);
-  if (trialCheck.isFrozen) {
-    return res.status(403).json({
-      error: 'تم تجميد حسابك لانتهاء الفترة التجريبية المحددة دون اشتراك. يرجى الاشتراك لتفعيل الحساب ومتابعة الاستخدام.',
-      status: 'frozen',
-      isFrozen: true,
-      subscriptionStatus: 'frozen',
-      trialEndsAt: user.trialEndsAt,
-      username: user.username,
-      fullName: user.fullName,
-      freezeReason: user.freezeReason || 'انتهاء الفترة التجريبية',
+    // 1. Check pending status
+    if (user.status === 'pending') {
+      return res.status(403).json({
+        error: 'حسابك قيد المراجعة الإدارية حالياً، ولا يمكنك استخدام البوت إلا بعد موافقة المسؤول.',
+        status: 'pending',
+        username: user.username,
+        fullName: user.fullName,
+      });
+    }
+
+    // 2. Check rejected status
+    if (user.status === 'rejected') {
+      return res.status(403).json({
+        error: 'تم رفض طلب حسابك من قِبل إدارة النظام. يتعذر تسجيل الدخول.',
+        status: 'rejected',
+        username: user.username,
+        fullName: user.fullName,
+      });
+    }
+
+    // 3. Real-time trial expiration & freeze check
+    const trialCheck = checkAndUpdateUserTrialStatus(user, true);
+    if (trialCheck.isFrozen) {
+      return res.status(403).json({
+        error: 'تم تجميد حسابك لانتهاء الفترة التجريبية المحددة دون اشتراك. يرجى الاشتراك لتفعيل الحساب ومتابعة الاستخدام.',
+        status: 'frozen',
+        isFrozen: true,
+        subscriptionStatus: 'frozen',
+        trialEndsAt: user.trialEndsAt,
+        username: user.username,
+        fullName: user.fullName,
+        freezeReason: user.freezeReason || 'انتهاء الفترة التجريبية',
+        user: toSafeUser(user),
+      });
+    }
+
+    return res.json({
+      message: 'تم تسجيل الدخول بنجاح',
       user: toSafeUser(user),
     });
+  } catch (err: any) {
+    console.error('Login internal error:', err);
+    return res.status(500).json({ error: err?.message || 'حدث خطأ غير متوقع أثناء تسجيل الدخول' });
   }
-
-  return res.json({
-    message: 'تم تسجيل الدخول بنجاح',
-    user: toSafeUser(user),
-  });
 });
 
 // Password Reset using recovery code
 app.post('/api/auth/reset-password', async (req, res) => {
-  const { identifier, recoveryCode, newPassword } = req.body;
-  if (!identifier || !recoveryCode || !newPassword) {
-    return res.status(400).json({
-      error: 'يرجى إدخال اسم المستخدم أو رقم الجوال، ورمز استعادة كلمة المرور، وكلمة المرور الجديدة',
+  try {
+    if (!Array.isArray(db.users)) {
+      db.users = [];
+    }
+
+    const { identifier, recoveryCode, newPassword } = req.body || {};
+    if (!identifier || !recoveryCode || !newPassword) {
+      return res.status(400).json({
+        error: 'يرجى إدخال اسم المستخدم أو رقم الجوال، ورمز استعادة كلمة المرور، وكلمة المرور الجديدة',
+      });
+    }
+
+    if (String(newPassword).length < 4) {
+      return res.status(400).json({ error: 'يجب ألا تقل كلمة المرور الجديدة عن 4 خانات' });
+    }
+
+    const trimmedId = String(identifier).trim().toLowerCase();
+    const trimmedCode = String(recoveryCode).trim().toLowerCase();
+
+    let user = db.users.find(
+      (u) =>
+        u &&
+        ((u.username && u.username.toLowerCase() === trimmedId) ||
+          (u.phone && u.phone.trim().toLowerCase() === trimmedId))
+    );
+
+    // If not found in memory, query Firestore directly
+    if (!user) {
+      try {
+        const cloudUsers = await fetchUsersFromFirestore();
+        if (cloudUsers && Array.isArray(cloudUsers)) {
+          db.users = cloudUsers;
+          user = db.users.find(
+            (u) =>
+              u &&
+              ((u.username && u.username.toLowerCase() === trimmedId) ||
+                (u.phone && u.phone.trim().toLowerCase() === trimmedId))
+          );
+        }
+      } catch (fErr) {
+        console.warn('Firestore fallback check on reset-password:', fErr);
+      }
+    }
+
+    if (!user) {
+      return res.status(404).json({ error: 'لم يتم العثور على حساب مسجل بهذا الاسم أو رقم الجوال' });
+    }
+
+    if (!user.recoveryCode || user.recoveryCode.trim().toLowerCase() !== trimmedCode) {
+      return res.status(400).json({ error: 'رمز استعادة كلمة المرور غير صحيح لهذا الحساب' });
+    }
+
+    user.password = String(newPassword);
+    saveDB();
+    try {
+      await updateUserInFirestore(user.id, { password: user.password });
+    } catch (saveErr) {
+      console.warn('Failed to update password in Firestore cloud:', saveErr);
+    }
+
+    return res.json({
+      message: 'تم تعيين كلمة المرور الجديدة بنجاح! يمكنك الآن تسجيل الدخول بها.',
     });
+  } catch (err: any) {
+    console.error('Reset password internal error:', err);
+    return res.status(500).json({ error: err?.message || 'حدث خطأ في الخادم أثناء إعادة تعيين كلمة المرور' });
   }
-
-  if (String(newPassword).length < 4) {
-    return res.status(400).json({ error: 'يجب ألا تقل كلمة المرور الجديدة عن 4 خانات' });
-  }
-
-  const trimmedId = String(identifier).trim().toLowerCase();
-  const trimmedCode = String(recoveryCode).trim().toLowerCase();
-
-  const user = db.users.find(
-    (u) =>
-      u.username.toLowerCase() === trimmedId ||
-      (u.phone && u.phone.trim().toLowerCase() === trimmedId)
-  );
-
-  if (!user) {
-    return res.status(404).json({ error: 'لم يتم العثور على حساب مسجل بهذا الاسم أو رقم الجوال' });
-  }
-
-  if (!user.recoveryCode || user.recoveryCode.trim().toLowerCase() !== trimmedCode) {
-    return res.status(400).json({ error: 'رمز استعادة كلمة المرور غير صحيح لهذا الحساب' });
-  }
-
-  user.password = String(newPassword);
-  saveDB();
-  await updateUserInFirestore(user.id, { password: user.password });
-
-  return res.json({
-    message: 'تم تعيين كلمة المرور الجديدة بنجاح! يمكنك الآن تسجيل الدخول بها.',
-  });
 });
 
 // Fixed Admin Login

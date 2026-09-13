@@ -25,6 +25,12 @@ import {
   Server
 } from 'lucide-react';
 import { User } from '../types';
+import { safeFetchJson } from '../utils/safeApi';
+import {
+  directLoginUser,
+  directRegisterUser,
+  directResetPassword,
+} from '../services/clientFirestore';
 
 interface AuthModalProps {
   onLoginSuccess: (user: User) => void;
@@ -88,40 +94,75 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: username.trim(), password }),
-      });
+      let isFallbackNeeded = false;
+      let serverErrorMsg = '';
 
-      let data: any = null;
       try {
-        data = await res.json();
-      } catch (jsonErr) {
-        console.warn('Login non-JSON response:', res.status);
-      }
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: username.trim(), password }),
+        });
 
-      if (!res.ok || !data) {
-        if (data?.status === 'pending') {
-          setPendingStatusUser({ username: data.username || username });
-        } else if (data?.status === 'rejected') {
-          setRejectedUser(data.username || username);
-        } else {
-          setError(data?.error || `فشل تسجيل الدخول (${res.status}). الخادم لم يرسل استجابة صحيحة.`);
+        const parsed = await safeFetchJson<any>(res);
+        if (parsed.ok && parsed.data?.user) {
+          onLoginSuccess(parsed.data.user);
+          return;
         }
-        return;
+
+        // Business logic rejection from server (e.g. wrong credentials or pending/frozen)
+        if (res.status === 401) {
+          setError(parsed.error || 'بيانات الدخول أو كلمة المرور غير صحيحة');
+          return;
+        }
+
+        if (res.status === 403 && parsed.data) {
+          if (parsed.data.status === 'pending') {
+            setPendingStatusUser({ username: parsed.data.username || username });
+          } else if (parsed.data.status === 'rejected') {
+            setRejectedUser(parsed.data.username || username);
+          } else {
+            setError(parsed.error || parsed.data.error || 'الحساب غير متاح حالياً');
+          }
+          return;
+        }
+
+        // Status is 500, HTML error page, or serverless invocation failure
+        isFallbackNeeded = true;
+        serverErrorMsg = parsed.error || `خطأ في الخادم (${res.status})`;
+      } catch (fetchErr: any) {
+        console.warn('[Auth] API /api/auth/login fetch error, falling back to direct cloud Firestore:', fetchErr);
+        isFallbackNeeded = true;
       }
 
-      onLoginSuccess(data.user);
-    } catch (err: any) {
-      console.error('Login network error:', err);
-      let errorMsg = 'تعذر الاتصال بالخادم، يرجى المحاولة مرة أخرى.';
-      if (err instanceof TypeError && err.message.includes('fetch')) {
-         errorMsg = 'تعذر الاتصال بالخادم: فشل في الشبكة.';
-      } else if (err?.message) {
-         errorMsg = `تعذر الاتصال بالخادم: ${err.message}`;
+      if (isFallbackNeeded) {
+        console.log('[Auth] Attempting direct Cloud Firestore login fallback...');
+        const direct = await directLoginUser(username.trim(), password);
+        if (direct.ok && direct.user) {
+          onLoginSuccess(direct.user);
+          return;
+        }
+
+        if (direct.status === 'pending') {
+          setPendingStatusUser({ username: direct.user?.username || username });
+          return;
+        }
+
+        if (direct.status === 'rejected') {
+          setRejectedUser(direct.user?.username || username);
+          return;
+        }
+
+        if (direct.status === 'frozen') {
+          setError(direct.error || 'تم تجميد حسابك لانتهاء الفترة التجريبية المحددة.');
+          return;
+        }
+
+        setError(direct.error || serverErrorMsg || 'بيانات الدخول أو كلمة المرور غير صحيحة.');
       }
-      setError(errorMsg);
+    } catch (err: any) {
+      console.error('Login error:', err);
+      setError(err?.message || 'تعذر تسجيل الدخول، يرجى التحقق من الاتصال بالإنترنت.');
     } finally {
       setLoading(false);
     }
@@ -163,54 +204,83 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      let isFallbackNeeded = false;
+      let serverErrorMsg = '';
+
+      try {
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fullName: fullName.trim(),
+            phone: phone.trim(),
+            username: username.trim(),
+            password,
+            recoveryCode: recoveryCode.trim(),
+          }),
+        });
+
+        const parsed = await safeFetchJson<any>(res);
+        if (parsed.ok && (res.status === 200 || res.status === 201)) {
+          const data = parsed.data;
+          if (data?.isAutoApproved) {
+            setSuccessMessage(
+              'تم إنشاء الحساب واعتماده تلقائياً بنجاح! تم حفظ وتأكيد بياناتك، يمكنك الآن تسجيل الدخول مباشرة.'
+            );
+            setPassword('');
+            setTimeout(() => {
+              setMode('login');
+            }, 1600);
+          } else {
+            setSuccessMessage(
+              'تم تقديم طلب التسجيل بنجاح! تم حفظ بياناتك ورمز الأمان. حسابك حالياً في حالة "قيد المراجعة الإدارية".'
+            );
+            setPendingStatusUser({ username: username.trim() });
+            setPassword('');
+          }
+          return;
+        }
+
+        // Explicit validation error (400)
+        if (res.status === 400) {
+          setError(parsed.error || 'البيانات المدخلة غير صحيحة أو مستخدمة مسبقاً.');
+          return;
+        }
+
+        // Status is 500, HTML error page, or serverless invocation failure
+        isFallbackNeeded = true;
+        serverErrorMsg = parsed.error || `خطأ في الخادم (${res.status})`;
+      } catch (fetchErr: any) {
+        console.warn('[Auth] API /api/auth/register fetch error, falling back to direct cloud Firestore:', fetchErr);
+        isFallbackNeeded = true;
+      }
+
+      if (isFallbackNeeded) {
+        console.log('[Auth] Attempting direct Cloud Firestore registration fallback...');
+        const direct = await directRegisterUser({
           fullName: fullName.trim(),
           phone: phone.trim(),
           username: username.trim(),
           password,
           recoveryCode: recoveryCode.trim(),
-        }),
-      });
+        });
 
-      let data: any = null;
-      try {
-        data = await res.json();
-      } catch (jsonErr) {
-        console.warn('Register non-JSON response:', res.status);
-      }
+        if (direct.ok) {
+          setSuccessMessage(
+            direct.message || 'تم إنشاء الحساب بنجاح في قاعدة البيانات السحابية! يمكنك الآن تسجيل الدخول مباشرة.'
+          );
+          setPassword('');
+          setTimeout(() => {
+            setMode('login');
+          }, 1600);
+          return;
+        }
 
-      if (!res.ok || !data) {
-        setError(data?.error || `فشل إنشاء الحساب (${res.status}). الخادم لم يرسل استجابة صحيحة.`);
-        return;
-      }
-
-      if (data?.isAutoApproved) {
-        setSuccessMessage(
-          'تم إنشاء الحساب واعتماده تلقائياً بنجاح! تم حفظ وتأكيد بياناتك في السحابة، يمكنك الآن تسجيل الدخول مباشرة.'
-        );
-        setPassword('');
-        setTimeout(() => {
-          setMode('login');
-        }, 1600);
-      } else {
-        setSuccessMessage(
-          'تم تقديم طلب التسجيل بنجاح! تم حفظ بياناتك ورمز الأمان في قاعدة البيانات السحابية. حسابك حالياً في حالة "قيد المراجعة الإدارية".'
-        );
-        setPendingStatusUser({ username: username.trim() });
-        setPassword('');
+        setError(direct.error || serverErrorMsg || 'تعذر إنشاء الحساب، يرجى المحاولة مرة أخرى.');
       }
     } catch (err: any) {
-      console.error('Register network error:', err);
-      let errorMsg = 'تعذر الاتصال بالخادم أثناء التسجيل.';
-      if (err instanceof TypeError && err.message.includes('fetch')) {
-         errorMsg = 'تعذر الاتصال بالخادم: فشل في الشبكة.';
-      } else if (err?.message) {
-         errorMsg = `تعذر الاتصال بالخادم: ${err.message}`;
-      }
-      setError(errorMsg);
+      console.error('Register error:', err);
+      setError(err?.message || 'تعذر الاتصال بالخادم أثناء التسجيل.');
     } finally {
       setLoading(false);
     }
@@ -242,38 +312,68 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/reset-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          identifier: resetIdentifier.trim(),
-          recoveryCode: resetRecoveryCode.trim(),
-          newPassword: resetNewPassword,
-        }),
-      });
+      let isFallbackNeeded = false;
+      let serverErrorMsg = '';
 
-      let data: any = null;
       try {
-        data = await res.json();
-      } catch (jsonErr) {
-        console.warn('Reset password non-JSON response:', res.status);
+        const res = await fetch('/api/auth/reset-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            identifier: resetIdentifier.trim(),
+            recoveryCode: resetRecoveryCode.trim(),
+            newPassword: resetNewPassword,
+          }),
+        });
+
+        const parsed = await safeFetchJson<any>(res);
+        if (parsed.ok && res.status === 200) {
+          setSuccessMessage('تم تعيين كلمة المرور بنجاح! يمكنك الآن تسجيل الدخول بها.');
+          setUsername(resetIdentifier.trim());
+          setPassword('');
+          setResetNewPassword('');
+          setResetConfirmPassword('');
+          setResetRecoveryCode('');
+          setMode('login');
+          return;
+        }
+
+        if (res.status === 400 || res.status === 404) {
+          setError(parsed.error || 'رمز الاستعادة غير صحيح أو الحساب غير موجود.');
+          return;
+        }
+
+        isFallbackNeeded = true;
+        serverErrorMsg = parsed.error || `خطأ (${res.status})`;
+      } catch (fetchErr: any) {
+        console.warn('[Auth] API /api/auth/reset-password fetch error, falling back to direct cloud Firestore:', fetchErr);
+        isFallbackNeeded = true;
       }
 
-      if (!res.ok) {
-        setError(data?.error || `فشلت عملية تعيين كلمة المرور (${res.status})، يرجى التأكد من صحة رمز الأمان.`);
-        return;
-      }
+      if (isFallbackNeeded) {
+        console.log('[Auth] Attempting direct Cloud Firestore password reset fallback...');
+        const direct = await directResetPassword(
+          resetIdentifier.trim(),
+          resetRecoveryCode.trim(),
+          resetNewPassword
+        );
 
-      setSuccessMessage('تم تعيين كلمة المرور بنجاح! يمكنك الآن تسجيل الدخول بها.');
-      setUsername(resetIdentifier.trim());
-      setPassword('');
-      setResetNewPassword('');
-      setResetConfirmPassword('');
-      setResetRecoveryCode('');
-      setMode('login');
+        if (direct.ok) {
+          setSuccessMessage('تم تعيين كلمة المرور بنجاح في السحابة! يمكنك الآن تسجيل الدخول بها.');
+          setUsername(resetIdentifier.trim());
+          setPassword('');
+          setResetNewPassword('');
+          setResetConfirmPassword('');
+          setResetRecoveryCode('');
+          setMode('login');
+          return;
+        }
+
+        setError(direct.error || serverErrorMsg || 'فشلت عملية تعيين كلمة المرور، يرجى التأكد من صحة رمز الأمان.');
+      }
     } catch (err: any) {
-      console.error('Reset password network error:', err);
-      setError(err?.message ? `تعذر الاتصال بالخادم: ${err.message}` : 'تعذر الاتصال بالخادم.');
+      console.error('Reset password error:', err);
+      setError(err?.message || 'تعذر الاتصال بالخادم.');
     } finally {
       setLoading(false);
     }
