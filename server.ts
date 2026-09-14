@@ -3915,8 +3915,30 @@ async function startServer() {
   }
 }
 
-startServer().catch((err) => {
-  console.error('Unhandled error in startServer:', err);
-});
+// Only start standalone server if executed directly as the main entry point
+const isServerless = Boolean(
+  process.env.VERCEL || 
+  process.env.VERCEL_ENV ||
+  process.env.NOW_REGION ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME || 
+  process.env.NETLIFY ||
+  process.env.FUNCTION_NAME ||
+  process.env.LAMBDA_TASK_ROOT ||
+  process.env._HANDLER
+);
+
+const isMainEntry = Boolean(
+  process.argv[1] && (
+    process.argv[1].endsWith('server.ts') || 
+    process.argv[1].endsWith('server.cjs') || 
+    process.argv[1].endsWith('server.js')
+  )
+);
+
+if (!isServerless && isMainEntry) {
+  startServer().catch((err) => {
+    console.error('Unhandled error in startServer:', err);
+  });
+}
 
 export default app;

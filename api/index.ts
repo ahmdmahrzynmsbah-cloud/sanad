@@ -1,4 +1,4 @@
-import app from '../server';
+import app from '../server.ts';
 
 // Process-level shields against unhandled rejections and stream exceptions on Vercel
 if (typeof process !== 'undefined') {
@@ -20,9 +20,19 @@ export default async function handler(req: any, res: any) {
       }
     };
 
-    res.on('finish', finish);
-    res.on('close', finish);
+    // Safety timeout to prevent function from hanging indefinitely
+    const timeout = setTimeout(finish, 50000);
+
+    res.on('finish', () => {
+      clearTimeout(timeout);
+      finish();
+    });
+    res.on('close', () => {
+      clearTimeout(timeout);
+      finish();
+    });
     res.on('error', (err: any) => {
+      clearTimeout(timeout);
       console.error('[Vercel Response Error]:', err);
       finish();
     });
@@ -60,6 +70,9 @@ export default async function handler(req: any, res: any) {
           const subPath = decodeURIComponent(match[1]);
           req.url = '/api/' + subPath.replace(/^\//, '');
         }
+      } else if (req.query && (req.query['0'] || req.query['1'] || req.query['path'])) {
+        const wildcard = req.query['0'] || req.query['1'] || req.query['path'];
+        req.url = '/api/' + String(wildcard).replace(/^\//, '');
       } else if (req.url && !req.url.startsWith('/api')) {
         req.url = '/api' + (req.url.startsWith('/') ? req.url : '/' + req.url);
       }
