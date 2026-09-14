@@ -445,4 +445,279 @@ export async function directResetPassword(
   }
 }
 
+// ----------------------------------------------------
+// DIRECT CLIENT-SIDE BRANDING & SETTINGS FALLBACKS
+// ----------------------------------------------------
+
+export async function directSaveBrandingToFirestore(branding: any): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+
+  try {
+    const settingsRef = doc(db, 'system_settings', 'general');
+    const cleanData: any = {};
+    for (const [k, v] of Object.entries(branding || {})) {
+      if (v !== undefined) cleanData[k] = v;
+    }
+    cleanData.updatedAt = new Date().toISOString();
+    await setDoc(settingsRef, cleanData, { merge: true });
+    console.log('[Client Firestore] Branding saved directly to Firestore successfully');
+    return true;
+  } catch (err) {
+    console.error('[Client Firestore] Error saving branding directly:', err);
+    return false;
+  }
+}
+
+export async function directFetchBrandingFromFirestore(): Promise<any | null> {
+  const db = getClientDb();
+  if (!db) return null;
+
+  try {
+    const settingsCol = collection(db, 'system_settings');
+    const snapshot = await getDocs(settingsCol);
+    let found: any = null;
+    snapshot.forEach((docSnap) => {
+      if (docSnap.id === 'general') {
+        found = docSnap.data();
+      }
+    });
+    return found;
+  } catch (err) {
+    console.error('[Client Firestore] Error fetching branding directly:', err);
+    return null;
+  }
+}
+
+export async function directSavePlatformAboutToFirestore(data: any): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+
+  try {
+    const docRef = doc(db, 'system_settings', 'platform_about');
+    const cleanData: any = {};
+    for (const [k, v] of Object.entries(data || {})) {
+      if (v !== undefined) cleanData[k] = v;
+    }
+    cleanData.updatedAt = new Date().toISOString();
+    await setDoc(docRef, cleanData, { merge: true });
+    console.log('[Client Firestore] Platform about saved directly');
+    return true;
+  } catch (err) {
+    console.error('[Client Firestore] Error saving platform about:', err);
+    return false;
+  }
+}
+
+export async function directFetchPlatformAboutFromFirestore(): Promise<any | null> {
+  const db = getClientDb();
+  if (!db) return null;
+
+  try {
+    const settingsCol = collection(db, 'system_settings');
+    const snapshot = await getDocs(settingsCol);
+    let found: any = null;
+    snapshot.forEach((docSnap) => {
+      if (docSnap.id === 'platform_about') {
+        found = docSnap.data();
+      }
+    });
+    return found;
+  } catch (err) {
+    console.error('[Client Firestore] Error fetching platform about:', err);
+    return null;
+  }
+}
+
+export async function directSaveContactInfoToFirestore(data: any): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+
+  try {
+    const docRef = doc(db, 'system_settings', 'contact_info');
+    const cleanData: any = {};
+    for (const [k, v] of Object.entries(data || {})) {
+      if (v !== undefined) cleanData[k] = v;
+    }
+    cleanData.updatedAt = new Date().toISOString();
+    await setDoc(docRef, cleanData, { merge: true });
+    console.log('[Client Firestore] Contact info saved directly');
+    return true;
+  } catch (err) {
+    console.error('[Client Firestore] Error saving contact info:', err);
+    return false;
+  }
+}
+
+export async function directFetchContactInfoFromFirestore(): Promise<any | null> {
+  const db = getClientDb();
+  if (!db) return null;
+
+  try {
+    const settingsCol = collection(db, 'system_settings');
+    const snapshot = await getDocs(settingsCol);
+    let found: any = null;
+    snapshot.forEach((docSnap) => {
+      if (docSnap.id === 'contact_info') {
+        found = docSnap.data();
+      }
+    });
+    return found;
+  } catch (err) {
+    console.error('[Client Firestore] Error fetching contact info:', err);
+    return null;
+  }
+}
+
+export async function directSavePartnerToFirestore(partner: any): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+
+  try {
+    const partnerId = partner.id || 'partner-' + Date.now();
+    const partnerRef = doc(db, 'partners', partnerId);
+    await setDoc(partnerRef, {
+      ...partner,
+      id: partnerId,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+    return true;
+  } catch (err) {
+    console.error('[Client Firestore] Error saving partner directly:', err);
+    return false;
+  }
+}
+
+export async function directDeletePartnerFromFirestore(id: string): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+
+  try {
+    await deleteDoc(doc(db, 'partners', id));
+    return true;
+  } catch (err) {
+    console.error('[Client Firestore] Error deleting partner directly:', err);
+    return false;
+  }
+}
+
+export async function directFetchPartnersFromFirestore(): Promise<any[] | null> {
+  const db = getClientDb();
+  if (!db) return null;
+
+  try {
+    const col = collection(db, 'partners');
+    const snapshot = await getDocs(col);
+    const items: any[] = [];
+    snapshot.forEach((d) => {
+      items.push({ id: d.id, ...d.data() });
+    });
+    return items;
+  } catch (err) {
+    console.error('[Client Firestore] Error fetching partners directly:', err);
+    return null;
+  }
+}
+
+export async function directSaveRelatedSiteToFirestore(site: any): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+
+  try {
+    const siteId = site.id || 'site-' + Date.now();
+    const siteRef = doc(db, 'related_sites', siteId);
+    await setDoc(siteRef, {
+      ...site,
+      id: siteId,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+    return true;
+  } catch (err) {
+    console.error('[Client Firestore] Error saving related site directly:', err);
+    return false;
+  }
+}
+
+export async function directDeleteRelatedSiteFromFirestore(id: string): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+
+  try {
+    await deleteDoc(doc(db, 'related_sites', id));
+    return true;
+  } catch (err) {
+    console.error('[Client Firestore] Error deleting related site directly:', err);
+    return false;
+  }
+}
+
+export async function directFetchRelatedSitesFromFirestore(): Promise<any[] | null> {
+  const db = getClientDb();
+  if (!db) return null;
+
+  try {
+    const col = collection(db, 'related_sites');
+    const snapshot = await getDocs(col);
+    const items: any[] = [];
+    snapshot.forEach((d) => {
+      items.push({ id: d.id, ...d.data() });
+    });
+    return items;
+  } catch (err) {
+    console.error('[Client Firestore] Error fetching related sites directly:', err);
+    return null;
+  }
+}
+
+export async function directSaveSupervisorToFirestore(supervisor: any): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+
+  try {
+    const supId = supervisor.id || 'sup-' + Date.now();
+    const supRef = doc(db, 'supervisors', supId);
+    await setDoc(supRef, {
+      ...supervisor,
+      id: supId,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+    return true;
+  } catch (err) {
+    console.error('[Client Firestore] Error saving supervisor directly:', err);
+    return false;
+  }
+}
+
+export async function directDeleteSupervisorFromFirestore(id: string): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+
+  try {
+    await deleteDoc(doc(db, 'supervisors', id));
+    return true;
+  } catch (err) {
+    console.error('[Client Firestore] Error deleting supervisor directly:', err);
+    return false;
+  }
+}
+
+export async function directFetchSupervisorsFromFirestore(): Promise<any[] | null> {
+  const db = getClientDb();
+  if (!db) return null;
+
+  try {
+    const col = collection(db, 'supervisors');
+    const snapshot = await getDocs(col);
+    const items: any[] = [];
+    snapshot.forEach((d) => {
+      items.push({ id: d.id, ...d.data() });
+    });
+    return items;
+  } catch (err) {
+    console.error('[Client Firestore] Error fetching supervisors directly:', err);
+    return null;
+  }
+}
+
+
 

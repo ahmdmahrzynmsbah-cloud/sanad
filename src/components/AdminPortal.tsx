@@ -67,6 +67,8 @@ import {
   directSaveLawsBatchToFirestore,
   directFetchLawsFromFirestore,
   directDeleteLawFromFirestore,
+  directSaveBrandingToFirestore,
+  directFetchBrandingFromFirestore,
 } from '../services/clientFirestore';
 
 export interface QueuedLawItem {
@@ -591,31 +593,55 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     }
 
     try {
-      const res = await fetch('/api/admin/settings/branding', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const jsonRes = await safeFetchJson(res);
-      
-      if (jsonRes.ok && jsonRes.data?.success) {
+      let savedSuccessfully = false;
+      let resultingBranding: any = null;
+
+      try {
+        const res = await fetch('/api/admin/settings/branding', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const jsonRes = await safeFetchJson(res);
+        
+        if (jsonRes.ok && jsonRes.data?.success) {
+          savedSuccessfully = true;
+          resultingBranding = jsonRes.data.branding;
+        }
+      } catch (fetchErr) {
+        console.warn('[Serverless branding save notice, falling back to direct Firestore]:', fetchErr);
+      }
+
+      // If Serverless API is unavailable or encountered FUNCTION_INVOCATION_FAILED, fallback directly to Firestore
+      if (!savedSuccessfully) {
+        const directOk = await directSaveBrandingToFirestore(payload);
+        if (directOk) {
+          savedSuccessfully = true;
+          resultingBranding = payload;
+        }
+      }
+
+      if (savedSuccessfully && resultingBranding) {
         setBrandingFeedback({
           type: 'success',
-          message: 'تم حفظ وتطبيق الإعدادات بنجاح وحفظها سحابياً.',
+          message: 'تم حفظ وتطبيق الإعدادات وتخصيص الهوية بنجاح وحفظها سحابياً.',
         });
+        try {
+          localStorage.setItem('sanad_custom_branding', JSON.stringify(resultingBranding));
+        } catch {}
         if (onBrandingUpdated) {
-          onBrandingUpdated(jsonRes.data.branding);
+          onBrandingUpdated(resultingBranding);
         }
       } else {
         setBrandingFeedback({
           type: 'error',
-          message: jsonRes.error || jsonRes.data?.error || 'حدث خطأ أثناء حفظ الإعدادات. قد يكون حجم الصورة كبيراً جداً.',
+          message: 'حدث خطأ أثناء حفظ الإعدادات، يرجى التحقق من اتصال الإنترنت.',
         });
       }
     } catch {
       setBrandingFeedback({
         type: 'error',
-        message: 'تعذر الاتصال بالخادم لحفظ إعدادات السيستم.',
+        message: 'حدث خطأ غير متوقع أثناء حفظ الإعدادات.',
       });
     } finally {
       setSavingBranding(false);
@@ -627,27 +653,62 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     setResettingBranding(true);
     setBrandingFeedback(null);
     try {
-      const res = await fetch('/api/admin/settings/branding/reset', { method: 'POST' });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        applyBrandingState(data.branding);
+      let resetOk = false;
+      let targetBranding: any = null;
+
+      try {
+        const res = await fetch('/api/admin/settings/branding/reset', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          resetOk = true;
+          targetBranding = data.branding;
+        }
+      } catch {}
+
+      if (!resetOk) {
+        const defaultState = {
+          systemName: 'مساعد الجمارك والضرائب',
+          systemSubtitle: 'دولة فلسطين • وزارة المالية • الإدارة العامة للجمارك وضريبة الدخل',
+          systemBadge: 'فلسطين',
+          logoType: 'preset',
+          logoPreset: 'scale',
+          logoUrl: '',
+          founderName: 'المستشار القانوني أ. محمد ناصر خليل',
+          founderTitle: 'مستشار السياسات الجمركية والتشريعات الضريبية',
+          founderBio: 'خبير ومستشار قانوني وتشريعي متخصص في النظم الجمركية والضريبية الفلسطينية',
+          founderPhotoUrl: '',
+          founderQuote: 'الالتزام الضريبي والجمركي الواعي هو صمام أمان الاقتصاد الوطني وحماية حقيقية لحقوق المكلفين والخزينة العامة.',
+          siteOverview: 'منصة قانونية تخصصية متطورة توظف الذكاء الاصطناعي التوليدي والأنطولوجيا التشريعية لخدمة المكلفين، المحاسبين، المستوردين، ورجال الأعمال في فهم الإجراءات واللوائح والقرارات الصادرة عن وزارة المالية الفلسطينية والإدارة العامة للجمارك وضريبة الدخل.',
+        };
+        const directOk = await directSaveBrandingToFirestore(defaultState);
+        if (directOk) {
+          resetOk = true;
+          targetBranding = defaultState;
+        }
+      }
+
+      if (resetOk && targetBranding) {
+        applyBrandingState(targetBranding);
+        try {
+          localStorage.setItem('sanad_custom_branding', JSON.stringify(targetBranding));
+        } catch {}
         setBrandingFeedback({
           type: 'success',
-          message: 'تمت استعادة الاسم والشعار الافتراضي للسيستم بنجاح.',
+          message: 'تمت استعادة الاسم والشعار الافتراضي للسيستم بنجاح وحفظها سحابياً.',
         });
         if (onBrandingUpdated) {
-          onBrandingUpdated(data.branding);
+          onBrandingUpdated(targetBranding);
         }
       } else {
         setBrandingFeedback({
           type: 'error',
-          message: data.error || 'فشلت استعادة الإعدادات.',
+          message: 'فشلت استعادة الإعدادات.',
         });
       }
     } catch {
       setBrandingFeedback({
         type: 'error',
-        message: 'تعذر الاتصال بالخادم لاستعادة الإعدادات.',
+        message: 'تعذر الاتصال بقاعدة البيانات لاستعادة الإعدادات.',
       });
     } finally {
       setResettingBranding(false);

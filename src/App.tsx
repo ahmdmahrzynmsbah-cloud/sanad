@@ -14,9 +14,21 @@ import { SanadWelcomeModal } from './components/SanadWelcomeModal';
 import { User, SystemBranding, PlatformAboutData, ContactInfo } from './types';
 import { Scale, ShieldAlert, Clock, LogOut, ArrowRight, BookOpen } from 'lucide-react';
 import { initGlobalSync, useSync } from './utils/sync';
+import {
+  directFetchBrandingFromFirestore,
+  directFetchPlatformAboutFromFirestore,
+  directFetchContactInfoFromFirestore,
+} from './services/clientFirestore';
 
 export default function App() {
-  const [branding, setBranding] = useState<SystemBranding | undefined>(undefined);
+  const [branding, setBranding] = useState<SystemBranding | undefined>(() => {
+    try {
+      const cached = localStorage.getItem('sanad_custom_branding');
+      return cached ? JSON.parse(cached) : undefined;
+    } catch {
+      return undefined;
+    }
+  });
   const [platformAbout, setPlatformAbout] = useState<PlatformAboutData | null>(null);
   const [contactInfo, setContactInfo] = useState<ContactInfo | null>(null);
   const [authInitialMode, setAuthInitialMode] = useState<'login' | 'register'>('login');
@@ -84,6 +96,7 @@ export default function App() {
 
   // Fetch System Branding
   const fetchBranding = async () => {
+    let loaded = false;
     try {
       const res = await fetch('/api/system/branding');
       const data = await res.json();
@@ -92,35 +105,110 @@ export default function App() {
         if (data.systemName) {
           document.title = data.systemName;
         }
+        try {
+          localStorage.setItem('sanad_custom_branding', JSON.stringify(data));
+        } catch {}
+        loaded = true;
       }
-    } catch (err) {
-      console.warn('Failed to load branding:', err);
+    } catch {
+      // Fallback
+    }
+
+    if (!loaded) {
+      // 1. Try localStorage
+      try {
+        const cached = localStorage.getItem('sanad_custom_branding');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && parsed.systemName) {
+            setBranding(parsed);
+            document.title = parsed.systemName;
+            loaded = true;
+          }
+        }
+      } catch {}
+
+      // 2. Try Direct Firestore
+      try {
+        const direct = await directFetchBrandingFromFirestore();
+        if (direct && direct.systemName) {
+          setBranding(direct);
+          document.title = direct.systemName;
+          try {
+            localStorage.setItem('sanad_custom_branding', JSON.stringify(direct));
+          } catch {}
+        }
+      } catch (directErr) {
+        console.warn('Direct Firestore branding notice:', directErr);
+      }
     }
   };
 
   // Fetch Platform About
   const fetchPlatformAbout = async () => {
+    let loaded = false;
     try {
       const res = await fetch('/api/system/about');
       const data = await res.json();
       if (res.ok && data) {
         setPlatformAbout(data);
+        try {
+          localStorage.setItem('sanad_platform_about', JSON.stringify(data));
+        } catch {}
+        loaded = true;
       }
-    } catch (err) {
-      console.warn('Failed to load platform about:', err);
+    } catch {}
+
+    if (!loaded) {
+      try {
+        const cached = localStorage.getItem('sanad_platform_about');
+        if (cached) {
+          setPlatformAbout(JSON.parse(cached));
+        }
+      } catch {}
+      try {
+        const direct = await directFetchPlatformAboutFromFirestore();
+        if (direct) {
+          setPlatformAbout(direct);
+          try {
+            localStorage.setItem('sanad_platform_about', JSON.stringify(direct));
+          } catch {}
+        }
+      } catch {}
     }
   };
 
   // Fetch Contact Info
   const fetchContactInfo = async () => {
+    let loaded = false;
     try {
       const res = await fetch('/api/system/contact');
       const data = await res.json();
       if (res.ok && data && data.contactInfo) {
         setContactInfo(data.contactInfo);
+        try {
+          localStorage.setItem('sanad_contact_info', JSON.stringify(data.contactInfo));
+        } catch {}
+        loaded = true;
       }
-    } catch (err) {
-      console.warn('Failed to load contact info:', err);
+    } catch {}
+
+    if (!loaded) {
+      try {
+        const cached = localStorage.getItem('sanad_contact_info');
+        if (cached) {
+          setContactInfo(JSON.parse(cached));
+        }
+      } catch {}
+      try {
+        const direct = await directFetchContactInfoFromFirestore();
+        if (direct) {
+          setContactInfo(direct);
+          try {
+            localStorage.setItem('sanad_contact_info', JSON.stringify(direct));
+          } catch {}
+        }
+      } catch {}
     }
   };
 

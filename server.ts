@@ -49,7 +49,7 @@ import {
   clearUserConversationsFromFirestore,
   StoredConversation,
   onDatabaseChange,
-} from './server/firestore';
+} from './server/firestore.ts';
 
 dotenv.config();
 

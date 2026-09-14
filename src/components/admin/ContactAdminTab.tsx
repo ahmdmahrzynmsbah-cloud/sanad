@@ -20,6 +20,10 @@ import {
   X
 } from 'lucide-react';
 import { ContactInfo, ContactWhatsappItem, ContactPhoneItem } from '../../types';
+import {
+  directSaveContactInfoToFirestore,
+  directFetchContactInfoFromFirestore,
+} from '../../services/clientFirestore';
 
 interface ContactAdminTabProps {
   onContactUpdated?: (contact: ContactInfo) => void;
@@ -86,6 +90,7 @@ export const ContactAdminTab: React.FC<ContactAdminTabProps> = ({ onContactUpdat
   // Fetch initial data
   useEffect(() => {
     const fetchContactData = async () => {
+      let loaded = false;
       try {
         setLoading(true);
         const res = await fetch('/api/system/contact');
@@ -100,12 +105,26 @@ export const ContactAdminTab: React.FC<ContactAdminTabProps> = ({ onContactUpdat
           setAddress(info.address || DEFAULT_CONTACT_DATA.address || '');
           setNotes(info.notes || DEFAULT_CONTACT_DATA.notes || '');
           setUpdatedAt(info.updatedAt);
+          loaded = true;
         }
-      } catch (err) {
-        console.warn('Failed to load contact data in admin tab:', err);
-      } finally {
-        setLoading(false);
+      } catch {}
+
+      if (!loaded) {
+        try {
+          const direct = await directFetchContactInfoFromFirestore();
+          if (direct) {
+            setWhatsappNumbers(direct.whatsappNumbers || DEFAULT_CONTACT_DATA.whatsappNumbers);
+            setEmail(direct.email || DEFAULT_CONTACT_DATA.email);
+            setSecondaryEmail(direct.secondaryEmail || '');
+            setPhoneNumbers(direct.phoneNumbers || DEFAULT_CONTACT_DATA.phoneNumbers || []);
+            setWorkHours(direct.workHours || DEFAULT_CONTACT_DATA.workHours || '');
+            setAddress(direct.address || DEFAULT_CONTACT_DATA.address || '');
+            setNotes(direct.notes || DEFAULT_CONTACT_DATA.notes || '');
+            setUpdatedAt(direct.updatedAt);
+          }
+        } catch {}
       }
+      setLoading(false);
     };
 
     fetchContactData();
@@ -238,27 +257,43 @@ export const ContactAdminTab: React.FC<ContactAdminTabProps> = ({ onContactUpdat
         notes: notes.trim(),
       };
 
-      const res = await fetch('/api/admin/settings/contact', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      let saved = false;
+      let resultingInfo: any = null;
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'فشل حفظ بيانات التواصل');
+      try {
+        const res = await fetch('/api/admin/settings/contact', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          saved = true;
+          resultingInfo = data.contactInfo;
+        }
+      } catch {}
+
+      if (!saved) {
+        const directOk = await directSaveContactInfoToFirestore(payload);
+        if (directOk) {
+          saved = true;
+          resultingInfo = { ...payload, updatedAt: new Date().toISOString() };
+        }
       }
 
-      const data = await res.json();
-      setUpdatedAt(data.contactInfo?.updatedAt || new Date().toISOString());
-      if (onContactUpdated && data.contactInfo) {
-        onContactUpdated(data.contactInfo);
+      if (saved && resultingInfo) {
+        setUpdatedAt(resultingInfo.updatedAt || new Date().toISOString());
+        if (onContactUpdated) {
+          onContactUpdated(resultingInfo);
+        }
+        showFeedbackMessage(
+          'success',
+          'تم حفظ وتحديث بيانات التواصل وأرقام الواتساب والبريد بنجاح في قاعدة البيانات السحابية (Cloud Firestore)!'
+        );
+      } else {
+        throw new Error('فشل حفظ بيانات التواصل في قاعدة البيانات');
       }
-
-      showFeedbackMessage(
-        'success',
-        'تم حفظ وتحديث بيانات التواصل وأرقام الواتساب والبريد بنجاح في قاعدة البيانات السحابية (Cloud Firestore)!'
-      );
     } catch (err: any) {
       showFeedbackMessage('error', err.message || 'حدث خطأ أثناء الحفظ');
     } finally {

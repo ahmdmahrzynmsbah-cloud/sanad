@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { safeFetchJson } from '../../utils/safeApi';
 import {
+  directSavePlatformAboutToFirestore,
+  directFetchPlatformAboutFromFirestore,
+} from '../../services/clientFirestore';
+import {
   Target,
   Eye,
   Compass,
@@ -75,6 +79,7 @@ export const AboutPlatformAdminTab: React.FC<AboutPlatformAdminTabProps> = ({ on
   // Fetch initial data
   const fetchData = async () => {
     setLoading(true);
+    let loaded = false;
     try {
       const res = await fetch('/api/system/about');
       if (res.ok) {
@@ -87,13 +92,26 @@ export const AboutPlatformAdminTab: React.FC<AboutPlatformAdminTabProps> = ({ on
         setMissionContent(data.missionContent || '');
         setCustomSections(data.customSections || []);
         setUpdatedAt(data.updatedAt);
+        loaded = true;
       }
-    } catch (err) {
-      console.warn('Failed to load about data:', err);
-      setFeedback({ type: 'error', message: 'تعذر جلب بيانات عن المنصة من الخادم.' });
-    } finally {
-      setLoading(false);
+    } catch {}
+
+    if (!loaded) {
+      try {
+        const direct = await directFetchPlatformAboutFromFirestore();
+        if (direct) {
+          setOverviewTitle(direct.overviewTitle || 'عن منصة «سَنَد»');
+          setOverviewContent(direct.overviewContent || '');
+          setVisionTitle(direct.visionTitle || 'رؤيتنا (Vision)');
+          setVisionContent(direct.visionContent || '');
+          setMissionTitle(direct.missionTitle || 'رسالتنا (Mission)');
+          setMissionContent(direct.missionContent || '');
+          setCustomSections(direct.customSections || []);
+          setUpdatedAt(direct.updatedAt);
+        }
+      } catch {}
     }
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -110,17 +128,20 @@ export const AboutPlatformAdminTab: React.FC<AboutPlatformAdminTabProps> = ({ on
     setSaving(true);
     setFeedback(null);
 
-    try {
-      const payload = {
-        overviewTitle: overviewTitle.trim(),
-        overviewContent: overviewContent.trim(),
-        visionTitle: visionTitle.trim(),
-        visionContent: visionContent.trim(),
-        missionTitle: missionTitle.trim(),
-        missionContent: missionContent.trim(),
-        customSections,
-      };
+    const payload = {
+      overviewTitle: overviewTitle.trim(),
+      overviewContent: overviewContent.trim(),
+      visionTitle: visionTitle.trim(),
+      visionContent: visionContent.trim(),
+      missionTitle: missionTitle.trim(),
+      missionContent: missionContent.trim(),
+      customSections,
+    };
 
+    let saved = false;
+    let savedData: any = null;
+
+    try {
       const res = await fetch('/api/admin/settings/about', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -128,36 +149,35 @@ export const AboutPlatformAdminTab: React.FC<AboutPlatformAdminTabProps> = ({ on
       });
 
       const parsed = await safeFetchJson(res);
-      
-      if (!parsed.ok) {
-        setFeedback({ type: 'error', message: parsed.error || 'خطأ غير معروف' });
-        setSaving(false);
-        return;
+      if (parsed.ok && parsed.data?.success) {
+        saved = true;
+        savedData = parsed.data.platformAbout;
       }
-      
-      const data = parsed.data;
+    } catch {}
 
-      if (data.success) {
-        setFeedback({
-          type: 'success',
-          message: 'تم حفظ وتحديث محتوى «عن المنصة والرؤية والرسالة» بنجاح في قاعدة البيانات السحابية.',
-        });
-        setUpdatedAt(data.platformAbout?.updatedAt);
-        if (onAboutUpdated && data.platformAbout) {
-          onAboutUpdated(data.platformAbout);
-        }
-      } else {
-        setFeedback({
-          type: 'error',
-          message: data.error || 'حدث خطأ أثناء حفظ التعديلات.',
-        });
+    if (!saved) {
+      const directOk = await directSavePlatformAboutToFirestore(payload);
+      if (directOk) {
+        saved = true;
+        savedData = { ...payload, updatedAt: new Date().toISOString() };
       }
-    } catch (err) {
-      console.error('Save error:', err);
-      setFeedback({ type: 'error', message: 'فشل الاتصال بالخادم أثناء حفظ التعديلات.' });
-    } finally {
-      setSaving(false);
     }
+
+    if (saved) {
+      setFeedback({
+        type: 'success',
+        message: 'تم حفظ وتحديث محتوى «عن المنصة والرؤية والرسالة» بنجاح في قاعدة البيانات السحابية.',
+      });
+      if (savedData?.updatedAt) {
+        setUpdatedAt(savedData.updatedAt);
+      }
+      if (onAboutUpdated && savedData) {
+        onAboutUpdated(savedData);
+      }
+    } else {
+      setFeedback({ type: 'error', message: 'حدث خطأ أثناء حفظ التعديلات سحابياً.' });
+    }
+    setSaving(false);
   };
 
   // Reset to default
