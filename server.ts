@@ -803,8 +803,12 @@ async function syncWithFirestore() {
     }
     await seedFirestoreIfEmpty(db.users, db.laws, db.categories, db.supervisors, db.relatedSites, db.partners);
 
-    // Fetch collections sequentially to prevent Vercel Serverless OOM (Out of Memory) crashes
-    const cloudSettings = await fetchSettingsFromFirestore();
+    // Fetch critical collections first (users & settings) concurrently for instant availability
+    const [cloudSettings, cloudUsers] = await Promise.all([
+      fetchSettingsFromFirestore().catch(() => null),
+      fetchUsersFromFirestore().catch(() => null),
+    ]);
+
     const cloudAbout = await fetchPlatformAboutFromFirestore();
     const cloudContact = await fetchContactInfoFromFirestore();
     const cloudCategories = await fetchCategoriesFromFirestore();
@@ -812,8 +816,7 @@ async function syncWithFirestore() {
     const cloudRelatedSites = await fetchRelatedSitesFromFirestore();
     const cloudPartners = await fetchPartnersFromFirestore();
     
-    // Fetch heavy collections last
-    const cloudUsers = await fetchUsersFromFirestore();
+    // Fetch heavy laws collection
     const cloudLaws = await fetchLawsFromFirestore();
 
     let changed = false;
@@ -1319,10 +1322,21 @@ app.get('/api/system/contact', (req, res) => {
 });
 
 // Fast Consolidated Admin Initial Data (Single roundtrip for ultra-fast portal load)
-app.get('/api/admin/init', (req, res) => {
-  const safeUsers = db.users.map(toSafeUser);
+app.get('/api/admin/init', async (req, res) => {
+  try {
+    if (!db.users || db.users.length === 0) {
+      const cloudUsers = await fetchUsersFromFirestore();
+      if (cloudUsers && Array.isArray(cloudUsers)) {
+        db.users = cloudUsers;
+      }
+    }
+  } catch (err) {
+    console.error('Error ensuring users for /api/admin/init:', err);
+  }
+
+  const adminUsers = (db.users || []).map(toAdminUser);
   res.json({
-    users: safeUsers,
+    users: adminUsers,
     laws: db.laws,
     categories: db.categories || [],
     supervisors: (db.supervisors || []).sort((a, b) => (a.order || 0) - (b.order || 0)),
@@ -2352,8 +2366,18 @@ app.post('/api/admin/users/auto-approve-all', async (req, res) => {
 });
 
 // Get all users with real-time trial and subscription calculations (Admin view with credentials)
-app.get('/api/admin/users', (req, res) => {
-  const adminUsers = db.users.map(toAdminUser);
+app.get('/api/admin/users', async (req, res) => {
+  try {
+    if (!db.users || db.users.length === 0) {
+      const cloudUsers = await fetchUsersFromFirestore();
+      if (cloudUsers && Array.isArray(cloudUsers)) {
+        db.users = cloudUsers;
+      }
+    }
+  } catch (err) {
+    console.error('Error ensuring users for /api/admin/users:', err);
+  }
+  const adminUsers = (db.users || []).map(toAdminUser);
   res.json({ users: adminUsers });
 });
 

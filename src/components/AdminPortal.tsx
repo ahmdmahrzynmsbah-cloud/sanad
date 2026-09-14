@@ -69,6 +69,12 @@ import {
   directDeleteLawFromFirestore,
   directSaveBrandingToFirestore,
   directFetchBrandingFromFirestore,
+  directFetchUsersFromFirestore,
+  directUpdateUserStatusInFirestore,
+  directUpdateUserTrialInFirestore,
+  directUpdateUserSubscriptionInFirestore,
+  directToggleFreezeUserInFirestore,
+  directAutoApproveAllPendingInFirestore,
 } from '../services/clientFirestore';
 
 export interface QueuedLawItem {
@@ -105,7 +111,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   // Users state
   const [users, setUsers] = useState<User[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
-  const [usersFilter, setUsersFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'frozen'>('pending');
+  const [usersFilter, setUsersFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'frozen'>('all');
   const [userActionMessage, setUserActionMessage] = useState<string | null>(null);
   const [processingUserId, setProcessingUserId] = useState<string | null>(null);
 
@@ -264,17 +270,32 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   // Fetch Users
   const fetchUsers = async () => {
     setUsersLoading(true);
+    let loadedUsers: User[] | null = null;
     try {
       const res = await fetch('/api/admin/users');
-      const data = await res.json();
-      if (res.ok && data.users) {
-        setUsers(data.users);
+      const data = await safeFetchJson<{ users?: User[] }>(res);
+      if (data.ok && data.data?.users && Array.isArray(data.data.users) && data.data.users.length > 0) {
+        loadedUsers = data.data.users;
       }
     } catch (err) {
-      console.warn('Failed to fetch users:', err);
-    } finally {
-      setUsersLoading(false);
+      console.warn('Failed to fetch users from API, trying direct Firestore:', err);
     }
+
+    if (!loadedUsers || loadedUsers.length === 0) {
+      try {
+        const firestoreUsers = await directFetchUsersFromFirestore();
+        if (firestoreUsers && firestoreUsers.length > 0) {
+          loadedUsers = firestoreUsers;
+        }
+      } catch (fErr) {
+        console.warn('Failed to fetch users from direct Firestore:', fErr);
+      }
+    }
+
+    if (loadedUsers) {
+      setUsers(loadedUsers);
+    }
+    setUsersLoading(false);
   };
 
   // Fetch Laws
@@ -406,7 +427,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       const res = await fetch('/api/admin/init');
       if (res.ok) {
         const data = await res.json();
-        if (data.users) setUsers(data.users);
+        if (data.users && Array.isArray(data.users) && data.users.length > 0) {
+          setUsers(data.users);
+        } else {
+          // If init returned 0 users due to cold start, fetch directly from Firestore
+          try {
+            const firestoreUsers = await directFetchUsersFromFirestore();
+            if (firestoreUsers && firestoreUsers.length > 0) {
+              setUsers(firestoreUsers);
+            }
+          } catch (fErr) {
+            console.warn('Fallback direct users fetch failed:', fErr);
+          }
+        }
         if (data.laws) {
           setLaws(data.laws);
           if (onLawsUpdated) onLawsUpdated();
@@ -851,9 +884,23 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
           fetchUsers();
         }
         setTimeout(() => setUserActionMessage(null), 5000);
+      } else {
+        throw new Error(data.error || 'Server error');
       }
     } catch (err) {
-      console.error('Bulk approve failed:', err);
+      console.error('Bulk approve failed, trying direct Firestore:', err);
+      try {
+        const directRes = await directAutoApproveAllPendingInFirestore(defaultTrialDays);
+        if (directRes.success) {
+          setUserActionMessage(
+            `⚡ تم قبول واعتماد جميع الطلبات المعلقة (${directRes.count}) بنجاح في قاعدة البيانات!`
+          );
+          fetchUsers();
+          setTimeout(() => setUserActionMessage(null), 5000);
+        }
+      } catch (dErr) {
+        console.error('Direct bulk approve failed:', dErr);
+      }
     } finally {
       setBulkApproving(false);
     }
@@ -888,11 +935,37 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         }
         setTimeout(() => setUserActionMessage(null), 5000);
       } else {
-        setUserActionMessage(`❌ حدث خطأ: ${data.error || 'تعذر تحديث الحالة'}`);
-        fetchUsers();
+        const directOk = await directUpdateUserStatusInFirestore(id, status);
+        if (directOk) {
+          setUserActionMessage(
+            status === 'approved'
+              ? '✅ تم اعتماد المستخدم وتصريحه مباشرة في السحابة!'
+              : '⚠️ تم رفض المستخدم مباشرة في السحابة.'
+          );
+          fetchUsers();
+          setTimeout(() => setUserActionMessage(null), 5000);
+        } else {
+          setUserActionMessage(`❌ حدث خطأ: ${data.error || 'تعذر تحديث الحالة'}`);
+          fetchUsers();
+        }
       }
     } catch (err) {
-      console.error('Status update failed:', err);
+      console.warn('Status update API error, falling back to direct Firestore:', err);
+      try {
+        const directOk = await directUpdateUserStatusInFirestore(id, status);
+        if (directOk) {
+          setUserActionMessage(
+            status === 'approved'
+              ? '✅ تم اعتماد المستخدم وتصريحه مباشرة في السحابة!'
+              : '⚠️ تم رفض المستخدم مباشرة في السحابة.'
+          );
+          fetchUsers();
+          setTimeout(() => setUserActionMessage(null), 5000);
+          return;
+        }
+      } catch (dErr) {
+        console.error('Direct update user status failed:', dErr);
+      }
       setUserActionMessage('❌ تعذر الاتصال بالخادم، يرجى المحاولة ثانية.');
       fetchUsers();
     } finally {
@@ -957,10 +1030,36 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         }
         setTimeout(() => setUserActionMessage(null), 5000);
       } else {
-        setUserActionMessage(`❌ حدث خطأ: ${data.error || 'تعذر تعديل الاشتراك'}`);
+        const directOk = await directUpdateUserSubscriptionInFirestore(user.id, newSubscriptionState);
+        if (directOk) {
+          setUserActionMessage(
+            newSubscriptionState
+              ? `👑 تم تفعيل الاشتراك الدائم للمستخدم "${user.fullName || user.username}" مباشرة في السحابة!`
+              : `⚠️ تم إلغاء اشتراك المستخدم "${user.fullName || user.username}" مباشرة في السحابة.`
+          );
+          fetchUsers();
+          setTimeout(() => setUserActionMessage(null), 5000);
+        } else {
+          setUserActionMessage(`❌ حدث خطأ: ${data.error || 'تعذر تعديل الاشتراك'}`);
+        }
       }
     } catch (err) {
-      console.error('Toggle subscription error:', err);
+      console.warn('Toggle subscription error, trying direct Firestore:', err);
+      try {
+        const directOk = await directUpdateUserSubscriptionInFirestore(user.id, newSubscriptionState);
+        if (directOk) {
+          setUserActionMessage(
+            newSubscriptionState
+              ? `👑 تم تفعيل الاشتراك الدائم للمستخدم "${user.fullName || user.username}" مباشرة في السحابة!`
+              : `⚠️ تم إلغاء اشتراك المستخدم "${user.fullName || user.username}" مباشرة في السحابة.`
+          );
+          fetchUsers();
+          setTimeout(() => setUserActionMessage(null), 5000);
+          return;
+        }
+      } catch (dErr) {
+        console.error('Direct toggle subscription failed:', dErr);
+      }
       setUserActionMessage('❌ تعذر الاتصال بالخادم لتحديث الاشتراك.');
     } finally {
       setProcessingUserId(null);
@@ -988,10 +1087,30 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         }
         setTimeout(() => setUserActionMessage(null), 5000);
       } else {
-        setUserActionMessage(`❌ ${data.error || 'تعذر تمديد التجربة'}`);
+        const directOk = await directUpdateUserTrialInFirestore(userId, daysToAdd);
+        if (directOk) {
+          setUserActionMessage(`⏳ تم تمديد الفترة التجريبية للمستخدم بنجاح بمقدار (${daysToAdd} يوم) في السحابة!`);
+          setTrialModalUser(null);
+          fetchUsers();
+          setTimeout(() => setUserActionMessage(null), 5000);
+        } else {
+          setUserActionMessage(`❌ ${data.error || 'تعذر تمديد التجربة'}`);
+        }
       }
     } catch (err) {
-      console.error('Extend trial error:', err);
+      console.warn('Extend trial error, trying direct Firestore:', err);
+      try {
+        const directOk = await directUpdateUserTrialInFirestore(userId, daysToAdd);
+        if (directOk) {
+          setUserActionMessage(`⏳ تم تمديد الفترة التجريبية للمستخدم بنجاح بمقدار (${daysToAdd} يوم) في السحابة!`);
+          setTrialModalUser(null);
+          fetchUsers();
+          setTimeout(() => setUserActionMessage(null), 5000);
+          return;
+        }
+      } catch (dErr) {
+        console.error('Direct extend trial failed:', dErr);
+      }
       setUserActionMessage('❌ تعذر الاتصال بالخادم لتمديد الفترة التجريبية.');
     } finally {
       setUpdatingUserTrial(false);
@@ -1026,10 +1145,36 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         }
         setTimeout(() => setUserActionMessage(null), 5000);
       } else {
-        setUserActionMessage(`❌ ${data.error || 'تعذر تعديل حالة التجميد'}`);
+        const directOk = await directToggleFreezeUserInFirestore(user.id, !isCurrentlyFrozen);
+        if (directOk) {
+          setUserActionMessage(
+            isCurrentlyFrozen
+              ? `🔓 تم إلغاء تجميد حساب "${user.fullName || user.username}" مباشرة في السحابة!`
+              : `❄️ تم تجميد حساب "${user.fullName || user.username}" مباشرة في السحابة.`
+          );
+          fetchUsers();
+          setTimeout(() => setUserActionMessage(null), 5000);
+        } else {
+          setUserActionMessage(`❌ ${data.error || 'تعذر تعديل حالة التجميد'}`);
+        }
       }
     } catch (err) {
-      console.error('Toggle freeze error:', err);
+      console.warn('Toggle freeze error, trying direct Firestore:', err);
+      try {
+        const directOk = await directToggleFreezeUserInFirestore(user.id, !isCurrentlyFrozen);
+        if (directOk) {
+          setUserActionMessage(
+            isCurrentlyFrozen
+              ? `🔓 تم إلغاء تجميد حساب "${user.fullName || user.username}" مباشرة في السحابة!`
+              : `❄️ تم تجميد حساب "${user.fullName || user.username}" مباشرة في السحابة.`
+          );
+          fetchUsers();
+          setTimeout(() => setUserActionMessage(null), 5000);
+          return;
+        }
+      } catch (dErr) {
+        console.error('Direct toggle freeze failed:', dErr);
+      }
       setUserActionMessage('❌ تعذر الاتصال بالخادم لتعديل التجميد.');
     } finally {
       setProcessingUserId(null);
@@ -2048,6 +2193,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                     className="mt-3 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg text-xs font-bold transition-colors cursor-pointer"
                   >
                     عرض جميع الحسابات ({users.length})
+                  </button>
+                )}
+                {users.length === 0 && !usersLoading && (
+                  <button
+                    onClick={fetchUsers}
+                    className="mt-3 px-4 py-2 bg-[#12281e] hover:bg-[#1a382b] text-white rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    جلب المستخدمين من قاعدة البيانات السحابية
                   </button>
                 )}
               </div>

@@ -722,5 +722,257 @@ export async function directFetchSupervisorsFromFirestore(): Promise<any[] | nul
   }
 }
 
+// ----------------------------------------------------
+// DIRECT CLIENT-SIDE USERS MANAGEMENT FALLBACKS
+// ----------------------------------------------------
+
+/**
+ * Direct client-side fetch of all users from Firestore.
+ * Ensures the Admin Portal always displays registered users even if the serverless API cold-starts or fails.
+ */
+export async function directFetchUsersFromFirestore(): Promise<User[] | null> {
+  const db = getClientDb();
+  if (!db) return null;
+
+  try {
+    const col = collection(db, 'users');
+    const snapshot = await getDocs(col);
+    if (snapshot.empty) return [];
+
+    const now = Date.now();
+    const items: User[] = [];
+
+    snapshot.forEach((d) => {
+      const data = d.data();
+      const user: User = {
+        id: data.id || d.id,
+        username: data.username || '',
+        fullName: data.fullName || '',
+        phone: data.phone || '',
+        password: data.password || '',
+        recoveryCode: data.recoveryCode || '',
+        role: (data.role as any) || 'user',
+        status: (data.status as any) || 'approved',
+        createdAt: data.createdAt || new Date().toISOString(),
+        reviewedAt: data.reviewedAt || '',
+        subscriptionStatus: (data.subscriptionStatus as any) || 'trial',
+        trialDays: typeof data.trialDays === 'number' ? data.trialDays : 7,
+        trialStartedAt: data.trialStartedAt || data.createdAt || new Date().toISOString(),
+        trialEndsAt: data.trialEndsAt || '',
+        isSubscribed: Boolean(data.isSubscribed),
+        subscriptionPlan: data.subscriptionPlan || '',
+        subscribedAt: data.subscribedAt || '',
+        frozenAt: data.frozenAt || '',
+        freezeReason: data.freezeReason || '',
+      };
+
+      // Real-time trial calculation client-side
+      if (user.isSubscribed) {
+        user.subscriptionStatus = 'active';
+        user.isFrozen = false;
+        user.remainingTrialDays = 999;
+        user.remainingTrialHours = 999;
+      } else if (user.status === 'frozen' || user.subscriptionStatus === 'frozen') {
+        user.isFrozen = true;
+        user.subscriptionStatus = 'frozen';
+        user.remainingTrialDays = 0;
+        user.remainingTrialHours = 0;
+      } else {
+        if (!user.trialEndsAt) {
+          const createdTime = user.createdAt ? new Date(user.createdAt).getTime() : now;
+          const tDays = user.trialDays && user.trialDays > 0 ? user.trialDays : 7;
+          user.trialEndsAt = new Date(createdTime + tDays * 24 * 60 * 60 * 1000).toISOString();
+        }
+        const trialEndTime = new Date(user.trialEndsAt).getTime();
+        if (now >= trialEndTime) {
+          user.status = 'frozen';
+          user.subscriptionStatus = 'frozen';
+          user.isFrozen = true;
+          user.remainingTrialDays = 0;
+          user.remainingTrialHours = 0;
+        } else {
+          const diffMs = trialEndTime - now;
+          user.remainingTrialDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+          user.remainingTrialHours = Math.floor((diffMs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+          user.isFrozen = false;
+          user.subscriptionStatus = 'trial';
+        }
+      }
+
+      items.push(user);
+    });
+
+    // Sort newest users first
+    items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    console.log(`[Client Firestore] Loaded ${items.length} users directly from Cloud Firestore.`);
+    return items;
+  } catch (err) {
+    console.error('[Client Firestore] Error fetching users directly:', err);
+    return null;
+  }
+}
+
+/**
+ * Direct update of user status (approved / rejected) in Firestore
+ */
+export async function directUpdateUserStatusInFirestore(
+  userId: string,
+  status: 'approved' | 'rejected' | 'pending'
+): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+
+  try {
+    const userRef = doc(db, 'users', userId);
+    const updateData: any = {
+      status,
+      reviewedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    if (status === 'approved') {
+      updateData.subscriptionStatus = 'trial';
+      updateData.frozenAt = '';
+      updateData.freezeReason = '';
+    }
+    await updateDoc(userRef, updateData);
+    console.log(`[Client Firestore] Updated status for ${userId} to ${status}`);
+    return true;
+  } catch (err) {
+    console.error('[Client Firestore] Error updating user status directly:', err);
+    return false;
+  }
+}
+
+/**
+ * Direct update of user trial days in Firestore
+ */
+export async function directUpdateUserTrialInFirestore(
+  userId: string,
+  additionalDays: number
+): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+
+  try {
+    const userRef = doc(db, 'users', userId);
+    const now = Date.now();
+    const newEndTime = new Date(now + additionalDays * 24 * 60 * 60 * 1000).toISOString();
+    await updateDoc(userRef, {
+      trialDays: additionalDays,
+      trialEndsAt: newEndTime,
+      status: 'approved',
+      subscriptionStatus: 'trial',
+      frozenAt: '',
+      freezeReason: '',
+      updatedAt: new Date().toISOString(),
+    });
+    console.log(`[Client Firestore] Extended trial for ${userId} by ${additionalDays} days`);
+    return true;
+  } catch (err) {
+    console.error('[Client Firestore] Error extending user trial directly:', err);
+    return false;
+  }
+}
+
+/**
+ * Direct update of user subscription in Firestore
+ */
+export async function directUpdateUserSubscriptionInFirestore(
+  userId: string,
+  isSubscribed: boolean,
+  plan?: string
+): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+
+  try {
+    const userRef = doc(db, 'users', userId);
+    const updateData: any = {
+      isSubscribed,
+      subscriptionStatus: isSubscribed ? 'active' : 'trial',
+      status: isSubscribed ? 'approved' : 'approved',
+      subscribedAt: isSubscribed ? new Date().toISOString() : '',
+      subscriptionPlan: plan || (isSubscribed ? 'سنوي غير محدود' : ''),
+      frozenAt: '',
+      freezeReason: '',
+      updatedAt: new Date().toISOString(),
+    };
+    await updateDoc(userRef, updateData);
+    console.log(`[Client Firestore] Updated subscription for ${userId}: isSubscribed=${isSubscribed}`);
+    return true;
+  } catch (err) {
+    console.error('[Client Firestore] Error updating subscription directly:', err);
+    return false;
+  }
+}
+
+/**
+ * Direct freeze/unfreeze toggle in Firestore
+ */
+export async function directToggleFreezeUserInFirestore(
+  userId: string,
+  freeze: boolean,
+  reason?: string
+): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+
+  try {
+    const userRef = doc(db, 'users', userId);
+    const updateData: any = {
+      status: freeze ? 'frozen' : 'approved',
+      subscriptionStatus: freeze ? 'frozen' : 'trial',
+      frozenAt: freeze ? new Date().toISOString() : '',
+      freezeReason: freeze ? (reason || 'تم التجميد يدوياً بواسطة الإدارة') : '',
+      updatedAt: new Date().toISOString(),
+    };
+    await updateDoc(userRef, updateData);
+    console.log(`[Client Firestore] Toggled freeze for ${userId}: freeze=${freeze}`);
+    return true;
+  } catch (err) {
+    console.error('[Client Firestore] Error toggling freeze directly:', err);
+    return false;
+  }
+}
+
+/**
+ * Direct bulk auto-approval of all pending users in Firestore
+ */
+export async function directAutoApproveAllPendingInFirestore(defaultDays: number = 7): Promise<{ success: boolean; count: number }> {
+  const db = getClientDb();
+  if (!db) return { success: false, count: 0 };
+
+  try {
+    const col = collection(db, 'users');
+    const snapshot = await getDocs(col);
+    let count = 0;
+    const now = new Date();
+
+    for (const docSnap of snapshot.docs) {
+      const data = docSnap.data();
+      if (data.status === 'pending') {
+        const userRef = doc(db, 'users', docSnap.id);
+        const trialEndsAt = new Date(now.getTime() + defaultDays * 24 * 60 * 60 * 1000).toISOString();
+        await updateDoc(userRef, {
+          status: 'approved',
+          reviewedAt: now.toISOString(),
+          subscriptionStatus: 'trial',
+          trialDays: defaultDays,
+          trialStartedAt: now.toISOString(),
+          trialEndsAt,
+          updatedAt: now.toISOString(),
+        });
+        count++;
+      }
+    }
+
+    console.log(`[Client Firestore] Bulk auto-approved ${count} pending users.`);
+    return { success: true, count };
+  } catch (err) {
+    console.error('[Client Firestore] Error bulk auto-approving directly:', err);
+    return { success: false, count: 0 };
+  }
+}
+
 
 
