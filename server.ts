@@ -101,7 +101,17 @@ app.use((req, res, next) => {
 
 // 3. Body parsers IMMEDIATELY mounted so POST payload streams are never stalled by async middleware
 app.use((req, res, next) => {
-  if (req.body !== undefined && typeof req.body === 'object') {
+  if (typeof req.body === 'string' && req.body.trim()) {
+    try {
+      req.body = JSON.parse(req.body);
+      (req as any)._body = true;
+    } catch {}
+  } else if (Buffer.isBuffer(req.body)) {
+    try {
+      req.body = JSON.parse(req.body.toString('utf-8'));
+      (req as any)._body = true;
+    } catch {}
+  } else if (req.body !== undefined && typeof req.body === 'object') {
     (req as any)._body = true;
   }
   next();
@@ -179,25 +189,45 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 const syncClients = new Set<express.Response>();
 
 app.get('/api/sync', (req, res) => {
+  const isServerless = Boolean(
+    process.env.VERCEL ||
+    process.env.VERCEL_ENV ||
+    process.env.NOW_REGION ||
+    process.env.AWS_LAMBDA_FUNCTION_NAME ||
+    process.env.NETLIFY
+  );
+
+  if (isServerless) {
+    // In serverless environments, avoid holding long-lived HTTP streams
+    return res.status(200).json({ status: 'ok', mode: 'serverless-sync' });
+  }
+
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders();
   
-  syncClients.add(res);
-  
-  req.on('close', () => {
+  const cleanup = () => {
     syncClients.delete(res);
-  });
+  };
+
+  res.on('error', cleanup);
+  res.on('close', cleanup);
+  res.on('finish', cleanup);
+  req.on('close', cleanup);
+
+  syncClients.add(res);
 });
 
 // Broadcast changes from Firestore to connected SSE clients
 onDatabaseChange((collectionName) => {
   syncClients.forEach(client => {
     try {
-      if (!client.writableEnded) {
+      if (!client.writableEnded && client.socket && !client.socket.destroyed) {
         client.write(`data: ${JSON.stringify({ type: 'update', collection: collectionName })}\n\n`);
+      } else {
+        syncClients.delete(client);
       }
     } catch (e) {
       syncClients.delete(client);
@@ -1364,95 +1394,81 @@ app.get('/api/admin/settings', (req, res) => {
 // Update System Branding & Founder Profile
 app.post('/api/admin/settings/branding', async (req, res, next) => {
   try {
+    let body = req.body;
+    if (typeof body === 'string' && body.trim()) {
+      try {
+        body = JSON.parse(body);
+      } catch {}
+    }
     const {
-    systemName,
-    systemSubtitle,
-    systemBadge,
-    logoType,
-    logoPreset,
-    logoUrl,
-    logoAccentColor,
-    founderName,
-    founderTitle,
-    founderBio,
-    founderPhotoUrl,
-    founderQuote,
-    siteOverview,
-  } = req.body;
+      systemName,
+      systemSubtitle,
+      systemBadge,
+      logoType,
+      logoPreset,
+      logoUrl,
+      logoAccentColor,
+      founderName,
+      founderTitle,
+      founderBio,
+      founderPhotoUrl,
+      founderQuote,
+      siteOverview,
+    } = body || {};
 
-  if (!systemName || !String(systemName).trim()) {
-    return res.status(400).json({ error: 'يرجى إدخال اسم صحيح للنظام' });
-  }
+    if (!systemName || !String(systemName).trim()) {
+      return res.status(400).json({ error: 'يرجى إدخال اسم صحيح للنظام' });
+    }
 
-  if (!db.settings) {
-    db.settings = {
-      autoApproveNewUsers: true,
-      defaultTrialDays: 7,
-      trialPolicyEnabled: true,
-      ...DEFAULT_BRANDING,
-    };
-  }
+    if (!db.settings) {
+      db.settings = {
+        autoApproveNewUsers: true,
+        defaultTrialDays: 7,
+        trialPolicyEnabled: true,
+        ...DEFAULT_BRANDING,
+      };
+    }
 
-  db.settings.systemName = String(systemName).trim();
-  if (systemSubtitle !== undefined) {
-    db.settings.systemSubtitle = String(systemSubtitle).trim();
-  }
-  if (systemBadge !== undefined) {
-    db.settings.systemBadge = String(systemBadge).trim();
-  }
-  db.settings.logoType = logoType === 'url' || logoType === 'upload' ? logoType : 'preset';
-  if (logoPreset) {
-    db.settings.logoPreset = String(logoPreset).trim();
-  }
-  if (logoUrl !== undefined) {
-    db.settings.logoUrl = String(logoUrl);
-  }
-  // SAFETY CHECK: If string is way too large, truncate it or reject it before saving
-  if (db.settings.logoUrl && db.settings.logoUrl.length > 3000000) {
-     return res.status(400).json({ error: 'حجم الصورة ضخم جداً، يرجى رفع صورة أصغر أو استخدام رابط.' });
-  }
-  if (founderPhotoUrl !== undefined) {
-      if (String(founderPhotoUrl).length > 3000000) {
-          return res.status(400).json({ error: 'حجم صورة المؤسس ضخم جداً.' });
+    db.settings.systemName = String(systemName).trim();
+    if (systemSubtitle !== undefined) {
+      db.settings.systemSubtitle = String(systemSubtitle).trim();
+    }
+    if (systemBadge !== undefined) {
+      db.settings.systemBadge = String(systemBadge).trim();
+    }
+    db.settings.logoType = logoType === 'url' || logoType === 'upload' ? logoType : 'preset';
+    if (logoPreset) {
+      db.settings.logoPreset = String(logoPreset).trim();
+    }
+    if (logoUrl !== undefined) {
+      db.settings.logoUrl = String(logoUrl);
+    }
+    // SAFETY CHECK: If string is way too large, reject it before saving
+    if (db.settings.logoUrl && db.settings.logoUrl.length > 5000000) {
+      return res.status(400).json({ error: 'حجم الصورة ضخم جداً، يرجى رفع صورة أصغر أو استخدام رابط.' });
+    }
+    if (founderPhotoUrl !== undefined) {
+      if (String(founderPhotoUrl).length > 5000000) {
+        return res.status(400).json({ error: 'حجم صورة المؤسس ضخم جداً.' });
       }
-  }
-  if (logoAccentColor) {
-    db.settings.logoAccentColor = String(logoAccentColor).trim();
-  }
+    }
+    if (logoAccentColor) {
+      db.settings.logoAccentColor = String(logoAccentColor).trim();
+    }
 
-  if (founderName !== undefined) db.settings.founderName = String(founderName).trim();
-  if (founderTitle !== undefined) db.settings.founderTitle = String(founderTitle).trim();
-  if (founderBio !== undefined) db.settings.founderBio = String(founderBio).trim();
-  if (founderPhotoUrl !== undefined) db.settings.founderPhotoUrl = String(founderPhotoUrl);
-  if (founderQuote !== undefined) db.settings.founderQuote = String(founderQuote).trim();
-  if (siteOverview !== undefined) db.settings.siteOverview = String(siteOverview).trim();
+    if (founderName !== undefined) db.settings.founderName = String(founderName).trim();
+    if (founderTitle !== undefined) db.settings.founderTitle = String(founderTitle).trim();
+    if (founderBio !== undefined) db.settings.founderBio = String(founderBio).trim();
+    if (founderPhotoUrl !== undefined) db.settings.founderPhotoUrl = String(founderPhotoUrl);
+    if (founderQuote !== undefined) db.settings.founderQuote = String(founderQuote).trim();
+    if (siteOverview !== undefined) db.settings.siteOverview = String(siteOverview).trim();
 
-  saveDB();
+    saveDB();
 
-  saveSettingsToFirestore({
-    autoApproveNewUsers: db.settings.autoApproveNewUsers !== false,
-    defaultTrialDays: db.settings.defaultTrialDays || 7,
-    trialPolicyEnabled: true,
-    systemName: db.settings.systemName,
-    systemSubtitle: db.settings.systemSubtitle,
-    systemBadge: db.settings.systemBadge,
-    logoType: db.settings.logoType,
-    logoPreset: db.settings.logoPreset,
-    logoUrl: db.settings.logoUrl,
-    logoAccentColor: db.settings.logoAccentColor,
-
-    founderName: db.settings.founderName,
-    founderTitle: db.settings.founderTitle,
-    founderBio: db.settings.founderBio,
-    founderPhotoUrl: db.settings.founderPhotoUrl,
-    founderQuote: db.settings.founderQuote,
-    siteOverview: db.settings.siteOverview,
-  }).catch(e => console.error('Firestore save error:', e));
-
-  res.json({
-    success: true,
-    message: 'تم حفظ وتطبيق إعدادات السيستم وبيانات المؤسس بنجاح وحفظها سحابياً.',
-    branding: {
+    const firestorePayload = {
+      autoApproveNewUsers: db.settings.autoApproveNewUsers !== false,
+      defaultTrialDays: db.settings.defaultTrialDays || 7,
+      trialPolicyEnabled: true,
       systemName: db.settings.systemName,
       systemSubtitle: db.settings.systemSubtitle,
       systemBadge: db.settings.systemBadge,
@@ -1467,10 +1483,43 @@ app.post('/api/admin/settings/branding', async (req, res, next) => {
       founderPhotoUrl: db.settings.founderPhotoUrl,
       founderQuote: db.settings.founderQuote,
       siteOverview: db.settings.siteOverview,
-    },
-  });
-  } catch (err) {
-    next(err);
+    };
+
+    // Await cloud Firestore save with a safety timeout so Vercel doesn't freeze in-flight connections
+    try {
+      await Promise.race([
+        saveSettingsToFirestore(firestorePayload),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore save timed out')), 4000)),
+      ]);
+    } catch (fsErr) {
+      console.warn('Firestore settings cloud sync notice:', fsErr);
+    }
+
+    res.json({
+      success: true,
+      message: 'تم حفظ وتطبيق إعدادات السيستم وبيانات المؤسس بنجاح وحفظها سحابياً.',
+      branding: {
+        systemName: db.settings.systemName,
+        systemSubtitle: db.settings.systemSubtitle,
+        systemBadge: db.settings.systemBadge,
+        logoType: db.settings.logoType,
+        logoPreset: db.settings.logoPreset,
+        logoUrl: db.settings.logoUrl,
+        logoAccentColor: db.settings.logoAccentColor,
+
+        founderName: db.settings.founderName,
+        founderTitle: db.settings.founderTitle,
+        founderBio: db.settings.founderBio,
+        founderPhotoUrl: db.settings.founderPhotoUrl,
+        founderQuote: db.settings.founderQuote,
+        siteOverview: db.settings.siteOverview,
+      },
+    });
+  } catch (err: any) {
+    console.error('Branding save error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'حدث خطأ أثناء حفظ الإعدادات: ' + (err?.message || 'خطأ غير معروف') });
+    }
   }
 });
 
@@ -1963,214 +2012,306 @@ app.delete('/api/admin/partners/:id', async (req, res) => {
 
 // Reset Branding to Default
 app.post('/api/admin/settings/branding/reset', async (req, res) => {
-  if (!db.settings) {
-    db.settings = {
-      autoApproveNewUsers: true,
-      defaultTrialDays: 7,
-      trialPolicyEnabled: true,
-      ...DEFAULT_BRANDING,
-    };
+  try {
+    if (!db.settings) {
+      db.settings = {
+        autoApproveNewUsers: true,
+        defaultTrialDays: 7,
+        trialPolicyEnabled: true,
+        ...DEFAULT_BRANDING,
+      };
+    }
+
+    Object.assign(db.settings, DEFAULT_BRANDING);
+    saveDB();
+
+    try {
+      await Promise.race([
+        saveSettingsToFirestore({
+          autoApproveNewUsers: db.settings.autoApproveNewUsers !== false,
+          defaultTrialDays: db.settings.defaultTrialDays || 7,
+          trialPolicyEnabled: true,
+          ...DEFAULT_BRANDING,
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore reset timed out')), 4000)),
+      ]);
+    } catch (fsErr) {
+      console.warn('Firestore branding reset notice:', fsErr);
+    }
+
+    res.json({
+      success: true,
+      message: 'تم استعادة الاسم والشعار الافتراضي للسيستم بنجاح.',
+      branding: DEFAULT_BRANDING,
+    });
+  } catch (err: any) {
+    console.error('Branding reset error:', err);
+    res.status(500).json({ error: 'خطأ أثناء استعادة الإعدادات: ' + (err?.message || 'خطأ غير معروف') });
   }
-
-  Object.assign(db.settings, DEFAULT_BRANDING);
-  saveDB();
-
-  saveSettingsToFirestore({
-    autoApproveNewUsers: db.settings.autoApproveNewUsers !== false,
-    defaultTrialDays: db.settings.defaultTrialDays || 7,
-    trialPolicyEnabled: true,
-    ...DEFAULT_BRANDING,
-  }).catch(e => console.error('Firestore save error:', e));
-
-  res.json({
-    success: true,
-    message: 'تم استعادة الاسم والشعار الافتراضي للسيستم بنجاح.',
-    branding: DEFAULT_BRANDING,
-  });
 });
 
 // Update Platform About Content (Overview, Vision, Mission, Custom Sections)
-app.post('/api/admin/settings/about', async (req, res, next) => {
+app.post('/api/admin/settings/about', async (req, res) => {
   try {
-  const {
-    overviewTitle,
-    overviewContent,
-    visionTitle,
-    visionContent,
-    missionTitle,
-    missionContent,
-    customSections,
-  } = req.body;
+    let body = req.body;
+    if (typeof body === 'string' && body.trim()) {
+      try {
+        body = JSON.parse(body);
+      } catch {}
+    }
+    const {
+      overviewTitle,
+      overviewContent,
+      visionTitle,
+      visionContent,
+      missionTitle,
+      missionContent,
+      customSections,
+    } = body || {};
 
-  if (!overviewContent || !String(overviewContent).trim()) {
-    return res.status(400).json({ error: 'يرجى إدخال نبذة تعريفية صحيحة عن المنصة' });
-  }
+    if (!overviewContent || !String(overviewContent).trim()) {
+      return res.status(400).json({ error: 'يرجى إدخال نبذة تعريفية صحيحة عن المنصة' });
+    }
 
-  const updatedAbout: StoredPlatformAbout = {
-    overviewTitle: (overviewTitle && String(overviewTitle).trim()) || DEFAULT_PLATFORM_ABOUT.overviewTitle,
-    overviewContent: String(overviewContent).trim(),
-    visionTitle: (visionTitle && String(visionTitle).trim()) || DEFAULT_PLATFORM_ABOUT.visionTitle,
-    visionContent: (visionContent && String(visionContent).trim()) || DEFAULT_PLATFORM_ABOUT.visionContent,
-    missionTitle: (missionTitle && String(missionTitle).trim()) || DEFAULT_PLATFORM_ABOUT.missionTitle,
-    missionContent: (missionContent && String(missionContent).trim()) || DEFAULT_PLATFORM_ABOUT.missionContent,
-    customSections: Array.isArray(customSections) ? customSections : (db.platformAbout?.customSections || []),
-    updatedAt: new Date().toISOString(),
-  };
+    const updatedAbout: StoredPlatformAbout = {
+      overviewTitle: (overviewTitle && String(overviewTitle).trim()) || DEFAULT_PLATFORM_ABOUT.overviewTitle,
+      overviewContent: String(overviewContent).trim(),
+      visionTitle: (visionTitle && String(visionTitle).trim()) || DEFAULT_PLATFORM_ABOUT.visionTitle,
+      visionContent: (visionContent && String(visionContent).trim()) || DEFAULT_PLATFORM_ABOUT.visionContent,
+      missionTitle: (missionTitle && String(missionTitle).trim()) || DEFAULT_PLATFORM_ABOUT.missionTitle,
+      missionContent: (missionContent && String(missionContent).trim()) || DEFAULT_PLATFORM_ABOUT.missionContent,
+      customSections: Array.isArray(customSections) ? customSections : (db.platformAbout?.customSections || []),
+      updatedAt: new Date().toISOString(),
+    };
 
-  db.platformAbout = updatedAbout;
-  saveDB();
+    db.platformAbout = updatedAbout;
+    saveDB();
 
-  savePlatformAboutToFirestore(updatedAbout).catch(e => console.error("Firestore about error:", e));
+    try {
+      await Promise.race([
+        savePlatformAboutToFirestore(updatedAbout),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore about timed out')), 4000)),
+      ]);
+    } catch (fsErr) {
+      console.warn('Firestore about sync notice:', fsErr);
+    }
 
-  res.json({
-    success: true,
-    message: 'تم حفظ وتحديث محتوى «عن المنصة والرؤية والرسالة» بنجاح في قاعدة البيانات السحابية.',
-    platformAbout: updatedAbout,
-  });
+    res.json({
+      success: true,
+      message: 'تم حفظ وتحديث محتوى «عن المنصة والرؤية والرسالة» بنجاح في قاعدة البيانات السحابية.',
+      platformAbout: updatedAbout,
+    });
   } catch (err: any) {
     console.error('About update error:', err);
-    res.status(500).json({ error: 'خطأ داخلي في الخادم أثناء حفظ بيانات عن المنصة: ' + err.message });
+    res.status(500).json({ error: 'خطأ داخلي في الخادم أثناء حفظ بيانات عن المنصة: ' + (err?.message || 'خطأ غير معروف') });
   }
 });
 
 // Reset Platform About to Default
-app.post('/api/admin/settings/about/reset', async (req, res, next) => {
+app.post('/api/admin/settings/about/reset', async (req, res) => {
   try {
-  db.platformAbout = { ...DEFAULT_PLATFORM_ABOUT, updatedAt: new Date().toISOString() };
-  saveDB();
+    db.platformAbout = { ...DEFAULT_PLATFORM_ABOUT, updatedAt: new Date().toISOString() };
+    saveDB();
 
-  savePlatformAboutToFirestore(db.platformAbout).catch(e => console.error("Firestore about error:", e));
+    try {
+      await Promise.race([
+        savePlatformAboutToFirestore(db.platformAbout),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore about reset timed out')), 4000)),
+      ]);
+    } catch (fsErr) {
+      console.warn('Firestore about reset notice:', fsErr);
+    }
 
-  res.json({
-    success: true,
-    message: 'تم استعادة المحتوى الافتراضي لـ «عن المنصة والرؤية والرسالة» بنجاح.',
-    platformAbout: db.platformAbout,
-  });
+    res.json({
+      success: true,
+      message: 'تم استعادة المحتوى الافتراضي لـ «عن المنصة والرؤية والرسالة» بنجاح.',
+      platformAbout: db.platformAbout,
+    });
   } catch (err: any) {
-    next(err);
+    console.error('About reset error:', err);
+    res.status(500).json({ error: 'خطأ أثناء استعادة محتوى عن المنصة: ' + (err?.message || 'خطأ غير معروف') });
   }
 });
 
 // Update Contact Us Info (WhatsApp numbers, Email, Phone, Address, Hours)
-app.post('/api/admin/settings/contact', async (req, res, next) => {
+app.post('/api/admin/settings/contact', async (req, res) => {
   try {
-  const {
-    whatsappNumbers,
-    email,
-    secondaryEmail,
-    phoneNumbers,
-    workHours,
-    address,
-    notes,
-  } = req.body;
+    let body = req.body;
+    if (typeof body === 'string' && body.trim()) {
+      try {
+        body = JSON.parse(body);
+      } catch {}
+    }
+    const {
+      whatsappNumbers,
+      email,
+      secondaryEmail,
+      phoneNumbers,
+      workHours,
+      address,
+      notes,
+    } = body || {};
 
-  const current = db.contactInfo || DEFAULT_CONTACT_INFO;
+    const current = db.contactInfo || DEFAULT_CONTACT_INFO;
 
-  const updatedContact: StoredContactInfo = {
-    whatsappNumbers: Array.isArray(whatsappNumbers)
-      ? whatsappNumbers.map((item: any, index: number) => ({
-          id: item.id || `wa-${Date.now()}-${index}`,
-          name: String(item.name || '').trim(),
-          number: String(item.number || '').trim(),
-          description: item.description ? String(item.description).trim() : '',
-        }))
-      : current.whatsappNumbers,
-    email: email !== undefined ? String(email).trim() : current.email,
-    secondaryEmail: secondaryEmail !== undefined ? String(secondaryEmail).trim() : (current.secondaryEmail || ''),
-    phoneNumbers: Array.isArray(phoneNumbers)
-      ? phoneNumbers.map((p: any, index: number) => ({
-          id: p.id || `ph-${Date.now()}-${index}`,
-          name: String(p.name || '').trim(),
-          number: String(p.number || '').trim(),
-        }))
-      : (current.phoneNumbers || []),
-    workHours: workHours !== undefined ? String(workHours).trim() : current.workHours,
-    address: address !== undefined ? String(address).trim() : current.address,
-    notes: notes !== undefined ? String(notes).trim() : current.notes,
-    updatedAt: new Date().toISOString(),
-  };
+    const updatedContact: StoredContactInfo = {
+      whatsappNumbers: Array.isArray(whatsappNumbers)
+        ? whatsappNumbers.map((item: any, index: number) => ({
+            id: item.id || `wa-${Date.now()}-${index}`,
+            name: String(item.name || '').trim(),
+            number: String(item.number || '').trim(),
+            description: item.description ? String(item.description).trim() : '',
+          }))
+        : current.whatsappNumbers,
+      email: email !== undefined ? String(email).trim() : current.email,
+      secondaryEmail: secondaryEmail !== undefined ? String(secondaryEmail).trim() : (current.secondaryEmail || ''),
+      phoneNumbers: Array.isArray(phoneNumbers)
+        ? phoneNumbers.map((p: any, index: number) => ({
+            id: p.id || `ph-${Date.now()}-${index}`,
+            name: String(p.name || '').trim(),
+            number: String(p.number || '').trim(),
+          }))
+        : (current.phoneNumbers || []),
+      workHours: workHours !== undefined ? String(workHours).trim() : current.workHours,
+      address: address !== undefined ? String(address).trim() : current.address,
+      notes: notes !== undefined ? String(notes).trim() : current.notes,
+      updatedAt: new Date().toISOString(),
+    };
 
-  db.contactInfo = updatedContact;
-  saveDB();
+    db.contactInfo = updatedContact;
+    saveDB();
 
-  saveContactInfoToFirestore(updatedContact).catch(e => console.error("Firestore contact error:", e));
+    try {
+      await Promise.race([
+        saveContactInfoToFirestore(updatedContact),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore contact timed out')), 4000)),
+      ]);
+    } catch (fsErr) {
+      console.warn('Firestore contact sync notice:', fsErr);
+    }
 
-  res.json({
-    success: true,
-    message: 'تم حفظ وتحديث بيانات التواصل وأرقام الواتساب بنجاح في قاعدة البيانات السحابية.',
-    contactInfo: updatedContact,
-  });
+    res.json({
+      success: true,
+      message: 'تم حفظ وتحديث بيانات التواصل وأرقام الواتساب بنجاح في قاعدة البيانات السحابية.',
+      contactInfo: updatedContact,
+    });
   } catch (err: any) {
-    next(err);
+    console.error('Contact update error:', err);
+    res.status(500).json({ error: 'خطأ أثناء تحديث بيانات التواصل: ' + (err?.message || 'خطأ غير معروف') });
   }
 });
 
 // Reset Contact Info to Default
 app.post('/api/admin/settings/contact/reset', async (req, res) => {
-  db.contactInfo = { ...DEFAULT_CONTACT_INFO, updatedAt: new Date().toISOString() };
-  saveDB();
-  saveContactInfoToFirestore(db.contactInfo).catch(e => console.error("Firestore contact error:", e));
+  try {
+    db.contactInfo = { ...DEFAULT_CONTACT_INFO, updatedAt: new Date().toISOString() };
+    saveDB();
 
-  res.json({
-    success: true,
-    message: 'تمت استعادة بيانات التواصل الافتراضية بنجاح.',
-    contactInfo: db.contactInfo,
-  });
+    try {
+      await Promise.race([
+        saveContactInfoToFirestore(db.contactInfo),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore contact reset timed out')), 4000)),
+      ]);
+    } catch (fsErr) {
+      console.warn('Firestore contact reset notice:', fsErr);
+    }
+
+    res.json({
+      success: true,
+      message: 'تمت استعادة بيانات التواصل الافتراضية بنجاح.',
+      contactInfo: db.contactInfo,
+    });
+  } catch (err: any) {
+    console.error('Contact reset error:', err);
+    res.status(500).json({ error: 'خطأ أثناء استعادة بيانات التواصل: ' + (err?.message || 'خطأ غير معروف') });
+  }
 });
 
 // Update default trial days setting
-app.post('/api/admin/settings/trial', async (req, res, next) => {
+app.post('/api/admin/settings/trial', async (req, res) => {
   try {
-  const { defaultTrialDays } = req.body;
-  const days = parseInt(String(defaultTrialDays), 10);
-  if (isNaN(days) || days < 1) {
-    return res.status(400).json({ error: 'يرجى إدخال عدد أيام تجريبية صالح (يوم واحد على الأقل)' });
+    let body = req.body;
+    if (typeof body === 'string' && body.trim()) {
+      try {
+        body = JSON.parse(body);
+      } catch {}
+    }
+    const { defaultTrialDays } = body || {};
+    const days = parseInt(String(defaultTrialDays), 10);
+    if (isNaN(days) || days < 1) {
+      return res.status(400).json({ error: 'يرجى إدخال عدد أيام تجريبية صالح (يوم واحد على الأقل)' });
+    }
+
+    if (!db.settings) {
+      db.settings = { autoApproveNewUsers: true, defaultTrialDays: 7, trialPolicyEnabled: true };
+    }
+    db.settings.defaultTrialDays = days;
+    saveDB();
+
+    try {
+      await Promise.race([
+        saveSettingsToFirestore({
+          autoApproveNewUsers: db.settings.autoApproveNewUsers !== false,
+          defaultTrialDays: days,
+          trialPolicyEnabled: true,
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore trial timed out')), 4000)),
+      ]);
+    } catch (fsErr) {
+      console.warn('Firestore trial sync notice:', fsErr);
+    }
+
+    res.json({
+      success: true,
+      defaultTrialDays: days,
+      message: `تم تحديد الفترة التجريبية الافتراضية للحسابات الجديدة إلى ${days} أيام بنجاح وحفظها سحابياً.`,
+    });
+  } catch (err: any) {
+    console.error('Trial update error:', err);
+    res.status(500).json({ error: 'خطأ أثناء تحديث الفترة التجريبية: ' + (err?.message || 'خطأ غير معروف') });
   }
-
-  if (!db.settings) {
-    db.settings = { autoApproveNewUsers: true, defaultTrialDays: 7, trialPolicyEnabled: true };
-  }
-  db.settings.defaultTrialDays = days;
-  saveDB();
-
-  saveSettingsToFirestore({
-    autoApproveNewUsers: db.settings.autoApproveNewUsers !== false,
-    defaultTrialDays: days,
-    trialPolicyEnabled: true,
-  }).catch(e => console.error('Firestore save error:', e));
-
-  res.json({
-    success: true,
-    defaultTrialDays: days,
-    message: `تم تحديد الفترة التجريبية الافتراضية للحسابات الجديدة إلى ${days} أيام بنجاح وحفظها سحابياً.`,
-  });
-  } catch (err: any) { next(err); }
 });
 
 // Update auto-approve setting
-app.post('/api/admin/settings/auto-approve', (req, res, next) => {
+app.post('/api/admin/settings/auto-approve', async (req, res) => {
   try {
-  const { enabled } = req.body;
-  if (!db.settings) {
-    db.settings = { autoApproveNewUsers: true, defaultTrialDays: 7, trialPolicyEnabled: true };
+    let body = req.body;
+    if (typeof body === 'string' && body.trim()) {
+      try {
+        body = JSON.parse(body);
+      } catch {}
+    }
+    const { enabled } = body || {};
+    if (!db.settings) {
+      db.settings = { autoApproveNewUsers: true, defaultTrialDays: 7, trialPolicyEnabled: true };
+    }
+    db.settings.autoApproveNewUsers = Boolean(enabled);
+    saveDB();
+
+    try {
+      await Promise.race([
+        saveSettingsToFirestore({
+          autoApproveNewUsers: db.settings.autoApproveNewUsers,
+          defaultTrialDays: db.settings.defaultTrialDays || 7,
+          trialPolicyEnabled: true,
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore auto-approve timed out')), 4000)),
+      ]);
+    } catch (fsErr) {
+      console.warn('Firestore auto-approve sync notice:', fsErr);
+    }
+
+    res.json({
+      success: true,
+      autoApprove: db.settings.autoApproveNewUsers,
+      message: db.settings.autoApproveNewUsers
+        ? 'تم تفعيل نظام القبول التلقائي للحسابات الجديدة بنجاح'
+        : 'تم إيقاف نظام القبول التلقائي (الموافقة اليدوية مطلوبة للحسابات الجديدة)',
+    });
+  } catch (err: any) {
+    console.error('Auto-approve update error:', err);
+    res.status(500).json({ error: 'خطأ أثناء تحديث إعداد القبول التلقائي: ' + (err?.message || 'خطأ غير معروف') });
   }
-  db.settings.autoApproveNewUsers = Boolean(enabled);
-  saveDB();
-
-  saveSettingsToFirestore({
-    autoApproveNewUsers: db.settings.autoApproveNewUsers,
-    defaultTrialDays: db.settings.defaultTrialDays || 7,
-    trialPolicyEnabled: true,
-  }).catch((e) => console.error('Error saving settings to Firestore:', e));
-
-  res.json({
-    success: true,
-    autoApprove: db.settings.autoApproveNewUsers,
-    message: db.settings.autoApproveNewUsers
-      ? 'تم تفعيل نظام القبول التلقائي للحسابات الجديدة بنجاح'
-      : 'تم إيقاف نظام القبول التلقائي (الموافقة اليدوية مطلوبة للحسابات الجديدة)',
-  });
-  } catch (err: any) { next(err); }
 });
 
 // Auto-Approve ALL Pending Users at once
@@ -3710,12 +3851,18 @@ function generateKnowledgeFallback(query: string, laws: StoredLaw[]): string {
 
 
 // Global error handler
-app.use((err, req, res, next) => {
-  console.error('Express Error:', err.message);
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('Express Error:', err?.stack || err?.message || err);
+  if (res.headersSent) {
+    return next(err);
+  }
   if (err instanceof SyntaxError && (err as any).status === 400 && 'body' in err) {
     return res.status(400).json({ error: 'حجم البيانات كبير جداً أو التنسيق غير صحيح. يرجى اختيار صورة أصغر حجماً.' });
   }
-  res.status(500).json({ error: 'خطأ داخلي في الخادم: ' + err.message });
+  if (err?.type === 'entity.too.large' || err?.status === 413) {
+    return res.status(413).json({ error: 'حجم الملف أو البيانات المرسلة كبير جداً. الحد الأقصى المسموح به هو 50 ميجابايت.' });
+  }
+  res.status(500).json({ error: 'خطأ داخلي في الخادم: ' + (err?.message || 'خطأ غير معروف') });
 });
 
   // Vite middleware & Static serving (Standalone execution only)

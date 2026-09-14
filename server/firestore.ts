@@ -39,26 +39,50 @@ export function onDatabaseChange(callback: ChangeCallback) {
 }
 
 function notifyChange(collectionName: string) {
-  changeListeners.forEach(cb => cb(collectionName));
+  changeListeners.forEach(cb => {
+    try {
+      cb(collectionName);
+    } catch (e) {
+      console.error('Error in changeListener callback:', e);
+    }
+  });
 }
 
 async function setDoc(docRef: DocumentReference<any, any>, data: any, options?: any) {
   const cleanData = cleanUndefined(data);
   const result = options ? await firebaseSetDoc(docRef, cleanData, options) : await firebaseSetDoc(docRef, cleanData);
-  notifyChange(docRef.parent.id);
+  try {
+    if (docRef?.parent?.id) {
+      notifyChange(docRef.parent.id);
+    }
+  } catch (e) {
+    console.error('notifyChange error in setDoc:', e);
+  }
   return result;
 }
 
 async function updateDoc(docRef: DocumentReference<any, any>, data: any) {
   const cleanData = cleanUndefined(data);
   const result = await firebaseUpdateDoc(docRef, cleanData);
-  notifyChange(docRef.parent.id);
+  try {
+    if (docRef?.parent?.id) {
+      notifyChange(docRef.parent.id);
+    }
+  } catch (e) {
+    console.error('notifyChange error in updateDoc:', e);
+  }
   return result;
 }
 
 async function deleteDoc(docRef: DocumentReference<any, any>) {
   const result = await firebaseDeleteDoc(docRef);
-  notifyChange(docRef.parent.id);
+  try {
+    if (docRef?.parent?.id) {
+      notifyChange(docRef.parent.id);
+    }
+  } catch (e) {
+    console.error('notifyChange error in deleteDoc:', e);
+  }
   return result;
 }
 

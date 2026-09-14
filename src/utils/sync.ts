@@ -25,15 +25,19 @@ export function initGlobalSync() {
       }
     };
 
+    let failCount = 0;
     activeEventSource.onerror = () => {
-      // EventSource auto-reconnects, but if it completely fails (e.g. server down),
-      // we close it and manually reconnect with backoff to prevent console spam
       activeEventSource?.close();
+      failCount++;
+      // In serverless environments (like Vercel), SSE is not supported, so cease retrying after 3 attempts
+      if (failCount >= 3) {
+        return;
+      }
       if (!reconnectTimer) {
         reconnectTimer = setTimeout(() => {
           reconnectTimer = null;
           connect();
-        }, 5000);
+        }, 10000);
       }
     };
   }
