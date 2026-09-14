@@ -1039,3 +1039,17 @@ export async function directAutoApproveAllPendingInFirestore(defaultDays: number
 
 
 
+
+export async function directDeleteUserFromFirestore(
+  userId: string
+): Promise<boolean> {
+  try {
+    const db = getFirestore(app);
+    await deleteDoc(doc(db, 'users', userId));
+    console.log(`[Client Firestore] Successfully deleted user directly: ${userId}`);
+    return true;
+  } catch (err) {
+    console.error('[Client Firestore] Error deleting user directly:', err);
+    return false;
+  }
+}

@@ -75,6 +75,7 @@ import {
   directUpdateUserSubscriptionInFirestore,
   directToggleFreezeUserInFirestore,
   directAutoApproveAllPendingInFirestore,
+  directDeleteUserFromFirestore,
   directSaveDefaultTrialDaysToFirestore,
   directSaveAutoApproveToFirestore,
   directFetchSettingsFromFirestore,
@@ -1062,26 +1063,53 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
 
   const handleConfirmDeleteUser = async () => {
     if (!userToDelete) return;
-    setDeletingUserId(userToDelete.id);
+    const targetUserId = userToDelete.id;
+    setDeletingUserId(targetUserId);
     setDeleteUserError(null);
     try {
-      const res = await fetch(`/api/admin/users/${userToDelete.id}`, {
+      const res = await fetch(`/api/admin/users/${targetUserId}`, {
         method: 'DELETE',
       });
       if (res.ok) {
-        setUsers((prev) => prev.filter((u) => u.id !== userToDelete.id));
+        setUsers((prev) => prev.filter((u) => u.id !== targetUserId));
         setUserActionMessage(`تم حذف المستخدم "${userToDelete.fullName || userToDelete.username}" نهائياً بنجاح.`);
         setTimeout(() => setUserActionMessage(null), 3000);
         setUserToDelete(null);
-        if (selectedUserDetails?.id === userToDelete.id) {
+        if (selectedUserDetails?.id === targetUserId) {
           setSelectedUserDetails(null);
         }
       } else {
-        const data = await res.json();
-        setDeleteUserError(data.error || 'تعذر حذف المستخدم من الخادم.');
+        const directOk = await directDeleteUserFromFirestore(targetUserId);
+        if (directOk) {
+          setUsers((prev) => prev.filter((u) => u.id !== targetUserId));
+          setUserActionMessage(`تم حذف المستخدم "${userToDelete.fullName || userToDelete.username}" نهائياً بنجاح.`);
+          setTimeout(() => setUserActionMessage(null), 3000);
+          setUserToDelete(null);
+          if (selectedUserDetails?.id === targetUserId) {
+            setSelectedUserDetails(null);
+          }
+        } else {
+          const data = await res.json().catch(() => ({}));
+          setDeleteUserError(data.error || 'تعذر حذف المستخدم من الخادم.');
+        }
       }
     } catch (err) {
-      console.error(err);
+      console.warn('Backend delete failed, trying direct firestore delete:', err);
+      try {
+        const directOk = await directDeleteUserFromFirestore(targetUserId);
+        if (directOk) {
+          setUsers((prev) => prev.filter((u) => u.id !== targetUserId));
+          setUserActionMessage(`تم حذف المستخدم "${userToDelete.fullName || userToDelete.username}" نهائياً بنجاح.`);
+          setTimeout(() => setUserActionMessage(null), 3000);
+          setUserToDelete(null);
+          if (selectedUserDetails?.id === targetUserId) {
+            setSelectedUserDetails(null);
+          }
+          return;
+        }
+      } catch (dErr) {
+        console.error('Direct firestore delete also failed:', dErr);
+      }
       setDeleteUserError('حدث خطأ أثناء الاتصال بالخادم لحذف المستخدم.');
     } finally {
       setDeletingUserId(null);
