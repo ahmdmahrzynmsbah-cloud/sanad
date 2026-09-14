@@ -75,6 +75,8 @@ import {
   directUpdateUserSubscriptionInFirestore,
   directToggleFreezeUserInFirestore,
   directAutoApproveAllPendingInFirestore,
+  directSaveDefaultTrialDaysToFirestore,
+  directSaveAutoApproveToFirestore,
 } from '../services/clientFirestore';
 
 export interface QueuedLawItem {
@@ -840,28 +842,39 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     const nextVal = !autoApproveEnabled;
     setAutoApproveLoading(true);
     setAutoApproveEnabled(nextVal);
+    let success = false;
     try {
       const res = await fetch('/api/admin/settings/auto-approve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enabled: nextVal }),
       });
-      const data = await res.json();
-      if (res.ok) {
-        setUserActionMessage(
-          nextVal
-            ? '⚡ تم تفعيل نظام القبول التلقائي! سيتم اعتماد وقبول أي حساب جديد فور تسجيله مباشرة.'
-            : '🔒 تم إيقاف نظام القبول التلقائي. يتطلب أي حساب جديد مراجعة واعتماد المسؤول يدوياً.'
-        );
-        setTimeout(() => setUserActionMessage(null), 5000);
-      } else {
-        setAutoApproveEnabled(!nextVal);
-      }
+      if (res.ok) success = true;
     } catch {
-      setAutoApproveEnabled(!nextVal);
-    } finally {
-      setAutoApproveLoading(false);
+      // Handled via fallback
     }
+
+    if (!success) {
+      try {
+        const directOk = await directSaveAutoApproveToFirestore(nextVal);
+        if (directOk) success = true;
+      } catch (fErr) {
+        console.error('Direct auto approve save failed:', fErr);
+      }
+    }
+
+    if (success) {
+      setUserActionMessage(
+        nextVal
+          ? '⚡ تم تفعيل نظام القبول التلقائي! سيتم اعتماد وقبول أي حساب جديد فور تسجيله مباشرة.'
+          : '🔒 تم إيقاف نظام القبول التلقائي. يتطلب أي حساب جديد مراجعة واعتماد المسؤول يدوياً.'
+      );
+      setTimeout(() => setUserActionMessage(null), 5000);
+    } else {
+      setAutoApproveEnabled(!nextVal);
+      setUserActionMessage('❌ تعذر حفظ إعدادات القبول التلقائي، يرجى المحاولة ثانية.');
+    }
+    setAutoApproveLoading(false);
   };
 
   // Bulk Auto-Approve all currently pending requests
@@ -983,27 +996,44 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
 
     setSavingTrialSettings(true);
     setTrialSettingsFeedback(null);
+    let apiSuccess = false;
     try {
       const res = await fetch('/api/admin/settings/trial', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ defaultTrialDays: days }),
       });
-      const data = await res.json();
       if (res.ok) {
+        apiSuccess = true;
+      }
+    } catch (err) {
+      console.warn('Save trial settings API error, falling back to direct Firestore:', err);
+    }
+
+    // Direct Firestore fallback (saves directly to Cloud Firestore)
+    try {
+      const directOk = await directSaveDefaultTrialDaysToFirestore(days);
+      if (directOk || apiSuccess) {
         setDefaultTrialDays(days);
         setEditingTrialDays(days);
         setTrialSettingsFeedback(`✅ تم حفظ وتطبيق مدة الفترة التجريبية الافتراضية (${days} يوم) بنجاح في قاعدة البيانات السحابية.`);
         setTimeout(() => setTrialSettingsFeedback(null), 5000);
-      } else {
-        setTrialSettingsFeedback(`❌ حدث خطأ: ${data.error || 'تعذر حفظ الإعدادات'}`);
+        setSavingTrialSettings(false);
+        return;
       }
-    } catch (err) {
-      console.error('Save trial settings error:', err);
-      setTrialSettingsFeedback('❌ تعذر الاتصال بالخادم لحفظ إعدادات الفترة التجريبية.');
-    } finally {
-      setSavingTrialSettings(false);
+    } catch (fErr) {
+      console.error('Direct save trial settings error:', fErr);
     }
+
+    if (apiSuccess) {
+      setDefaultTrialDays(days);
+      setEditingTrialDays(days);
+      setTrialSettingsFeedback(`✅ تم حفظ وتطبيق مدة الفترة التجريبية الافتراضية (${days} يوم) بنجاح.`);
+      setTimeout(() => setTrialSettingsFeedback(null), 5000);
+    } else {
+      setTrialSettingsFeedback('❌ تعذر حفظ إعدادات الفترة التجريبية، يرجى المحاولة ثانية.');
+    }
+    setSavingTrialSettings(false);
   };
 
   // Toggle user subscription status

@@ -472,6 +472,42 @@ export async function directSaveBrandingToFirestore(branding: any): Promise<bool
   }
 }
 
+export async function directSaveDefaultTrialDaysToFirestore(days: number): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+
+  try {
+    const settingsRef = doc(db, 'system_settings', 'general');
+    await setDoc(settingsRef, {
+      defaultTrialDays: days,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+    console.log('[Client Firestore] Successfully saved defaultTrialDays to Firestore:', days);
+    return true;
+  } catch (err) {
+    console.error('[Client Firestore] Error saving defaultTrialDays directly:', err);
+    return false;
+  }
+}
+
+export async function directSaveAutoApproveToFirestore(autoApprove: boolean): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+
+  try {
+    const settingsRef = doc(db, 'system_settings', 'general');
+    await setDoc(settingsRef, {
+      autoApproveNewUsers: autoApprove,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+    console.log('[Client Firestore] Successfully saved autoApproveNewUsers to Firestore:', autoApprove);
+    return true;
+  } catch (err) {
+    console.error('[Client Firestore] Error saving autoApproveNewUsers directly:', err);
+    return false;
+  }
+}
+
 export async function directFetchBrandingFromFirestore(): Promise<any | null> {
   const db = getClientDb();
   if (!db) return null;

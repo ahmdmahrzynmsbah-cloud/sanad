@@ -1,9 +1,35 @@
+// Global polyfills for serverless environments (prevents pdfjs-dist / DOMMatrix crashes on Vercel/Node)
+if (typeof (globalThis as any).DOMMatrix === 'undefined') {
+  (globalThis as any).DOMMatrix = class DOMMatrix {
+    a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
+    m11 = 1; m12 = 0; m13 = 0; m14 = 0;
+    m21 = 0; m22 = 1; m23 = 0; m24 = 0;
+    m31 = 0; m32 = 0; m33 = 1; m34 = 0;
+    m41 = 0; m42 = 0; m43 = 0; m44 = 1;
+    is2D = true;
+    isIdentity = true;
+    constructor(_init?: any) {}
+  };
+}
+if (typeof (globalThis as any).ImageData === 'undefined') {
+  (globalThis as any).ImageData = class ImageData {
+    width = 0;
+    height = 0;
+    data = new Uint8ClampedArray(0);
+    constructor(w: number, h: number) { this.width = w; this.height = h; }
+  };
+}
+if (typeof (globalThis as any).Path2D === 'undefined') {
+  (globalThis as any).Path2D = class Path2D {
+    constructor() {}
+  };
+}
+
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
 // Vite is dynamically imported in local dev mode
 import { GoogleGenAI, Type } from '@google/genai';
-import { PDFParse } from 'pdf-parse';
 import dotenv from 'dotenv';
 import {
   initFirestore,
@@ -934,6 +960,35 @@ async function syncWithFirestore() {
     console.error('❌ Error during Cloud Firestore synchronization:', err);
   }
 }
+
+let firestoreInitialized = false;
+let firestoreInitPromise: Promise<void> | null = null;
+
+export async function ensureFirestoreReady() {
+  if (firestoreInitialized) return;
+  if (!firestoreInitPromise) {
+    firestoreInitPromise = (async () => {
+      try {
+        await syncWithFirestore();
+        firestoreInitialized = true;
+      } catch (err) {
+        console.error('ensureFirestoreReady error:', err);
+      }
+    })();
+  }
+  return firestoreInitPromise;
+}
+
+// Ensure database is initialized in serverless environments (e.g. Vercel)
+app.use(async (req, res, next) => {
+  if (!firestoreInitialized) {
+    await Promise.race([
+      ensureFirestoreReady(),
+      new Promise((r) => setTimeout(r, 800)),
+    ]);
+  }
+  next();
+});
 
 // Fixed Admin credentials
 const ADMIN_CREDENTIALS = {
@@ -2679,31 +2734,39 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
     let localPdfText = '';
     let estimatedPages = 1;
     try {
-      const PDFParseClass: any = (PDFParse as any)?.PDFParse || (PDFParse as any)?.default || PDFParse;
-      const parser: any = new PDFParseClass({ data: buffer });
-      await parser.load();
-      const rawParsedText: any = await parser.getText();
-      const info: any = await parser.getInfo().catch(() => null);
-      await parser.destroy().catch(() => {});
-      if (rawParsedText) {
-        if (rawParsedText.pages && Array.isArray(rawParsedText.pages)) {
-          const pageTexts = rawParsedText.pages
-            .map((p: any) => (p.text || '').trim())
-            .filter(Boolean);
-          if (pageTexts.length > 0) {
-            localPdfText = pageTexts.join('\n\n');
+      let PDFParseClass: any = null;
+      try {
+        const imported: any = await import('pdf-parse');
+        PDFParseClass = imported?.PDFParse || imported?.default || imported;
+      } catch (impErr) {
+        console.warn('PDFParse dynamic import failed:', impErr);
+      }
+      if (PDFParseClass) {
+        const parser: any = new PDFParseClass({ data: buffer });
+        await parser.load();
+        const rawParsedText: any = await parser.getText();
+        const info: any = await parser.getInfo().catch(() => null);
+        await parser.destroy().catch(() => {});
+        if (rawParsedText) {
+          if (rawParsedText.pages && Array.isArray(rawParsedText.pages)) {
+            const pageTexts = rawParsedText.pages
+              .map((p: any) => (p.text || '').trim())
+              .filter(Boolean);
+            if (pageTexts.length > 0) {
+              localPdfText = pageTexts.join('\n\n');
+            }
+          }
+          if (!localPdfText && typeof rawParsedText === 'string') {
+            localPdfText = rawParsedText.trim();
+          } else if (!localPdfText && typeof rawParsedText.text === 'string') {
+            localPdfText = rawParsedText.text.trim();
           }
         }
-        if (!localPdfText && typeof rawParsedText === 'string') {
-          localPdfText = rawParsedText.trim();
-        } else if (!localPdfText && typeof rawParsedText.text === 'string') {
-          localPdfText = rawParsedText.text.trim();
+        if (info && info.total) {
+          estimatedPages = info.total;
+        } else if (rawParsedText && rawParsedText.total) {
+          estimatedPages = rawParsedText.total;
         }
-      }
-      if (info && info.total) {
-        estimatedPages = info.total;
-      } else if (rawParsedText && rawParsedText.total) {
-        estimatedPages = rawParsedText.total;
       }
     } catch (parserErr) {
       console.warn('[AI-PDF] PDFParse direct buffer parse warning:', parserErr);
