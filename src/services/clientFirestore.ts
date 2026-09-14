@@ -1044,7 +1044,7 @@ export async function directDeleteUserFromFirestore(
   userId: string
 ): Promise<boolean> {
   try {
-    const db = getFirestore(app);
+    const db = getClientDb();
     await deleteDoc(doc(db, 'users', userId));
     console.log(`[Client Firestore] Successfully deleted user directly: ${userId}`);
     return true;

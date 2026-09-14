@@ -2706,18 +2706,36 @@ app.post('/api/admin/users/:id/unfreeze', async (req, res) => {
 // Delete user (admin helper)
 app.delete('/api/admin/users/:id', async (req, res) => {
   const { id } = req.params;
+  
+  if (!id) {
+    return res.status(400).json({ error: 'معرف المستخدم مفقود' });
+  }
+
+  // Remove from local memory if exists
   const initialLen = db.users.length;
   db.users = db.users.filter((u) => u.id !== id);
   if (db.users.length < initialLen) {
     saveDB();
   }
   
+  // ALWAYS try to delete from Firestore directly, regardless of local memory
   try {
     await deleteUserFromFirestore(id);
     return res.json({ message: 'تم حذف المستخدم بنجاح' });
-  } catch (err) {
+  } catch (err: any) {
     console.error('Failed to delete user from Firestore:', err);
-    return res.status(500).json({ error: 'تعذر حذف المستخدم من قاعدة البيانات السحابية' });
+    // If it failed from Firestore but succeeded locally, consider it a partial success 
+    // to avoid permanently blocking the user from deleting phantom local accounts
+    if (db.users.length < initialLen) {
+       return res.json({ message: 'تم حذف المستخدم محلياً (حدث خطأ في قاعدة البيانات السحابية)' });
+    }
+    
+    // Ignore 'not found' errors from firestore when deleting
+    if (err.code === 5 || err.message?.includes('not found')) {
+      return res.json({ message: 'تم الحذف (المستخدم غير موجود مسبقاً في السحابة)' });
+    }
+    
+    return res.status(500).json({ error: 'تعذر حذف المستخدم من قاعدة البيانات السحابية', details: err.message });
   }
 });
 

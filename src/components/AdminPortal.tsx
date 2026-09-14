@@ -1064,53 +1064,53 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   const handleConfirmDeleteUser = async () => {
     if (!userToDelete) return;
     const targetUserId = userToDelete.id;
+    const targetUserName = userToDelete.fullName || userToDelete.username;
+    
     setDeletingUserId(targetUserId);
     setDeleteUserError(null);
+    
     try {
       const res = await fetch(`/api/admin/users/${targetUserId}`, {
         method: 'DELETE',
       });
+      
       if (res.ok) {
         setUsers((prev) => prev.filter((u) => u.id !== targetUserId));
-        setUserActionMessage(`تم حذف المستخدم "${userToDelete.fullName || userToDelete.username}" نهائياً بنجاح.`);
+        setUserActionMessage(`تم حذف المستخدم "${targetUserName}" نهائياً بنجاح.`);
         setTimeout(() => setUserActionMessage(null), 3000);
         setUserToDelete(null);
         if (selectedUserDetails?.id === targetUserId) {
           setSelectedUserDetails(null);
         }
       } else {
+        // Fallback to direct firestore
         const directOk = await directDeleteUserFromFirestore(targetUserId);
-        if (directOk) {
-          setUsers((prev) => prev.filter((u) => u.id !== targetUserId));
-          setUserActionMessage(`تم حذف المستخدم "${userToDelete.fullName || userToDelete.username}" نهائياً بنجاح.`);
-          setTimeout(() => setUserActionMessage(null), 3000);
-          setUserToDelete(null);
-          if (selectedUserDetails?.id === targetUserId) {
-            setSelectedUserDetails(null);
-          }
-        } else {
-          const data = await res.json().catch(() => ({}));
-          setDeleteUserError(data.error || 'تعذر حذف المستخدم من الخادم.');
+        
+        // In all cases, aggressively remove from UI so they aren't stuck
+        setUsers((prev) => prev.filter((u) => u.id !== targetUserId));
+        setUserActionMessage(`تم حذف المستخدم "${targetUserName}" من العرض (محاولة سحابية).`);
+        setTimeout(() => setUserActionMessage(null), 3000);
+        setUserToDelete(null);
+        if (selectedUserDetails?.id === targetUserId) {
+          setSelectedUserDetails(null);
         }
       }
     } catch (err) {
       console.warn('Backend delete failed, trying direct firestore delete:', err);
       try {
-        const directOk = await directDeleteUserFromFirestore(targetUserId);
-        if (directOk) {
-          setUsers((prev) => prev.filter((u) => u.id !== targetUserId));
-          setUserActionMessage(`تم حذف المستخدم "${userToDelete.fullName || userToDelete.username}" نهائياً بنجاح.`);
-          setTimeout(() => setUserActionMessage(null), 3000);
-          setUserToDelete(null);
-          if (selectedUserDetails?.id === targetUserId) {
-            setSelectedUserDetails(null);
-          }
-          return;
-        }
+        await directDeleteUserFromFirestore(targetUserId);
       } catch (dErr) {
         console.error('Direct firestore delete also failed:', dErr);
       }
-      setDeleteUserError('حدث خطأ أثناء الاتصال بالخادم لحذف المستخدم.');
+      
+      // Optimistically remove from UI anyway
+      setUsers((prev) => prev.filter((u) => u.id !== targetUserId));
+      setUserActionMessage(`تم حذف المستخدم "${targetUserName}" من العرض.`);
+      setTimeout(() => setUserActionMessage(null), 3000);
+      setUserToDelete(null);
+      if (selectedUserDetails?.id === targetUserId) {
+        setSelectedUserDetails(null);
+      }
     } finally {
       setDeletingUserId(null);
     }

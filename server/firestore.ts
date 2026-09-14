@@ -311,15 +311,19 @@ export async function updateUserInFirestore(
 
 export async function deleteUserFromFirestore(userId: string): Promise<boolean> {
   const db = initFirestore();
-  if (!db) return false;
+  if (!db) {
+    console.error(`Error deleting user ${userId} from Firestore: DB not initialized.`);
+    return false;
+  }
 
   try {
     const userRef = doc(db, 'users', userId);
     await deleteDoc(userRef);
+    console.log(`Successfully deleted user ${userId} from Firestore.`);
     return true;
   } catch (err) {
     console.error(`Error deleting user ${userId} from Firestore:`, err);
-    return false;
+    throw err; // Re-throw to allow the route handler to catch it
   }
 }
 
