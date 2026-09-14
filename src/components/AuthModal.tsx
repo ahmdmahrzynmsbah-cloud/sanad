@@ -24,7 +24,7 @@ import {
   Sparkles,
   Server
 } from 'lucide-react';
-import { User } from '../types';
+import { User, SystemBranding } from '../types';
 import { safeFetchJson } from '../utils/safeApi';
 import {
   directLoginUser,
@@ -37,6 +37,7 @@ interface AuthModalProps {
   onGoToAdminLogin: () => void;
   initialMode?: 'login' | 'register';
   onBackToHome?: () => void;
+  branding?: SystemBranding;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -44,6 +45,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onGoToAdminLogin,
   initialMode = 'login',
   onBackToHome,
+  branding,
 }) => {
   const [mode, setMode] = useState<'login' | 'register' | 'forgot'>(initialMode);
 
@@ -401,24 +403,37 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm sm:text-base font-bold tracking-tight text-white">دولة فلسطين</span>
+                  <span className="text-sm sm:text-base font-bold tracking-tight text-white">{branding?.authPortalHeaderTop || 'دولة فلسطين'}</span>
                   <span className="text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/30">
                     رسمي
                   </span>
                 </div>
                 <p className="text-[11px] sm:text-xs text-slate-300 font-light mt-0.5">
-                  وزارة المالية • الإدارة العامة للجمارك وضريبة الدخل
+                  {branding?.authPortalHeaderBottom || 'وزارة المالية • الإدارة العامة للجمارك وضريبة الدخل'}
                 </p>
               </div>
             </div>
 
             <div className="space-y-2 sm:space-y-3 mt-4 sm:mt-8">
               <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-white leading-snug">
-                بوابة المستفيدين <br />
-                <span className="text-[#a7d9c0]">والاستعلام الجمركي والضريبي</span>
+                {(() => {
+                  const rawTitle = branding?.authPortalTitle || 'بوابة المستفيدين\nوالاستعلام الجمركي والضريبي';
+                  const parts = rawTitle.split('\n');
+                  return (
+                    <>
+                      {parts[0]}
+                      {parts.length > 1 && (
+                        <>
+                          <br />
+                          <span className="text-[#a7d9c0]">{parts.slice(1).join('\n')}</span>
+                        </>
+                      )}
+                    </>
+                  );
+                })()}
               </h2>
               <p className="text-xs sm:text-sm text-slate-300/90 leading-relaxed font-normal">
-                منظومة وطنية ذكية توفر فتاوى وحسابات مخصصة استناداً إلى قرارات بقانون واللوائح التنفيذية النافذة في فلسطين.
+                {branding?.authPortalDescription || 'منظومة وطنية ذكية توفر فتاوى وحسابات مخصصة استناداً إلى قرارات بقانون واللوائح التنفيذية النافذة في فلسطين.'}
               </p>
             </div>
 
@@ -428,19 +443,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-emerald-400 shrink-0">
                   <BookOpen className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
                 </div>
-                <span>تشريعات محيّنة ومفهرسة بنصوص المواد الرسمية</span>
+                <span>{branding?.authPortalFeature1 || 'تشريعات محيّنة ومفهرسة بنصوص المواد الرسمية'}</span>
               </div>
               <div className="flex items-center gap-2.5 sm:gap-3 text-xs text-slate-200">
                 <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-emerald-400 shrink-0">
                   <ShieldCheck className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
                 </div>
-                <span>تدقيق واعتماد أمني ورقابي للحسابات المصرح لها</span>
+                <span>{branding?.authPortalFeature2 || 'تدقيق واعتماد أمني ورقابي للحسابات المصرح لها'}</span>
               </div>
               <div className="flex items-center gap-2.5 sm:gap-3 text-xs text-slate-200">
                 <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-emerald-400 shrink-0">
                   <Server className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
                 </div>
-                <span>حفظ وتزامن سحابي فوري عبر Cloud Firestore</span>
+                <span>{branding?.authPortalFeature3 || 'حفظ وتزامن سحابي فوري عبر Cloud Firestore'}</span>
               </div>
             </div>
           </div>

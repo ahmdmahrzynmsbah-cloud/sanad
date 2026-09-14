@@ -189,6 +189,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     'المنظومة الرقمية الفلسطينية المتكاملة للاستعلام والاستشارات في القوانين الجمركية، ضريبة الدخل، ضريبة القيمة المضافة، والمكوس. توفر المنظومة محرك ذكاء اصطناعي مدعوماً بنصوص القوانين والقرارات بقانون المعتمدة رسمياً في دولة فلسطين للإجابة الفورية، واستخراج النصوص الأصلية مع أرقام المواد، واحتساب الرسوم والضرائب بالشيكل بدقة متناهية.'
   );
 
+  // Auth Portal Dynamic Texts
+  const [authPortalHeaderTopInput, setAuthPortalHeaderTopInput] = useState('دولة فلسطين');
+  const [authPortalHeaderBottomInput, setAuthPortalHeaderBottomInput] = useState('وزارة المالية • الإدارة العامة للجمارك وضريبة الدخل');
+  const [authPortalTitleInput, setAuthPortalTitleInput] = useState('بوابة المستفيدين\nوالاستعلام الجمركي والضريبي');
+  const [authPortalDescriptionInput, setAuthPortalDescriptionInput] = useState('منظومة وطنية ذكية توفر فتاوى وحسابات مخصصة استناداً إلى قرارات بقانون واللوائح التنفيذية النافذة في فلسطين.');
+  const [authPortalFeature1Input, setAuthPortalFeature1Input] = useState('تشريعات محيّنة ومفهرسة بنصوص المواد الرسمية');
+  const [authPortalFeature2Input, setAuthPortalFeature2Input] = useState('تدقيق واعتماد أمني ورقابي للحسابات المصرح لها');
+  const [authPortalFeature3Input, setAuthPortalFeature3Input] = useState('حفظ وتزامن سحابي فوري عبر Cloud Firestore');
+
   // Laws state
   const [laws, setLaws] = useState<Law[]>([]);
   const [lawsLoading, setLawsLoading] = useState(false);
@@ -443,6 +452,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     }
     if (b.founderQuote || b.founder?.quote) setFounderQuoteInput(b.founderQuote || b.founder?.quote || '');
     if (b.siteOverview || b.founder?.siteOverview) setSiteOverviewInput(b.siteOverview || b.founder?.siteOverview || '');
+
+    // Auth Portal Text state
+    setAuthPortalHeaderTopInput(b.authPortalHeaderTop ?? 'دولة فلسطين');
+    setAuthPortalHeaderBottomInput(b.authPortalHeaderBottom ?? 'وزارة المالية • الإدارة العامة للجمارك وضريبة الدخل');
+    setAuthPortalTitleInput(b.authPortalTitle ?? 'بوابة المستفيدين\nوالاستعلام الجمركي والضريبي');
+    setAuthPortalDescriptionInput(b.authPortalDescription ?? 'منظومة وطنية ذكية توفر فتاوى وحسابات مخصصة استناداً إلى قرارات بقانون واللوائح التنفيذية النافذة في فلسطين.');
+    setAuthPortalFeature1Input(b.authPortalFeature1 ?? 'تشريعات محيّنة ومفهرسة بنصوص المواد الرسمية');
+    setAuthPortalFeature2Input(b.authPortalFeature2 ?? 'تدقيق واعتماد أمني ورقابي للحسابات المصرح لها');
+    setAuthPortalFeature3Input(b.authPortalFeature3 ?? 'حفظ وتزامن سحابي فوري عبر Cloud Firestore');
   };
 
   // Ultra-fast consolidated initial data load (Single round-trip)
@@ -638,6 +656,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       founderPhotoUrl: founderPhotoUrlInput.trim(),
       founderQuote: founderQuoteInput.trim(),
       siteOverview: siteOverviewInput.trim(),
+      
+      authPortalHeaderTop: authPortalHeaderTopInput,
+      authPortalHeaderBottom: authPortalHeaderBottomInput,
+      authPortalTitle: authPortalTitleInput,
+      authPortalSubtitle: '', // reserved for future if they want a colored secondary title part
+      authPortalDescription: authPortalDescriptionInput,
+      authPortalFeature1: authPortalFeature1Input,
+      authPortalFeature2: authPortalFeature2Input,
+      authPortalFeature3: authPortalFeature3Input,
     };
 
     const payloadStr = JSON.stringify(payload);
@@ -4183,6 +4210,106 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                     onChange={(e) => setSiteOverviewInput(e.target.value)}
                     placeholder="اكتب نبذة توضيحية عن المنظومة، الخدمات التي تقدمها، التشريعات التي تستند إليها، وميزاتها للمكلفين..."
                     className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]/20 focus:border-[#12281e] transition-all leading-relaxed"
+                  />
+                </div>
+              </div>
+
+              {/* Auth Portal Customization */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-6 space-y-5">
+                <div className="flex items-center gap-3 border-b border-gray-100 pb-4">
+                  <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
+                    <UserIcon className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-gray-900">
+                      إعدادات صفحة الدخول (النصوص الجانبية)
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-1">
+                      تحكم في النصوص والنقاط الظاهرة في واجهة تسجيل الدخول
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                      العنوان العلوي (Top Header)
+                    </label>
+                    <input
+                      type="text"
+                      value={authPortalHeaderTopInput}
+                      onChange={(e) => setAuthPortalHeaderTopInput(e.target.value)}
+                      placeholder="دولة فلسطين"
+                      className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]/20 transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                      النص الفرعي العلوي (Bottom Header)
+                    </label>
+                    <input
+                      type="text"
+                      value={authPortalHeaderBottomInput}
+                      onChange={(e) => setAuthPortalHeaderBottomInput(e.target.value)}
+                      placeholder="وزارة المالية • الإدارة العامة..."
+                      className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]/20 transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                    عنوان الصفحة الرئيسي (Title)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={authPortalTitleInput}
+                    onChange={(e) => setAuthPortalTitleInput(e.target.value)}
+                    placeholder="بوابة المستفيدين..."
+                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]/20 transition-all"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">
+                    * استخدم زر الإدخال (Enter) لإنشاء سطر جديد، السطر الثاني سيظهر بلون مميز (أخضر فاتح).
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                    الوصف المختصر (Description)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={authPortalDescriptionInput}
+                    onChange={(e) => setAuthPortalDescriptionInput(e.target.value)}
+                    placeholder="منظومة وطنية ذكية توفر..."
+                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]/20 transition-all"
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <label className="block text-xs font-bold text-gray-800">
+                    المميزات (النقاط الثلاثة الظاهرة بالأسفل)
+                  </label>
+                  <input
+                    type="text"
+                    value={authPortalFeature1Input}
+                    onChange={(e) => setAuthPortalFeature1Input(e.target.value)}
+                    placeholder="الميزة الأولى..."
+                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]/20 transition-all"
+                  />
+                  <input
+                    type="text"
+                    value={authPortalFeature2Input}
+                    onChange={(e) => setAuthPortalFeature2Input(e.target.value)}
+                    placeholder="الميزة الثانية..."
+                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]/20 transition-all"
+                  />
+                  <input
+                    type="text"
+                    value={authPortalFeature3Input}
+                    onChange={(e) => setAuthPortalFeature3Input(e.target.value)}
+                    placeholder="الميزة الثالثة..."
+                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]/20 transition-all"
                   />
                 </div>
               </div>

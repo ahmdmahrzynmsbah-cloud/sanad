@@ -1489,6 +1489,14 @@ app.post('/api/admin/settings/branding', async (req, res, next) => {
       founderPhotoUrl,
       founderQuote,
       siteOverview,
+      authPortalHeaderTop,
+      authPortalHeaderBottom,
+      authPortalTitle,
+      authPortalSubtitle,
+      authPortalDescription,
+      authPortalFeature1,
+      authPortalFeature2,
+      authPortalFeature3,
     } = body || {};
 
     if (!systemName || !String(systemName).trim()) {
@@ -1538,6 +1546,15 @@ app.post('/api/admin/settings/branding', async (req, res, next) => {
     if (founderQuote !== undefined) db.settings.founderQuote = String(founderQuote).trim();
     if (siteOverview !== undefined) db.settings.siteOverview = String(siteOverview).trim();
 
+    if (authPortalHeaderTop !== undefined) db.settings.authPortalHeaderTop = String(authPortalHeaderTop).trim();
+    if (authPortalHeaderBottom !== undefined) db.settings.authPortalHeaderBottom = String(authPortalHeaderBottom).trim();
+    if (authPortalTitle !== undefined) db.settings.authPortalTitle = String(authPortalTitle).trim();
+    if (authPortalSubtitle !== undefined) db.settings.authPortalSubtitle = String(authPortalSubtitle).trim();
+    if (authPortalDescription !== undefined) db.settings.authPortalDescription = String(authPortalDescription).trim();
+    if (authPortalFeature1 !== undefined) db.settings.authPortalFeature1 = String(authPortalFeature1).trim();
+    if (authPortalFeature2 !== undefined) db.settings.authPortalFeature2 = String(authPortalFeature2).trim();
+    if (authPortalFeature3 !== undefined) db.settings.authPortalFeature3 = String(authPortalFeature3).trim();
+
     saveDB();
 
     const firestorePayload = {
@@ -1558,6 +1575,15 @@ app.post('/api/admin/settings/branding', async (req, res, next) => {
       founderPhotoUrl: db.settings.founderPhotoUrl,
       founderQuote: db.settings.founderQuote,
       siteOverview: db.settings.siteOverview,
+      
+      authPortalHeaderTop: db.settings.authPortalHeaderTop,
+      authPortalHeaderBottom: db.settings.authPortalHeaderBottom,
+      authPortalTitle: db.settings.authPortalTitle,
+      authPortalSubtitle: db.settings.authPortalSubtitle,
+      authPortalDescription: db.settings.authPortalDescription,
+      authPortalFeature1: db.settings.authPortalFeature1,
+      authPortalFeature2: db.settings.authPortalFeature2,
+      authPortalFeature3: db.settings.authPortalFeature3,
     };
 
     // Await cloud Firestore save with a safety timeout so Vercel doesn't freeze in-flight connections

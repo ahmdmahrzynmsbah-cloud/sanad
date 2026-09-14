@@ -251,6 +251,16 @@ export interface StoredSettings {
   founderPhotoUrl?: string;
   founderQuote?: string;
   siteOverview?: string;
+
+  // Auth Portal Dynamic Texts
+  authPortalHeaderTop?: string;
+  authPortalHeaderBottom?: string;
+  authPortalTitle?: string;
+  authPortalSubtitle?: string;
+  authPortalDescription?: string;
+  authPortalFeature1?: string;
+  authPortalFeature2?: string;
+  authPortalFeature3?: string;
 }
 
 export async function fetchSettingsFromFirestore(): Promise<StoredSettings | null> {

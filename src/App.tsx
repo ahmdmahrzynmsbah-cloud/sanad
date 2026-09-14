@@ -413,6 +413,7 @@ export default function App() {
               onGoToAdminLogin={() => setActiveView('admin-login')}
               initialMode={authInitialMode}
               onBackToHome={() => setActiveView('home')}
+              branding={branding}
             />
           </div>
         )}

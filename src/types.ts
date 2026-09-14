@@ -150,6 +150,16 @@ export interface SystemBranding {
   founderPhotoUrl?: string;
   founderQuote?: string;
   siteOverview?: string;
+  
+  // Auth Portal Dynamic Texts
+  authPortalHeaderTop?: string;
+  authPortalHeaderBottom?: string;
+  authPortalTitle?: string;
+  authPortalSubtitle?: string;
+  authPortalDescription?: string;
+  authPortalFeature1?: string;
+  authPortalFeature2?: string;
+  authPortalFeature3?: string;
 }
 
 export interface ContactWhatsappItem {
