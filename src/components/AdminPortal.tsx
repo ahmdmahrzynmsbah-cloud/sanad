@@ -48,7 +48,8 @@ import {
   Target,
   Link2,
   PhoneCall,
-  Handshake
+  Handshake,
+  User as UserIcon
 } from 'lucide-react';
 import { User, Law, LawCategory, LegalCategory, SystemBranding, PlatformAboutData, ContactInfo } from '../types';
 import { formatBytes, sanitizeLawTitle, PDFProgress } from '../utils/pdfParser';
