@@ -508,6 +508,33 @@ export async function directSaveAutoApproveToFirestore(autoApprove: boolean): Pr
   }
 }
 
+export async function directFetchSettingsFromFirestore(): Promise<{ autoApprove?: boolean; defaultTrialDays?: number; branding?: any } | null> {
+  const db = getClientDb();
+  if (!db) return null;
+
+  try {
+    const settingsCol = collection(db, 'system_settings');
+    const snapshot = await getDocs(settingsCol);
+    let found: any = null;
+    snapshot.forEach((docSnap) => {
+      if (docSnap.id === 'general') {
+        found = docSnap.data();
+      }
+    });
+    if (found) {
+      return {
+        autoApprove: typeof found.autoApproveNewUsers === 'boolean' ? found.autoApproveNewUsers : undefined,
+        defaultTrialDays: typeof found.defaultTrialDays === 'number' ? found.defaultTrialDays : undefined,
+        branding: found,
+      };
+    }
+    return null;
+  } catch (err) {
+    console.error('[Client Firestore] Error fetching settings directly:', err);
+    return null;
+  }
+}
+
 export async function directFetchBrandingFromFirestore(): Promise<any | null> {
   const db = getClientDb();
   if (!db) return null;

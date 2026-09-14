@@ -77,6 +77,7 @@ import {
   directAutoApproveAllPendingInFirestore,
   directSaveDefaultTrialDaysToFirestore,
   directSaveAutoApproveToFirestore,
+  directFetchSettingsFromFirestore,
 } from '../services/clientFirestore';
 
 export interface QueuedLawItem {
@@ -355,6 +356,26 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
 
   // Fetch Settings (Auto-approval & Trial duration & Branding)
   const fetchSettings = async () => {
+    // 1. Direct Cloud Firestore fetch first (guaranteed and instant)
+    try {
+      const directSettings = await directFetchSettingsFromFirestore();
+      if (directSettings) {
+        if (typeof directSettings.autoApprove === 'boolean') {
+          setAutoApproveEnabled(directSettings.autoApprove);
+        }
+        if (typeof directSettings.defaultTrialDays === 'number') {
+          setDefaultTrialDays(directSettings.defaultTrialDays);
+          setEditingTrialDays(directSettings.defaultTrialDays);
+        }
+        if (directSettings.branding) {
+          applyBrandingState(directSettings.branding);
+        }
+      }
+    } catch (fsErr) {
+      console.warn('Direct fetch settings notice:', fsErr);
+    }
+
+    // 2. Secondary API fetch
     try {
       const res = await fetch('/api/admin/settings');
       const data = await res.json();
@@ -371,7 +392,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         }
       }
     } catch (err) {
-      console.warn('Failed to fetch settings:', err);
+      console.warn('Failed to fetch settings via API:', err);
     }
   };
 
@@ -995,8 +1016,23 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     }
 
     setSavingTrialSettings(true);
-    setTrialSettingsFeedback(null);
-    let apiSuccess = false;
+    setTrialSettingsFeedback('⏳ جاري حفظ وتطبيق المدة...');
+    setDefaultTrialDays(days);
+    setEditingTrialDays(days);
+
+    let saved = false;
+
+    // 1. Direct Cloud Firestore Save (Instant & 100% resilient)
+    try {
+      const directOk = await directSaveDefaultTrialDaysToFirestore(days);
+      if (directOk) {
+        saved = true;
+      }
+    } catch (fErr) {
+      console.warn('Direct save trial settings error:', fErr);
+    }
+
+    // 2. Secondary API call to keep in-memory server state in sync
     try {
       const res = await fetch('/api/admin/settings/trial', {
         method: 'POST',
@@ -1004,28 +1040,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         body: JSON.stringify({ defaultTrialDays: days }),
       });
       if (res.ok) {
-        apiSuccess = true;
+        saved = true;
       }
     } catch (err) {
-      console.warn('Save trial settings API error, falling back to direct Firestore:', err);
+      console.warn('Save trial settings API notice:', err);
     }
 
-    // Direct Firestore fallback (saves directly to Cloud Firestore)
-    try {
-      const directOk = await directSaveDefaultTrialDaysToFirestore(days);
-      if (directOk || apiSuccess) {
-        setDefaultTrialDays(days);
-        setEditingTrialDays(days);
-        setTrialSettingsFeedback(`✅ تم حفظ وتطبيق مدة الفترة التجريبية الافتراضية (${days} يوم) بنجاح في قاعدة البيانات السحابية.`);
-        setTimeout(() => setTrialSettingsFeedback(null), 5000);
-        setSavingTrialSettings(false);
-        return;
-      }
-    } catch (fErr) {
-      console.error('Direct save trial settings error:', fErr);
-    }
-
-    if (apiSuccess) {
+    if (saved) {
       setDefaultTrialDays(days);
       setEditingTrialDays(days);
       setTrialSettingsFeedback(`✅ تم حفظ وتطبيق مدة الفترة التجريبية الافتراضية (${days} يوم) بنجاح.`);
@@ -2079,7 +2100,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                   يتم منح أي حساب جديد تلقائياً فترة تجريبية تحددها أنت بالأيام. وإذا لم يشترك المستخدم خلال هذه المدة، يتجمد حسابه تلقائياً ويُمنع من استخدام الشات لحين الاشتراك أو فك التجميد من قبلك.
                 </p>
                 {trialSettingsFeedback && (
-                  <p className="text-xs font-bold mt-1.5 text-emerald-700">{trialSettingsFeedback}</p>
+                  <p className={`text-xs font-bold mt-1.5 ${
+                    trialSettingsFeedback.startsWith('✅')
+                      ? 'text-emerald-700'
+                      : trialSettingsFeedback.startsWith('⏳')
+                      ? 'text-amber-700'
+                      : 'text-rose-600'
+                  }`}>
+                    {trialSettingsFeedback}
+                  </p>
                 )}
               </div>
             </div>

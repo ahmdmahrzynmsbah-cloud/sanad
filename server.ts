@@ -981,11 +981,15 @@ export async function ensureFirestoreReady() {
 
 // Ensure database is initialized in serverless environments (e.g. Vercel)
 app.use(async (req, res, next) => {
-  if (!firestoreInitialized) {
-    await Promise.race([
-      ensureFirestoreReady(),
-      new Promise((r) => setTimeout(r, 800)),
-    ]);
+  try {
+    if (!firestoreInitialized) {
+      await Promise.race([
+        ensureFirestoreReady(),
+        new Promise((r) => setTimeout(r, 800)),
+      ]);
+    }
+  } catch (err) {
+    console.error('Middleware ensureFirestoreReady error:', err);
   }
   next();
 });
