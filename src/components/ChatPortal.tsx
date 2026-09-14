@@ -484,13 +484,13 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
       {/* 2. Main Chat View Container (Center) */}
       <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden max-w-5xl mx-auto w-full gap-1.5 sm:gap-2">
         {/* Top Status & Quick Bar */}
-        <div className="bg-[#09090b] border border-zinc-800 rounded-2xl px-2.5 sm:px-3.5 py-2 shadow-2xs flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 text-xs shrink-0">
-          <div className="flex items-center gap-1.5 sm:gap-2 text-zinc-300 flex-wrap">
+        <div className="bg-white border border-zinc-950 rounded-2xl px-2.5 sm:px-3.5 py-2 shadow-2xs flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 text-xs shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 text-zinc-700 flex-wrap">
             {/* Mobile Open History Sidebar Button (Right) */}
             <button
               id="mobile-toggle-sidebar-btn"
               onClick={() => setIsMobileSidebarOpen(true)}
-              className="lg:hidden p-1.5 rounded-xl border border-zinc-700 hover:bg-zinc-800 text-zinc-300 transition-colors flex items-center gap-1 cursor-pointer font-bold text-xs shrink-0 min-h-[36px]"
+              className="lg:hidden p-1.5 rounded-xl border border-zinc-300 hover:bg-zinc-100 text-zinc-700 transition-colors flex items-center gap-1 cursor-pointer font-bold text-xs shrink-0 min-h-[36px]"
               title="سجل الاستشارات"
             >
               <PanelRight className="w-4 h-4 text-emerald-800" />
@@ -515,8 +515,8 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
 
             <div className="flex items-center gap-1.5">
               <div className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></div>
-              <span className="font-semibold text-zinc-300">قاعدة المعرفة:</span>
-              <span className="bg-zinc-900 text-zinc-300 px-2 py-0.5 rounded-lg border border-zinc-700 font-medium text-[11px]">
+              <span className="font-semibold text-zinc-800">قاعدة المعرفة:</span>
+              <span className="bg-zinc-100 text-zinc-700 px-2 py-0.5 rounded-lg border border-zinc-300 font-medium text-[11px]">
                 {lawsCount} تشريعات مفعلة
               </span>
             </div>
@@ -524,12 +524,12 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
 
           <div className="flex items-center gap-1.5 sm:gap-2">
             {currentUser.isSubscribed ? (
-              <span className="bg-amber-900/30 text-amber-300 border border-amber-800/50 text-[11px] font-semibold px-2.5 py-0.5 rounded-full flex items-center gap-1">
+              <span className="bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-semibold px-2.5 py-0.5 rounded-full flex items-center gap-1">
                 <Crown className="w-3 h-3 text-amber-600" />
                 مشترك دائم
               </span>
             ) : (
-              <span className="bg-zinc-800 text-zinc-300 border border-zinc-700 text-[11px] font-medium px-2.5 py-0.5 rounded-full flex items-center gap-1">
+              <span className="bg-zinc-100 text-zinc-700 border border-zinc-300 text-[11px] font-medium px-2.5 py-0.5 rounded-full flex items-center gap-1">
                 <Clock className="w-3 h-3 text-emerald-700" />
                 تجريبي ({currentUser.remainingTrialDays ?? currentUser.trialDays ?? 7} يوم)
               </span>
@@ -548,7 +548,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
         </div>
 
         {/* Messages Scroll Area */}
-        <div className="flex-1 bg-[#09090b] rounded-2xl border border-zinc-800 shadow-2xs overflow-y-auto p-3 sm:p-6 space-y-4 sm:space-y-5 touch-scroll">
+        <div className="flex-1 bg-white rounded-2xl border border-zinc-950 shadow-2xs overflow-y-auto p-3 sm:p-6 space-y-4 sm:space-y-5 touch-scroll">
           {messages.map((msg) => (
             <div
               key={msg.id}
@@ -571,22 +571,22 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
               <div
                 className={`max-w-[92%] sm:max-w-[80%] rounded-2xl p-3 sm:p-4 text-xs sm:text-sm leading-relaxed shadow-xs relative group ${
                   msg.sender === 'user'
-                    ? 'bg-[#103025] text-white rounded-tr-xs'
-                    : 'bg-[#18181b] text-zinc-200 border border-zinc-800 rounded-tl-xs'
+                    ? 'bg-emerald-50/90 text-emerald-950 border border-emerald-100/50 rounded-tr-xs'
+                    : 'bg-white text-zinc-800 border border-zinc-200/60 rounded-tl-xs'
                 }`}
               >
                 {/* Header inside bot message */}
                 {msg.sender === 'bot' && (
-                  <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-zinc-800 text-[11px] text-emerald-400 font-bold">
+                  <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-zinc-100 text-[11px] text-emerald-700 font-bold">
                     <span className="flex items-center gap-1.5">
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" />
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                       {systemName} • إفادة نظامية
                     </span>
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] text-zinc-400 font-normal">{msg.timestamp}</span>
                       <button
                         onClick={() => handleCopy(msg.id, msg.text)}
-                        className="text-zinc-500 hover:text-zinc-300 p-1 rounded transition-colors"
+                        className="text-zinc-400 hover:text-emerald-700 p-1 rounded transition-colors"
                         title="نسخ الإجابة"
                       >
                         {copiedId === msg.id ? (
@@ -601,47 +601,47 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
 
                 {/* Message Content */}
                 {msg.sender === 'user' ? (
-                  <p className="whitespace-pre-wrap font-medium text-white">{msg.text}</p>
+                  <p className="whitespace-pre-wrap font-medium text-emerald-950">{msg.text}</p>
                 ) : (
-                  <div className="markdown-body space-y-2 text-zinc-300">
+                  <div className="markdown-body space-y-2 text-zinc-700">
                     <Markdown
                       components={{
                         h1: ({ children }) => (
-                          <h3 className="text-sm sm:text-base font-bold text-zinc-100 mt-2 mb-1 border-b border-zinc-800 pb-1">
+                          <h3 className="text-sm sm:text-base font-bold text-zinc-900 mt-2 mb-1 border-b border-zinc-100 pb-1">
                             {children}
                           </h3>
                         ),
                         h2: ({ children }) => (
-                          <h4 className="text-xs sm:text-sm font-bold text-zinc-200 mt-2 mb-1">
+                          <h4 className="text-xs sm:text-sm font-bold text-zinc-800 mt-2 mb-1">
                             {children}
                           </h4>
                         ),
                         h3: ({ children }) => (
-                          <h5 className="text-xs font-bold text-zinc-200 mt-1.5 mb-1">
+                          <h5 className="text-xs font-bold text-zinc-800 mt-1.5 mb-1">
                             {children}
                           </h5>
                         ),
                         p: ({ children }) => (
-                          <p className="my-1.5 leading-relaxed text-[13px] sm:text-sm">{children}</p>
+                          <p className="my-1.5 leading-relaxed text-[13px] sm:text-sm text-zinc-700">{children}</p>
                         ),
                         ul: ({ children }) => (
-                          <ul className="list-disc list-inside space-y-1 my-2 pr-1 text-zinc-300">
+                          <ul className="list-disc list-inside space-y-1 my-2 pr-1 text-zinc-700">
                             {children}
                           </ul>
                         ),
                         ol: ({ children }) => (
-                          <ol className="list-decimal list-inside space-y-1.5 my-2 pr-1 text-zinc-300 font-medium">
+                          <ol className="list-decimal list-inside space-y-1.5 my-2 pr-1 text-zinc-800 font-medium">
                             {children}
                           </ol>
                         ),
                         li: ({ children }) => <li className="leading-relaxed">{children}</li>,
                         strong: ({ children }) => (
-                          <strong className="font-bold text-emerald-200 bg-emerald-900/30 px-1 rounded">
+                          <strong className="font-bold text-emerald-800 bg-emerald-50 px-1 rounded">
                             {children}
                           </strong>
                         ),
                         blockquote: ({ children }) => (
-                          <blockquote className="border-r-4 border-emerald-800 pr-3 my-2 text-zinc-400 italic bg-zinc-800 py-1 rounded-l">
+                          <blockquote className="border-r-4 border-emerald-600 pr-3 my-2 text-zinc-500 italic bg-zinc-50 py-1 rounded-l">
                             {children}
                           </blockquote>
                         ),
@@ -653,7 +653,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
                 )}
 
                 {msg.sender === 'user' && (
-                  <div className="text-[10px] text-emerald-200/70 text-left mt-1 font-mono">
+                  <div className="text-[10px] text-emerald-700/70 text-left mt-1 font-mono">
                     {msg.timestamp}
                   </div>
                 )}
@@ -680,7 +680,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
         </div>
 
         {/* Clean Input Bar */}
-        <div className="bg-[#09090b] border border-zinc-800 rounded-2xl p-1.5 shadow-2xs shrink-0">
+        <div className="bg-white border border-zinc-950 rounded-2xl p-1.5 shadow-2xs shrink-0">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -696,7 +696,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
               onChange={(e) => setInputPrompt(e.target.value)}
               disabled={loading}
               placeholder="اكتب استفسارك الضريبي أو الجمركي هنا (مثال: ما هي شروط إعفاء الطرد البريدي؟)..."
-              className="flex-1 px-3.5 py-2.5 text-xs sm:text-sm text-zinc-100 bg-transparent focus:outline-none placeholder-zinc-600"
+              className="flex-1 px-3.5 py-2.5 text-xs sm:text-sm text-zinc-900 bg-transparent focus:outline-none placeholder-zinc-400"
             />
             <button
               id="chat-send-btn"
@@ -708,19 +708,6 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
               <Send className="w-3.5 h-3.5 rotate-180" />
             </button>
           </form>
-        </div>
-
-        {/* Footer / Developer Credit */}
-        <div className="text-center mt-2 text-[10px] sm:text-[11px] text-zinc-400 shrink-0">
-          تم تطوير وتصميم هذه المنصة الذكية باحترافية عالية بواسطة{' '}
-          <a
-            href="https://wa.me/201034859313"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[#d4af37] font-bold hover:text-[#e2bd40] transition-colors"
-          >
-            شركة Fox Tech
-          </a>
         </div>
       </div>
 
