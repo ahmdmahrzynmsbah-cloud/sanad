@@ -581,7 +581,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     const payloadStr = JSON.stringify(payload);
     // VERCEL STRICT PAYLOAD LIMIT CHECK
     // Fallback safe limit to prevent Vercel 500 errors 
-    if (payloadStr.length > 200000) {
+    if (payloadStr.length > 4000000) {
       setBrandingFeedback({
         type: 'error',
         message: 'حجم الصورة المرفوعة ضخم جداً. يرجى مسح الصورة ورفع صورة بحجم أصغر، أو استخدم رابط للصورة (URL) بدلاً من ذلك.',
