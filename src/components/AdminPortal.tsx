@@ -2413,17 +2413,17 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                               </div>
                             )}
                           </td>
-                          <td className="py-3.5 px-4">
-                            <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                          <td className="py-2.5 px-3">
+                            <div className="flex flex-wrap items-center justify-center gap-1">
                               {/* View Full User Details Eye Button */}
                               <button
                                 id={`admin-view-user-${user.id}`}
                                 onClick={() => setSelectedUserDetails(user)}
-                                className="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-200/90 flex items-center gap-1 transition-all shadow-xs cursor-pointer hover:border-amber-300"
+                                className="px-2 py-1 rounded-md text-[11px] font-bold bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-200/90 flex items-center gap-1 transition-all shadow-xs cursor-pointer hover:border-amber-300"
                                 title="عرض كامل تفاصيل وبيانات المستخدم وكلمة المرور وتاريخ التسجيل"
                               >
-                                <Eye className="w-3.5 h-3.5 text-amber-700" />
-                                <span>عرض التفاصيل</span>
+                                <Eye className="w-3 h-3 text-amber-700" />
+                                <span>التفاصيل</span>
                               </button>
 
                               {/* If pending: Show approve/reject */}
@@ -2433,7 +2433,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                                     id={`admin-approve-user-${user.id}`}
                                     onClick={() => handleUpdateStatus(user.id, 'approved')}
                                     disabled={isProcessing}
-                                    className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1 transition-all shadow-xs cursor-pointer"
+                                    className="px-2 py-1 rounded-md text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1 transition-all shadow-xs cursor-pointer"
                                     title="قبول الحساب"
                                   >
                                     {isProcessing ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
@@ -2443,7 +2443,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                                     id={`admin-reject-user-${user.id}`}
                                     onClick={() => handleUpdateStatus(user.id, 'rejected')}
                                     disabled={isProcessing}
-                                    className="px-2.5 py-1 rounded-lg text-xs font-bold bg-red-600 hover:bg-red-700 text-white flex items-center gap-1 transition-all shadow-xs cursor-pointer"
+                                    className="px-2 py-1 rounded-md text-[11px] font-bold bg-red-600 hover:bg-red-700 text-white flex items-center gap-1 transition-all shadow-xs cursor-pointer"
                                     title="رفض الحساب"
                                   >
                                     <XCircle className="w-3 h-3" />
@@ -2457,7 +2457,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                                 id={`admin-sub-toggle-${user.id}`}
                                 onClick={() => handleToggleSubscription(user)}
                                 disabled={isProcessing}
-                                className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-all shadow-xs cursor-pointer ${
+                                className={`px-2 py-1 rounded-md text-[11px] font-bold flex items-center gap-1 transition-all shadow-xs cursor-pointer ${
                                   user.isSubscribed
                                     ? 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300'
                                     : 'bg-emerald-700 hover:bg-emerald-800 text-white'
@@ -2469,7 +2469,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                                 ) : (
                                   <Crown className="w-3 h-3 text-amber-300" />
                                 )}
-                                {user.isSubscribed ? 'إلغاء الاشتراك' : 'تفعيل اشتراك'}
+                                {user.isSubscribed ? 'إلغاء' : 'تفعيل'}
                               </button>
 
                               {/* Extend Trial Button */}
@@ -2480,11 +2480,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                                   setExtendDaysInput(7);
                                 }}
                                 disabled={isProcessing}
-                                className="px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 flex items-center gap-1 transition-all cursor-pointer"
+                                className="px-2 py-1 rounded-md text-[11px] font-bold bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 flex items-center gap-1 transition-all cursor-pointer"
                                 title="تمديد أو تغيير أيام الفترة التجريبية"
                               >
                                 <Calendar className="w-3 h-3 text-blue-600" />
-                                تمديد التجربة
+                                تمديد
                               </button>
 
                               {/* Freeze / Unfreeze Toggle Button */}
@@ -2492,7 +2492,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                                 id={`admin-freeze-toggle-${user.id}`}
                                 onClick={() => handleToggleFreeze(user)}
                                 disabled={isProcessing}
-                                className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                                className={`px-2 py-1 rounded-md text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
                                   isUserFrozen
                                     ? 'bg-purple-700 hover:bg-purple-800 text-white'
                                     : 'bg-gray-50 hover:bg-purple-50 text-purple-800 border border-purple-200'
@@ -2504,7 +2504,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                                 ) : (
                                   <Snowflake className="w-3 h-3 text-purple-500" />
                                 )}
-                                {isUserFrozen ? 'فك التجميد' : 'تجميد'}
+                                {isUserFrozen ? 'فك' : 'تجميد'}
                               </button>
 
                               {/* Delete User Button */}
@@ -2512,7 +2512,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                                 id={`admin-delete-user-${user.id}`}
                                 onClick={() => setUserToDelete(user)}
                                 disabled={isProcessing}
-                                className="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 flex items-center gap-1 transition-all shadow-xs cursor-pointer hover:border-rose-300"
+                                className="px-2 py-1 rounded-md text-[11px] font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 flex items-center gap-1 transition-all shadow-xs cursor-pointer hover:border-rose-300"
                                 title="حذف الحساب نهائياً"
                               >
                                 <Trash2 className="w-3 h-3" />
