@@ -117,6 +117,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   const [usersFilter, setUsersFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'frozen'>('all');
   const [userActionMessage, setUserActionMessage] = useState<string | null>(null);
   const [processingUserId, setProcessingUserId] = useState<string | null>(null);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+  const [deleteUserError, setDeleteUserError] = useState<string | null>(null);
 
   // Trial & Subscription Settings & State
   const [defaultTrialDays, setDefaultTrialDays] = useState<number>(7);
@@ -1055,6 +1058,34 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       setTrialSettingsFeedback('❌ تعذر حفظ إعدادات الفترة التجريبية، يرجى المحاولة ثانية.');
     }
     setSavingTrialSettings(false);
+  };
+
+  const handleConfirmDeleteUser = async () => {
+    if (!userToDelete) return;
+    setDeletingUserId(userToDelete.id);
+    setDeleteUserError(null);
+    try {
+      const res = await fetch(`/api/admin/users/${userToDelete.id}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        setUsers((prev) => prev.filter((u) => u.id !== userToDelete.id));
+        setUserActionMessage(`تم حذف المستخدم "${userToDelete.fullName || userToDelete.username}" نهائياً بنجاح.`);
+        setTimeout(() => setUserActionMessage(null), 3000);
+        setUserToDelete(null);
+        if (selectedUserDetails?.id === userToDelete.id) {
+          setSelectedUserDetails(null);
+        }
+      } else {
+        const data = await res.json();
+        setDeleteUserError(data.error || 'تعذر حذف المستخدم من الخادم.');
+      }
+    } catch (err) {
+      console.error(err);
+      setDeleteUserError('حدث خطأ أثناء الاتصال بالخادم لحذف المستخدم.');
+    } finally {
+      setDeletingUserId(null);
+    }
   };
 
   // Toggle user subscription status
@@ -2474,6 +2505,18 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                                   <Snowflake className="w-3 h-3 text-purple-500" />
                                 )}
                                 {isUserFrozen ? 'فك التجميد' : 'تجميد'}
+                              </button>
+
+                              {/* Delete User Button */}
+                              <button
+                                id={`admin-delete-user-${user.id}`}
+                                onClick={() => setUserToDelete(user)}
+                                disabled={isProcessing}
+                                className="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 flex items-center gap-1 transition-all shadow-xs cursor-pointer hover:border-rose-300"
+                                title="حذف الحساب نهائياً"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                حذف
                               </button>
                             </div>
                           </td>
@@ -4775,6 +4818,57 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                   </>
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* USER DELETION CONFIRMATION MODAL                         */}
+      {/* ======================================================== */}
+      {userToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl border border-rose-200 shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-5 text-center">
+              <div className="w-12 h-12 rounded-full bg-rose-100 flex items-center justify-center mx-auto mb-4 border border-rose-200 shadow-inner">
+                <Trash2 className="w-6 h-6 text-rose-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">تأكيد الحذف النهائي</h3>
+              <p className="text-xs text-gray-600 leading-relaxed mb-4">
+                هل أنت متأكد من رغبتك في حذف المستخدم <span className="font-bold text-gray-900">"{userToDelete.fullName || userToDelete.username}"</span> نهائياً؟<br/>
+                <span className="text-rose-600 font-bold">هذا الإجراء لا يمكن التراجع عنه وسيحذف كافة بياناته.</span>
+              </p>
+              {deleteUserError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-bold rounded-xl mb-4">
+                  {deleteUserError}
+                </div>
+              )}
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUserToDelete(null);
+                    setDeleteUserError(null);
+                  }}
+                  disabled={deletingUserId === userToDelete.id}
+                  className="flex-1 py-2 text-xs font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  تراجع
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDeleteUser}
+                  disabled={deletingUserId === userToDelete.id}
+                  className="flex-1 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-50 shadow-xs cursor-pointer"
+                >
+                  {deletingUserId === userToDelete.id ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
+                  <span>تأكيد الحذف</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
