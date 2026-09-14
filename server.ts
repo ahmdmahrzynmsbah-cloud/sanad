@@ -2710,10 +2710,15 @@ app.delete('/api/admin/users/:id', async (req, res) => {
   db.users = db.users.filter((u) => u.id !== id);
   if (db.users.length < initialLen) {
     saveDB();
+  }
+  
+  try {
     await deleteUserFromFirestore(id);
     return res.json({ message: 'تم حذف المستخدم بنجاح' });
+  } catch (err) {
+    console.error('Failed to delete user from Firestore:', err);
+    return res.status(500).json({ error: 'تعذر حذف المستخدم من قاعدة البيانات السحابية' });
   }
-  return res.status(404).json({ error: 'المستخدم غير موجود' });
 });
 
 // --- Laws Management Endpoints ---

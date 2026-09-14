@@ -65,7 +65,9 @@ export default function App() {
   });
 
   const [lawsCount, setLawsCount] = useState<number>(3);
-  const [showWelcomeModal, setShowWelcomeModal] = useState<boolean>(true);
+  const [showWelcomeModal, setShowWelcomeModal] = useState<boolean>(() => {
+    return localStorage.getItem('sanad_welcome_seen') !== 'true';
+  });
 
   const handleQuestionFromWelcomeModal = (questionText: string) => {
     if (!questionText.trim()) return;
@@ -594,7 +596,10 @@ export default function App() {
       {/* Interactive Sanad Welcome Dialog (النافذة المنبثقة: اسأل سند + من هو سند) */}
       <SanadWelcomeModal
         isOpen={showWelcomeModal}
-        onClose={() => setShowWelcomeModal(false)}
+        onClose={() => {
+          setShowWelcomeModal(false);
+          localStorage.setItem('sanad_welcome_seen', 'true');
+        }}
         onQuestionAsked={handleQuestionFromWelcomeModal}
       />
     </div>
