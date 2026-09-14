@@ -265,6 +265,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           username: username.trim(),
           password,
           recoveryCode: recoveryCode.trim(),
+          role: requestedRole,
         });
 
         if (direct.ok) {

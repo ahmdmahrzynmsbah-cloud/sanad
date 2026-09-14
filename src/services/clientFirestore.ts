@@ -158,6 +158,7 @@ export async function directRegisterUser(payload: {
   username: string;
   password: string;
   recoveryCode: string;
+  role?: string;
 }): Promise<DirectAuthResult> {
   const db = getClientDb();
   if (!db) {
@@ -200,6 +201,8 @@ export async function directRegisterUser(payload: {
     const trialEndsAt = new Date(now.getTime() + defaultTrialDays * 24 * 60 * 60 * 1000).toISOString();
     const newUserId = 'user-' + Date.now();
 
+    const isSupervisor = payload.role === 'supervisor';
+
     const userData: any = {
       id: newUserId,
       username: trimmedUsername,
@@ -207,7 +210,7 @@ export async function directRegisterUser(payload: {
       phone: trimmedPhone,
       recoveryCode: trimmedRecoveryCode,
       password: String(payload.password),
-      role: 'user',
+      role: isSupervisor ? 'supervisor' : 'user',
       status: 'approved',
       createdAt: now.toISOString(),
       reviewedAt: now.toISOString(),

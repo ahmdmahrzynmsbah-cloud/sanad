@@ -1043,7 +1043,7 @@ app.post('/api/auth/register', async (req, res) => {
       recoveryCode: trimmedRecoveryCode,
       password: String(password),
       role: role === 'supervisor' ? 'supervisor' : 'user',
-      status: role === 'supervisor' ? 'pending' : (isAutoApprove ? 'approved' : 'pending'),
+      status: isAutoApprove ? 'approved' : 'pending',
       createdAt: now.toISOString(),
       ...(isAutoApprove ? { reviewedAt: now.toISOString() } : {}),
 
