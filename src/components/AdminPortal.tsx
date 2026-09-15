@@ -204,8 +204,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   const [authPortalFeature2Input, setAuthPortalFeature2Input] = useState('تدقيق واعتماد أمني ورقابي للحسابات المصرح لها');
   const [authPortalFeature3Input, setAuthPortalFeature3Input] = useState('حفظ وتزامن سحابي فوري عبر Cloud Firestore');
 
-  // Laws state
-  const [laws, setLaws] = useState<Law[]>([]);
+  // Laws state with resilient local caching
+  const [laws, setLaws] = useState<Law[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('sanad_cached_laws');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return [];
+  });
   const [lawsLoading, setLawsLoading] = useState(false);
   const [lawSearch, setLawSearch] = useState('');
   const [lawCategoryFilter, setLawCategoryFilter] = useState<string>('الكل');
@@ -220,8 +231,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     }));
   };
 
-  // Dynamic Legal Categories state
-  const [categories, setCategories] = useState<LegalCategory[]>([]);
+  // Dynamic Legal Categories state with resilient local caching
+  const [categories, setCategories] = useState<LegalCategory[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('sanad_cached_categories');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return [];
+  });
   const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [newCategoryInput, setNewCategoryInput] = useState('');
@@ -346,6 +368,23 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     setUsersLoading(false);
   };
 
+  // Laws and categories localStorage persistence
+  useEffect(() => {
+    if (typeof window !== 'undefined' && laws.length > 0) {
+      try {
+        localStorage.setItem('sanad_cached_laws', JSON.stringify(laws));
+      } catch {}
+    }
+  }, [laws]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && categories.length > 0) {
+      try {
+        localStorage.setItem('sanad_cached_categories', JSON.stringify(categories));
+      } catch {}
+    }
+  }, [categories]);
+
   // Fetch Laws
   const fetchLaws = async () => {
     setLawsLoading(true);
@@ -353,7 +392,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     try {
       const res = await fetch('/api/laws');
       const result = await safeFetchJson<{ laws?: Law[] }>(res);
-      if (result.ok && result.data && result.data.laws) {
+      if (result.ok && result.data && result.data.laws && result.data.laws.length > 0) {
         setLaws(result.data.laws);
         if (onLawsUpdated) onLawsUpdated();
         loaded = true;
@@ -368,10 +407,26 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         if (firestoreLaws && firestoreLaws.length > 0) {
           setLaws(firestoreLaws);
           if (onLawsUpdated) onLawsUpdated();
+          loaded = true;
         }
       } catch (fErr) {
         console.warn('Failed to fetch laws from direct Firestore:', fErr);
       }
+    }
+
+    // Secondary fallback: recover previously cached laws from localStorage if network/quota fails
+    if (!loaded) {
+      try {
+        const cached = localStorage.getItem('sanad_cached_laws');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setLaws(parsed);
+            if (onLawsUpdated) onLawsUpdated();
+            loaded = true;
+          }
+        }
+      } catch {}
     }
     setLawsLoading(false);
   };
@@ -379,12 +434,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   // Fetch Dynamic Legal Categories
   const fetchCategories = async () => {
     setCategoriesLoading(true);
+    let loaded = false;
     try {
       const res = await fetch('/api/categories');
       const data = await res.json();
-      if (res.ok && data.categories) {
+      if (res.ok && data.categories && data.categories.length > 0) {
         setCategories(data.categories);
-        // Ensure newCategory has a valid default if currently empty or not in list
+        loaded = true;
         if (data.categories.length > 0) {
           setNewCategory((prev) => {
             const exists = data.categories.some((c: LegalCategory) => c.name === prev);
@@ -394,9 +450,20 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       }
     } catch (err) {
       console.warn('Failed to fetch categories:', err);
-    } finally {
-      setCategoriesLoading(false);
     }
+
+    if (!loaded) {
+      try {
+        const cached = localStorage.getItem('sanad_cached_categories');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setCategories(parsed);
+          }
+        }
+      } catch {}
+    }
+    setCategoriesLoading(false);
   };
 
   // Fetch Settings (Auto-approval & Trial duration & Branding)
@@ -517,9 +584,29 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
             console.warn('Fallback direct users fetch failed:', fErr);
           }
         }
-        if (data.laws) {
+        if (data.laws && Array.isArray(data.laws) && data.laws.length > 0) {
           setLaws(data.laws);
           if (onLawsUpdated) onLawsUpdated();
+        } else {
+          // If init returned 0 laws due to cold start, fetch from direct Firestore or localStorage cache
+          try {
+            const firestoreLaws = await directFetchLawsFromFirestore();
+            if (firestoreLaws && firestoreLaws.length > 0) {
+              setLaws(firestoreLaws);
+              if (onLawsUpdated) onLawsUpdated();
+            } else {
+              const cached = localStorage.getItem('sanad_cached_laws');
+              if (cached) {
+                const parsed = JSON.parse(cached);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  setLaws(parsed);
+                  if (onLawsUpdated) onLawsUpdated();
+                }
+              }
+            }
+          } catch (fErr) {
+            console.warn('Fallback laws fetch failed:', fErr);
+          }
         }
         if (data.categories) {
           setCategories(data.categories);
