@@ -124,6 +124,27 @@ export interface StoredLaw {
   updatedAt: string;
 }
 
+export interface StoredLawRequest {
+  id: string;
+  title: string;
+  category: string;
+  content: string;
+  description?: string;
+  sourceFileName?: string;
+  sourceFileSize?: string;
+  pageCount?: number;
+  userId?: string;
+  userName?: string;
+  userFullName?: string;
+  userPhone?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  rejectionReason?: string;
+  createdAt: string;
+  updatedAt?: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+}
+
 export interface StoredCategory {
   id: string;
   name: string;
@@ -414,6 +435,95 @@ export async function deleteLawFromFirestore(lawId: string): Promise<boolean> {
     return true;
   } catch (err) {
     console.error(`Error deleting law ${lawId} from Firestore:`, err);
+    return false;
+  }
+}
+
+export async function fetchLawRequestsFromFirestore(): Promise<StoredLawRequest[] | null> {
+  const db = initFirestore();
+  if (!db) return null;
+
+  try {
+    const col = collection(db, 'law_requests');
+    const snapshot = await getDocs(col);
+    if (snapshot.empty) {
+      return [];
+    }
+
+    const requests: StoredLawRequest[] = [];
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data() as StoredLawRequest;
+      requests.push({
+        id: docSnap.id,
+        ...data,
+      });
+    });
+    return requests;
+  } catch (err) {
+    console.error('Error fetching law requests from Firestore:', err);
+    return null;
+  }
+}
+
+export async function saveLawRequestToFirestore(request: StoredLawRequest): Promise<boolean> {
+  const db = initFirestore();
+  if (!db) return false;
+
+  try {
+    const docRef = doc(db, 'law_requests', request.id);
+    await setDoc(docRef, {
+      id: request.id,
+      title: request.title,
+      category: request.category || 'جمارك',
+      content: request.content || '',
+      description: request.description || '',
+      sourceFileName: request.sourceFileName || null,
+      sourceFileSize: request.sourceFileSize || null,
+      pageCount: request.pageCount || null,
+      userId: request.userId || '',
+      userName: request.userName || '',
+      userFullName: request.userFullName || '',
+      userPhone: request.userPhone || '',
+      status: request.status || 'pending',
+      rejectionReason: request.rejectionReason || '',
+      createdAt: request.createdAt || new Date().toISOString(),
+      reviewedAt: request.reviewedAt || null,
+      reviewedBy: request.reviewedBy || null,
+    });
+    return true;
+  } catch (err) {
+    console.error(`Error saving law request ${request.id} to Firestore:`, err);
+    return false;
+  }
+}
+
+export async function updateLawRequestInFirestore(
+  requestId: string,
+  partial: Partial<StoredLawRequest>
+): Promise<boolean> {
+  const db = initFirestore();
+  if (!db) return false;
+
+  try {
+    const docRef = doc(db, 'law_requests', requestId);
+    await updateDoc(docRef, partial as any);
+    return true;
+  } catch (err) {
+    console.error(`Error updating law request ${requestId} in Firestore:`, err);
+    return false;
+  }
+}
+
+export async function deleteLawRequestFromFirestore(requestId: string): Promise<boolean> {
+  const db = initFirestore();
+  if (!db) return false;
+
+  try {
+    const docRef = doc(db, 'law_requests', requestId);
+    await deleteDoc(docRef);
+    return true;
+  } catch (err) {
+    console.error(`Error deleting law request ${requestId} from Firestore:`, err);
     return false;
   }
 }

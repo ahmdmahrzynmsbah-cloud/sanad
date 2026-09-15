@@ -67,6 +67,10 @@ import {
   saveConversationToFirestore,
   deleteConversationFromFirestore,
   clearUserConversationsFromFirestore,
+  fetchLawRequestsFromFirestore,
+  saveLawRequestToFirestore,
+  updateLawRequestInFirestore,
+  deleteLawRequestFromFirestore,
   onDatabaseChange,
 } from './server/firestore.ts';
 import type {
@@ -77,6 +81,7 @@ import type {
   StoredContactWhatsappItem,
   StoredContactPhoneItem,
   StoredConversation,
+  StoredLawRequest,
 } from './server/firestore.ts';
 
 dotenv.config();
@@ -339,6 +344,16 @@ interface DBSettings {
   founderPhotoUrl?: string;
   founderQuote?: string;
   siteOverview?: string;
+
+  // Custom Auth Portal Texts
+  authPortalHeaderTop?: string;
+  authPortalHeaderBottom?: string;
+  authPortalTitle?: string;
+  authPortalSubtitle?: string;
+  authPortalDescription?: string;
+  authPortalFeature1?: string;
+  authPortalFeature2?: string;
+  authPortalFeature3?: string;
 }
 
 const DEFAULT_FOUNDER = {
@@ -490,6 +505,7 @@ export const DEFAULT_RELATED_SITES: StoredRelatedSite[] = [
 interface DBData {
   users: StoredUser[];
   laws: StoredLaw[];
+  lawRequests?: StoredLawRequest[];
   categories?: StoredCategory[];
   settings?: DBSettings;
   supervisors?: StoredSupervisor[];
@@ -611,6 +627,9 @@ function initDB(): DBData {
       if (!data.contactInfo) {
         data.contactInfo = { ...DEFAULT_CONTACT_INFO };
       }
+      if (!data.lawRequests) {
+        data.lawRequests = [];
+      }
       return data;
     } catch {
       // Fallback
@@ -632,6 +651,7 @@ function initDB(): DBData {
     contactInfo: { ...DEFAULT_CONTACT_INFO },
     users: [],
     laws: INITIAL_LAWS,
+    lawRequests: [],
   };
 
   try {
@@ -950,6 +970,13 @@ async function syncWithFirestore() {
       db.partners = cloudPartners;
       changed = true;
       console.log(`✅ Loaded ${cloudPartners.length} partners from Cloud Firestore.`);
+    }
+
+    const cloudLawRequests = await fetchLawRequestsFromFirestore();
+    if (cloudLawRequests && cloudLawRequests.length > 0) {
+      db.lawRequests = cloudLawRequests;
+      changed = true;
+      console.log(`✅ Loaded ${cloudLawRequests.length} law requests from Cloud Firestore.`);
     }
 
     if (changed) {
@@ -1397,6 +1424,7 @@ app.get('/api/admin/init', async (req, res) => {
   res.json({
     users: adminUsers,
     laws: db.laws,
+    lawRequests: db.lawRequests || [],
     categories: db.categories || [],
     supervisors: (db.supervisors || []).sort((a, b) => (a.order || 0) - (b.order || 0)),
     relatedSites: db.relatedSites || [],
@@ -3324,6 +3352,249 @@ app.delete('/api/laws/:id', async (req, res) => {
   } catch (err: any) {
     console.error('Error deleting law:', err);
     return res.status(500).json({ error: 'حدث خطأ أثناء حذف القانون: ' + (err?.message || '') });
+  }
+});
+
+// ----------------------------------------------------
+// Law Requests Management Endpoints (طلبات إضافة القوانين من المستفيدين)
+// ----------------------------------------------------
+
+// Get all law requests (or filtered by userId)
+app.get('/api/law-requests', async (req, res) => {
+  try {
+    const { userId } = req.query;
+    if (!db.lawRequests) {
+      db.lawRequests = [];
+    }
+
+    // Attempt to pull latest from Firestore if empty or fresh query
+    if (db.lawRequests.length === 0) {
+      const cloudRequests = await fetchLawRequestsFromFirestore();
+      if (cloudRequests && cloudRequests.length > 0) {
+        db.lawRequests = cloudRequests;
+      }
+    }
+
+    let requests = db.lawRequests;
+    if (userId && typeof userId === 'string') {
+      requests = requests.filter((r) => r.userId === userId);
+    }
+
+    res.json({ lawRequests: requests });
+  } catch (err: any) {
+    console.error('Error fetching law requests:', err);
+    res.status(500).json({ error: 'تعذر جلب طلبات القوانين: ' + (err?.message || '') });
+  }
+});
+
+// Submit a new law request from a user / beneficiary
+app.post('/api/law-requests', async (req, res) => {
+  try {
+    const {
+      title,
+      category,
+      content,
+      description,
+      sourceFileName,
+      sourceFileSize,
+      pageCount,
+      userId,
+      userName,
+      userFullName,
+      userPhone,
+    } = req.body;
+
+    if (!title || !String(title).trim()) {
+      return res.status(400).json({ error: 'عنوان التشريع أو القانون مطلوب' });
+    }
+    if (!content || !String(content).trim()) {
+      return res.status(400).json({ error: 'محتوى أو نصوص المواد القانونية مطلوبة' });
+    }
+
+    const newRequest: StoredLawRequest = {
+      id: 'req-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+      title: String(title).trim(),
+      category: category ? String(category).trim() : 'جمارك',
+      content: String(content).trim(),
+      description: description ? String(description).trim() : undefined,
+      sourceFileName: sourceFileName ? String(sourceFileName).trim() : undefined,
+      sourceFileSize: sourceFileSize ? String(sourceFileSize).trim() : undefined,
+      pageCount: pageCount ? Number(pageCount) : undefined,
+      userId: userId ? String(userId).trim() : undefined,
+      userName: userName ? String(userName).trim() : undefined,
+      userFullName: userFullName ? String(userFullName).trim() : undefined,
+      userPhone: userPhone ? String(userPhone).trim() : undefined,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (!db.lawRequests) {
+      db.lawRequests = [];
+    }
+
+    db.lawRequests.unshift(newRequest);
+    saveDB();
+
+    // Async save to Firestore
+    saveLawRequestToFirestore(newRequest).catch((e) =>
+      console.error('Firestore save law request error:', e)
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'تم إرسال طلب إضافة القانون بنجاح وسيقوم المشرفون بمراجعته وإدراجه في قاعدة المعرفة.',
+      lawRequest: newRequest,
+    });
+  } catch (err: any) {
+    console.error('Submit law request error:', err);
+    res.status(500).json({ error: 'تعذر إرسال طلب القانون: ' + (err?.message || '') });
+  }
+});
+
+// Approve law request: Moves request to main laws collection and marks request approved
+app.post('/api/law-requests/:id/approve', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reviewedBy, customTitle, customCategory, customContent } = req.body;
+
+    if (!db.lawRequests) {
+      db.lawRequests = [];
+    }
+
+    const reqIndex = db.lawRequests.findIndex((r) => r.id === id);
+    if (reqIndex === -1) {
+      return res.status(404).json({ error: 'طلب القانون غير موجود' });
+    }
+
+    const request = db.lawRequests[reqIndex];
+    const finalTitle = customTitle ? String(customTitle).trim() : request.title;
+    const finalCategory = customCategory ? String(customCategory).trim() : request.category;
+    const finalContent = customContent ? String(customContent).trim() : request.content;
+
+    // Create law document
+    const newLaw: StoredLaw = {
+      id: 'law-' + Date.now(),
+      title: finalTitle,
+      category: finalCategory,
+      content: finalContent,
+      sourceFileName: request.sourceFileName,
+      sourceFileSize: request.sourceFileSize,
+      pageCount: request.pageCount,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    db.laws.unshift(newLaw);
+    cachedIndexedChunks = null;
+
+    // Update request state
+    request.status = 'approved';
+    request.reviewedAt = new Date().toISOString();
+    request.reviewedBy = reviewedBy ? String(reviewedBy).trim() : 'المشرف';
+    request.updatedAt = new Date().toISOString();
+
+    db.lawRequests[reqIndex] = request;
+    saveDB();
+
+    // Persist both law and request to Firestore
+    await Promise.all([
+      saveLawToFirestore(newLaw).catch((e) => console.error('Error saving approved law to firestore:', e)),
+      updateLawRequestInFirestore(request.id, {
+        status: 'approved',
+        reviewedAt: request.reviewedAt,
+        reviewedBy: request.reviewedBy,
+        updatedAt: request.updatedAt,
+      }).catch((e) => console.error('Error updating law request in firestore:', e)),
+    ]);
+
+    res.json({
+      success: true,
+      message: `تم اعتماد القانون "${newLaw.title}" وإدراجه بنجاح في قاعدة المعرفة الرسمية!`,
+      law: newLaw,
+      lawRequest: request,
+      laws: db.laws,
+      lawRequests: db.lawRequests,
+    });
+  } catch (err: any) {
+    console.error('Approve law request error:', err);
+    res.status(500).json({ error: 'تعذر اعتماد القانون: ' + (err?.message || '') });
+  }
+});
+
+// Reject law request
+app.post('/api/law-requests/:id/reject', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reviewedBy, rejectionReason } = req.body;
+
+    if (!db.lawRequests) {
+      db.lawRequests = [];
+    }
+
+    const reqIndex = db.lawRequests.findIndex((r) => r.id === id);
+    if (reqIndex === -1) {
+      return res.status(404).json({ error: 'طلب القانون غير موجود' });
+    }
+
+    const request = db.lawRequests[reqIndex];
+    request.status = 'rejected';
+    request.reviewedAt = new Date().toISOString();
+    request.reviewedBy = reviewedBy ? String(reviewedBy).trim() : 'المشرف';
+    request.rejectionReason = rejectionReason ? String(rejectionReason).trim() : undefined;
+    request.updatedAt = new Date().toISOString();
+
+    db.lawRequests[reqIndex] = request;
+    saveDB();
+
+    await updateLawRequestInFirestore(request.id, {
+      status: 'rejected',
+      reviewedAt: request.reviewedAt,
+      reviewedBy: request.reviewedBy,
+      rejectionReason: request.rejectionReason,
+      updatedAt: request.updatedAt,
+    }).catch((e) => console.error('Error rejecting law request in firestore:', e));
+
+    res.json({
+      success: true,
+      message: `تم رفض طلب القانون "${request.title}".`,
+      lawRequest: request,
+      lawRequests: db.lawRequests,
+    });
+  } catch (err: any) {
+    console.error('Reject law request error:', err);
+    res.status(500).json({ error: 'تعذر رفض طلب القانون: ' + (err?.message || '') });
+  }
+});
+
+// Delete law request
+app.delete('/api/law-requests/:id', async (req, res) => {
+  try {
+    const id = decodeURIComponent(req.params.id).trim();
+    if (!db.lawRequests) {
+      db.lawRequests = [];
+    }
+
+    const initialLen = db.lawRequests.length;
+    db.lawRequests = db.lawRequests.filter((r) => r.id !== id);
+
+    if (db.lawRequests.length < initialLen) {
+      saveDB();
+    }
+
+    await deleteLawRequestFromFirestore(id).catch((e) =>
+      console.error('Error deleting law request from firestore:', e)
+    );
+
+    res.json({
+      success: true,
+      message: 'تم حذف طلب القانون بنجاح.',
+      deletedId: id,
+      lawRequests: db.lawRequests,
+    });
+  } catch (err: any) {
+    console.error('Delete law request error:', err);
+    res.status(500).json({ error: 'تعذر حذف طلب القانون: ' + (err?.message || '') });
   }
 });
 

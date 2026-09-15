@@ -16,6 +16,7 @@ import {
   PanelLeft,
   Plus,
   Layers,
+  FileUp,
 } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { User, ChatMessage, Conversation, SystemBranding, Law } from '../types';
@@ -30,6 +31,7 @@ interface ChatPortalProps {
   lawsCount: number;
   branding?: SystemBranding;
   onLogout?: () => void;
+  onOpenSubmitLaw?: () => void;
 }
 
 export const ChatPortal: React.FC<ChatPortalProps> = ({
@@ -37,6 +39,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
   lawsCount,
   branding,
   onLogout,
+  onOpenSubmitLaw,
 }) => {
   const systemName = branding?.systemName || 'مساعد الجمارك والضرائب';
   const logoType = branding?.logoType || 'preset';
@@ -533,6 +536,19 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
                 <Clock className="w-3 h-3 text-emerald-700" />
                 تجريبي ({currentUser.remainingTrialDays ?? currentUser.trialDays ?? 7} يوم)
               </span>
+            )}
+
+            {onOpenSubmitLaw && (
+              <button
+                id="chat-submit-law-btn"
+                onClick={onOpenSubmitLaw}
+                className="bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 flex items-center gap-1 text-[11px] font-bold px-2.5 sm:px-3 py-1.5 rounded-xl transition-all shadow-2xs cursor-pointer shrink-0 min-h-[36px]"
+                title="اقتراح أو رفع قانون جديد لمراجعته من المشرفين"
+              >
+                <FileUp className="w-3.5 h-3.5 text-emerald-700" />
+                <span className="hidden sm:inline">اقتراح قانون</span>
+                <span className="sm:hidden">رفع</span>
+              </button>
             )}
 
             <button

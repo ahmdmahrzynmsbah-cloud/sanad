@@ -60,6 +60,7 @@ import { RelatedSitesAdminTab } from './admin/RelatedSitesAdminTab';
 import { PartnersAdminTab } from './admin/PartnersAdminTab';
 import { AboutPlatformAdminTab } from './admin/AboutPlatformAdminTab';
 import { ContactAdminTab } from './admin/ContactAdminTab';
+import { LawRequestsAdminTab } from './admin/LawRequestsAdminTab';
 import { UserDetailsModal } from './admin/UserDetailsModal';
 import { useSync } from '../utils/sync';
 import { safeFetchJson } from '../utils/safeApi';
@@ -80,6 +81,7 @@ import {
   directSaveDefaultTrialDaysToFirestore,
   directSaveAutoApproveToFirestore,
   directFetchSettingsFromFirestore,
+  directFetchLawRequestsFromFirestore,
 } from '../services/clientFirestore';
 
 export interface QueuedLawItem {
@@ -111,7 +113,10 @@ interface AdminPortalProps {
 export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUpdated, onBrandingUpdated, onAboutUpdated, onContactUpdated }) => {
   const isSupervisor = currentAdmin?.role === 'supervisor';
 
-  const [activeTab, setActiveTab] = useState<'requests' | 'laws' | 'supervisors' | 'related-sites' | 'partners' | 'about' | 'contact' | 'settings'>('requests');
+  const [activeTab, setActiveTab] = useState<'requests' | 'laws' | 'law-requests' | 'supervisors' | 'related-sites' | 'partners' | 'about' | 'contact' | 'settings'>('requests');
+
+  // Law Requests state
+  const [pendingLawRequestsCount, setPendingLawRequestsCount] = useState<number>(0);
 
   // Users state
   const [users, setUsers] = useState<User[]>([]);
@@ -277,10 +282,36 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       const res = await fetch('/api/system/status');
       const data = await res.json();
       setSystemStatus(data);
+      await fetchPendingLawRequestsCount();
     } catch (err) {
       console.warn('Failed to fetch system status:', err);
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  // Fetch pending law requests count
+  const fetchPendingLawRequestsCount = async () => {
+    try {
+      const res = await fetch('/api/law-requests');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.lawRequests && Array.isArray(data.lawRequests)) {
+          const count = data.lawRequests.filter((r: any) => r.status === 'pending').length;
+          setPendingLawRequestsCount(count);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch law requests count via API:', err);
+    }
+
+    try {
+      const list = await directFetchLawRequestsFromFirestore();
+      const count = list.filter((r) => r.status === 'pending').length;
+      setPendingLawRequestsCount(count);
+    } catch (fErr) {
+      console.warn('Failed to fetch law requests count from direct Firestore:', fErr);
     }
   };
 
@@ -512,6 +543,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         if (data.systemStatus) {
           setSystemStatus(data.systemStatus);
         }
+        if (data.lawRequests && Array.isArray(data.lawRequests)) {
+          const pending = data.lawRequests.filter((r: any) => r.status === 'pending').length;
+          setPendingLawRequestsCount(pending);
+        } else {
+          fetchPendingLawRequestsCount();
+        }
       } else {
         // Fallback to parallel execution
         await Promise.all([
@@ -521,6 +558,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
           fetchSystemStatus(),
           fetchSettings(),
           fetchBranding(),
+          fetchPendingLawRequestsCount(),
         ]);
       }
     } catch (err) {
@@ -532,6 +570,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         fetchSystemStatus(),
         fetchSettings(),
         fetchBranding(),
+        fetchPendingLawRequestsCount(),
       ]);
     } finally {
       setUsersLoading(false);
@@ -1973,6 +2012,28 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
           <span className="bg-[#e2e8f0] text-gray-700 text-[10px] sm:text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full font-bold">
             {laws.length}
           </span>
+        </button>
+
+        <button
+          id="admin-tab-law-requests"
+          onClick={() => setActiveTab('law-requests')}
+          className={`pb-3 px-3.5 sm:px-5 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 transition-all shrink-0 cursor-pointer ${
+            activeTab === 'law-requests'
+              ? 'border-[#12281e] text-[#12281e]'
+              : 'border-transparent text-gray-500 hover:text-gray-900'
+          }`}
+        >
+          <FileText className="w-4 h-4 text-emerald-700" />
+          <span>طلبات القوانين</span>
+          {pendingLawRequestsCount > 0 ? (
+            <span className="bg-amber-500 text-white text-[10px] sm:text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full font-extrabold animate-pulse">
+              {pendingLawRequestsCount} جديد
+            </span>
+          ) : (
+            <span className="bg-gray-100 text-gray-600 text-[10px] sm:text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full font-bold">
+              0
+            </span>
+          )}
         </button>
 
         {!isSupervisor && (
@@ -3593,6 +3654,24 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
           </div>
         </div>
       )}
+
+      {/* ======================================================== */}
+      {/* TAB: LAW REQUESTS (طلبات القوانين المقترحة من المستفيدين) */}
+      {/* ======================================================== */}
+      {activeTab === 'law-requests' && (
+        <LawRequestsAdminTab
+          currentAdmin={currentAdmin}
+          categories={categories}
+          onLawApproved={() => {
+            fetchLaws();
+            fetchPendingLawRequestsCount();
+          }}
+          onRequestCountChanged={() => {
+            fetchPendingLawRequestsCount();
+          }}
+        />
+      )}
+
       {/* ======================================================== */}
       {activeTab === 'settings' && (
         <div className="space-y-6 animate-in fade-in duration-200">

@@ -50,6 +50,27 @@ export interface Law {
   updatedAt: string;
 }
 
+export interface LawRequest {
+  id: string;
+  title: string;
+  category: string;
+  content: string;
+  description?: string;
+  sourceFileName?: string;
+  sourceFileSize?: string;
+  pageCount?: number;
+  userId?: string;
+  userName?: string;
+  userFullName?: string;
+  userPhone?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  rejectionReason?: string;
+  createdAt: string;
+  updatedAt?: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+}
+
 export interface ChatMessage {
   id: string;
   sender: 'user' | 'bot';

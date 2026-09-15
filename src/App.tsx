@@ -11,6 +11,7 @@ import { PartnersView } from './components/PartnersView';
 import { AboutPlatformView } from './components/AboutPlatformView';
 import { ContactUsView } from './components/ContactUsView';
 import { SanadWelcomeModal } from './components/SanadWelcomeModal';
+import { SubmitLawModal } from './components/SubmitLawModal';
 import { User, SystemBranding, PlatformAboutData, ContactInfo } from './types';
 import { Scale, ShieldAlert, Clock, LogOut, ArrowRight, BookOpen } from 'lucide-react';
 import { initGlobalSync, useSync } from './utils/sync';
@@ -68,6 +69,7 @@ export default function App() {
   const [showWelcomeModal, setShowWelcomeModal] = useState<boolean>(() => {
     return localStorage.getItem('sanad_welcome_seen') !== 'true';
   });
+  const [showSubmitLawModal, setShowSubmitLawModal] = useState<boolean>(false);
 
   const handleQuestionFromWelcomeModal = (questionText: string) => {
     if (!questionText.trim()) return;
@@ -527,7 +529,13 @@ export default function App() {
                 </div>
               </div>
             ) : currentUser && currentUser.status === 'approved' ? (
-              <ChatPortal currentUser={currentUser} lawsCount={lawsCount} branding={branding} onLogout={handleLogout} />
+              <ChatPortal
+                currentUser={currentUser}
+                lawsCount={lawsCount}
+                branding={branding}
+                onLogout={handleLogout}
+                onOpenSubmitLaw={() => setShowSubmitLawModal(true)}
+              />
             ) : currentUser && currentUser.status === 'pending' ? (
               /* Blocked pending user trying to access chat directly */
               <div className="max-w-md mx-auto my-14 p-6 bg-white rounded-xl border border-amber-200 text-center shadow-md">
@@ -602,6 +610,13 @@ export default function App() {
           localStorage.setItem('sanad_welcome_seen', 'true');
         }}
         onQuestionAsked={handleQuestionFromWelcomeModal}
+      />
+
+      {/* Submit Law Modal for beneficiaries / users */}
+      <SubmitLawModal
+        isOpen={showSubmitLawModal}
+        onClose={() => setShowSubmitLawModal(false)}
+        currentUser={currentUser}
       />
     </div>
   );

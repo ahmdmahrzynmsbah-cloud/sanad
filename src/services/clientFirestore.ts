@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc, updateDoc } from 'firebase/firestore';
-import type { Law, User } from '../types';
+import type { Law, User, LawRequest } from '../types';
 
 const firebaseConfig = {
   projectId: 'pos1-d562e',
@@ -1050,6 +1050,134 @@ export async function directDeleteUserFromFirestore(
     return true;
   } catch (err) {
     console.error('[Client Firestore] Error deleting user directly:', err);
+    return false;
+  }
+}
+
+/**
+ * Direct fetch law requests from Firestore
+ */
+export async function directFetchLawRequestsFromFirestore(): Promise<LawRequest[] | null> {
+  const db = getClientDb();
+  if (!db) return null;
+
+  try {
+    const col = collection(db, 'law_requests');
+    const snapshot = await getDocs(col);
+    if (snapshot.empty) return [];
+
+    const items: LawRequest[] = [];
+    snapshot.forEach((d) => {
+      const data = d.data();
+      items.push({
+        id: data.id || d.id,
+        title: data.title || '',
+        category: data.category || 'جمارك',
+        content: data.content || '',
+        description: data.description || '',
+        sourceFileName: data.sourceFileName || undefined,
+        sourceFileSize: data.sourceFileSize || undefined,
+        pageCount: data.pageCount || undefined,
+        userId: data.userId || '',
+        userName: data.userName || '',
+        userFullName: data.userFullName || undefined,
+        userPhone: data.userPhone || undefined,
+        status: data.status || 'pending',
+        rejectionReason: data.rejectionReason || undefined,
+        createdAt: data.createdAt || new Date().toISOString(),
+        updatedAt: data.updatedAt || data.createdAt || new Date().toISOString(),
+        reviewedAt: data.reviewedAt || undefined,
+        reviewedBy: data.reviewedBy || undefined,
+      });
+    });
+    return items;
+  } catch (err) {
+    console.error('[Client Firestore] Error fetching law requests directly:', err);
+    return null;
+  }
+}
+
+/**
+ * Direct save law request to Firestore
+ */
+export async function directSaveLawRequestToFirestore(request: LawRequest): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+
+  try {
+    const docRef = doc(db, 'law_requests', request.id);
+    await setDoc(docRef, {
+      id: request.id,
+      title: request.title,
+      category: request.category || 'جمارك',
+      content: request.content || '',
+      description: request.description || '',
+      sourceFileName: request.sourceFileName || null,
+      sourceFileSize: request.sourceFileSize || null,
+      pageCount: request.pageCount || null,
+      userId: request.userId || '',
+      userName: request.userName || '',
+      userFullName: request.userFullName || '',
+      userPhone: request.userPhone || '',
+      status: request.status || 'pending',
+      rejectionReason: request.rejectionReason || '',
+      createdAt: request.createdAt || new Date().toISOString(),
+      reviewedAt: request.reviewedAt || null,
+      reviewedBy: request.reviewedBy || null,
+    });
+    console.log(`[Client Firestore] Successfully saved law request directly: ${request.id}`);
+    return true;
+  } catch (err) {
+    console.error('[Client Firestore] Error saving law request directly:', err);
+    return false;
+  }
+}
+
+/**
+ * Direct update law request status in Firestore
+ */
+export async function directUpdateLawRequestStatusInFirestore(
+  requestId: string,
+  status: 'approved' | 'rejected',
+  rejectionReason?: string,
+  reviewedBy?: string
+): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+
+  try {
+    const docRef = doc(db, 'law_requests', requestId);
+    const updateData: any = {
+      status,
+      reviewedAt: new Date().toISOString(),
+      reviewedBy: reviewedBy || 'المشرف',
+    };
+    if (rejectionReason !== undefined) {
+      updateData.rejectionReason = rejectionReason;
+    }
+    await updateDoc(docRef, updateData);
+    console.log(`[Client Firestore] Updated law request ${requestId} status to ${status}`);
+    return true;
+  } catch (err) {
+    console.error('[Client Firestore] Error updating law request status directly:', err);
+    return false;
+  }
+}
+
+/**
+ * Direct delete law request from Firestore
+ */
+export async function directDeleteLawRequestFromFirestore(requestId: string): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+
+  try {
+    const docRef = doc(db, 'law_requests', requestId);
+    await deleteDoc(docRef);
+    console.log(`[Client Firestore] Successfully deleted law request directly: ${requestId}`);
+    return true;
+  } catch (err) {
+    console.error('[Client Firestore] Error deleting law request directly:', err);
     return false;
   }
 }
