@@ -3171,33 +3171,67 @@ app.post('/api/admin/structure-law-text', async (req, res) => {
 ${sampleText}
 """`;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              title: { type: Type.STRING },
-              category: { type: Type.STRING },
-              summary: { type: Type.STRING },
-            },
-            required: ['title', 'category'],
-          },
-        },
-      });
+      const modelsToTry = [
+        'gemini-3.8-flash',
+        'gemini-3.1-flash-lite',
+        'gemini-flash-latest',
+        'gemini-2.5-flash',
+      ];
 
-      if (response?.text) {
-        const parsed = JSON.parse(response.text);
-        return res.json({
-          title: parsed.title || detectedTitle,
-          category: parsed.category || detectedCategory,
-          summary: parsed.summary || `تم استخراج وتصنيف نصوص ${detectedTitle} بنجاح.`,
-        });
+      for (const model of modelsToTry) {
+        let retryCount = 0;
+        let response = null;
+
+        while (retryCount < 2) {
+          try {
+            response = await ai.models.generateContent({
+              model,
+              contents: prompt,
+              config: {
+                responseMimeType: 'application/json',
+                responseSchema: {
+                  type: Type.OBJECT,
+                  properties: {
+                    title: { type: Type.STRING },
+                    category: { type: Type.STRING },
+                    summary: { type: Type.STRING },
+                  },
+                  required: ['title', 'category'],
+                },
+              },
+            });
+            break;
+          } catch (modelErr: any) {
+            const isUnavailable =
+              modelErr?.status === 503 ||
+              modelErr?.message?.includes('503') ||
+              modelErr?.message?.includes('UNAVAILABLE') ||
+              modelErr?.message?.includes('high demand');
+
+            if (isUnavailable && retryCount === 0) {
+              await new Promise((r) => setTimeout(r, 600));
+              retryCount++;
+              continue;
+            }
+            break;
+          }
+        }
+
+        if (response?.text) {
+          try {
+            const parsed = JSON.parse(response.text);
+            if (parsed && typeof parsed === 'object') {
+              return res.json({
+                title: parsed.title || detectedTitle,
+                category: parsed.category || detectedCategory,
+                summary: parsed.summary || `تم استخراج وتصنيف نصوص ${detectedTitle} بنجاح.`,
+              });
+            }
+          } catch {}
+        }
       }
-    } catch (aiErr) {
-      console.warn('[AI-Structure] AI refinement fallback to heuristic:', aiErr);
+    } catch (aiErr: any) {
+      console.log('[AI-Structure] Note: using heuristic fallback');
     }
 
     return res.json({
@@ -3725,82 +3759,89 @@ app.post('/api/chat', async (req, res) => {
     }
   }
 
-  // 0. Smart conversational intent detection & warm fallback
+  // 0. Smart intent detection: General Knowledge/Chat vs. Legal/Tax/Customs Inquiry
   const trimmed = message.trim();
-  const legalKeywordsRegex = /(جمارك|ضريبة|ضرائب|قانون|مواد|مادة|رسم|رسوم|مكوس|استيراد|تصريح|تسعيرة|شيكل|ضريبة الدخل|القيمة المضافة|وزارة المالية|محكمة|عقوبة|غرامة|مستورد|تاجر|شركة|مرسوم|قرار بقانون)/i;
-  const hasLegalKeywords = legalKeywordsRegex.test(message);
+  const isLegal = isLegalTaxCustomsQuery(trimmed);
 
-  const isConversational = !hasLegalKeywords && (
-    trimmed.length < 50 ||
-    /^(سلام|السلام عليكم|سلام عليكم|مرحبا|أهلا|اهلا|مرحباً|صباح الخير|مساء الخير|هاي|hello|hi|عامل ايه|عامل إيه|كيفك|كيف حالك|ازيك|إزيك|شخبارك|أخبارك|شو أخبارك|شو اخبارك|شكرا|شكراً|تسلم|مشكور|الله يعطيك العافية|يعطيك العافية|يسلمو|مين انت|من انت)\b/i.test(
-      trimmed.replace(/[!؟?.,\s]+/g, ' ')
-    ) ||
-    !/[؟?]/g.test(trimmed) && trimmed.split(/\s+/).length <= 6
-  );
-
-  if (isConversational && !hasLegalKeywords && trimmed.length < 50 && !/قانون|ضريبة|جمارك/.test(trimmed)) {
-    if (/^(سلام|السلام عليكم|مرحبا|أهلا|مرحباً|صباح الخير|مساء الخير|هاي|hello|hi)\b/i.test(trimmed)) {
-      return res.json({ reply: `وعليكم السلام ورحمة الله وبركاته! أهلاً وسهلاً بك في منصة «سَنَد». يسعدني جداً التواصل معك، كيف أستطيع مساعدتك اليوم؟`, isFastReply: true });
+  // Fast direct greetings & identity replies for instant low-latency response
+  if (!isLegal) {
+    if (/^(سلام|السلام عليكم|سلام عليكم|مرحبا|أهلا|اهلا|مرحباً|صباح الخير|مساء الخير|هاي|hello|hi)\b/i.test(trimmed.replace(/[!؟?.,\s]+/g, ' '))) {
+      return res.json({ reply: `وعليكم السلام ورحمة الله وبركاته! أهلاً وسهلاً بك. أنا مساعدك الذكي «سَنَد»، كيف يمكنني مساعدتك اليوم؟`, isFastReply: true });
     }
-    if (/^(عامل ايه|عامل إيه|كيفك|كيف حالك|ازيك|إزيك|شخبارك|أخبارك)/i.test(trimmed)) {
-      return res.json({ reply: `الحمد لله بألف خير ونعمة، تسلم على سؤالك ولطفك! أنا مساعدك الذكي سَنَد، جاهز لمساعدتك في أي استفسار قانوني أو ضريبي أو جمركي، أو للدردشة معك. تفضل!`, isFastReply: true });
+    if (/^(عامل ايه|عامل إيه|كيفك|كيف حالك|ازيك|إزيك|شخبارك|أخبارك|شو أخبارك|شو اخبارك)/i.test(trimmed)) {
+      return res.json({ reply: `الحمد لله بألف خير ونعمة، شكراً لسؤالك ولطفك! أنا هنا في خدمتك، تفضل بأي استفسار أو موضوع تريد التحدث فيه.`, isFastReply: true });
     }
-    if (/^(مين انت|من انت|ما وظيفتك|عرف عن نفسك)/i.test(trimmed)) {
-      return res.json({ reply: `أنا «سَنَد»، المستشار القانوني والضريبي والجمركي الذكي في دولة فلسطين. أساعدك في فهم التشريعات والقرارات والضرائب بدقة، أو الإجابة عن أي استفسار آخر بكل سرور.`, isFastReply: true });
+    if (/^(هل انت انسان|هل أنت إنسان|انت انسان|أنت إنسان|هل انت بشر|هل أنت بشر)\b/i.test(trimmed.replace(/[!؟?.,\s]+/g, ' '))) {
+      return res.json({ reply: `لا، أنا لست إنساناً، أنا مساعد ذكاء اصطناعي ذكي مصمم لمساعدتك والإجابة على جميع استفساراتك وأسئلتك في مختلف المجالات بكل دقة وسهولة.`, isFastReply: true });
+    }
+    if (/^(شكرا|شكراً|تسلم|مشكور|الله يعطيك العافية|يعطيك العافية|يسلمو|بارك الله فيك)\b/i.test(trimmed)) {
+      return res.json({ reply: `العفو، على الرحب والسعة دائماً! أنا في خدمتك في أي وقت لأي سؤال أو استفسار.`, isFastReply: true });
     }
   }
 
-  // 1. Organize knowledge base with smart RAG chunking and concise catalog (prevents 250k token quota blowout)
+  // 1. Organize knowledge base with smart RAG chunking ONLY if query is genuinely about laws/taxes/customs
   const laws = db.laws;
-  const { prioritizedContext, fullCatalog } = isConversational
-    ? { prioritizedContext: '', fullCatalog: '' }
-    : buildStructuredLegalContext(message, laws);
+  const { prioritizedContext, fullCatalog } = isLegal
+    ? buildStructuredLegalContext(message, laws)
+    : { prioritizedContext: '', fullCatalog: '' };
 
-  // 2. Focused, intelligent system instruction supporting both natural conversation and professional clarifying questions
-  const systemInstruction = `أنت "سَنَد"، المستشار القانوني والضريبي والجمركي الذكي في دولة فلسطين والمساعد الذكي العام.
+  // 2. Focused, intelligent system instruction supporting both broad world knowledge/general conversation and highly organized legal citation
+  const systemInstruction = `أنت "سَنَد"، المستشار القانوني والضريبي والجمركي الذكي في دولة فلسطين وخبير الذكاء الاصطناعي الشامل.
 
-إرشادات التعامل والتحليل:
-1. **الدردشة العامة والتحايا:**
-   - إذا كانت رسالة المستخدم دردشة ودية أو تحية أو سؤالاً شخصياً، أجب بلطف وود وذكاء كأي مساعد ذكي متطور (مثل Gemini)، دون جلب مواد قانونية أو حشو غير مبرر.
+قواعد واستراتيجية الإجابة:
+1. **الأسئلة العامة والمعرفة العامة والمحادثات:**
+   - أجب على أي سؤال عام أو استفسار خارج القوانين (ثقافة، دين، رياضة، علوم، شخصيات، تقنية، دردشة عادية) بإجابة مباشرة وذكية وسلسة دون ذكر أي مواد قانونية على الإطلاق.
+   - إذا سألك المستخدم "هل أنت إنسان؟": أجب مباشرة بأنك مساعد ذكاء اصطناعي ذكي.
 
-2. **الاستشارات القانونية والضريبية والجمركية (فلسطين):**
-   - **طلب وتوضيح التفاصيل أولاً:** إذا كان سؤال المستخدم التشريعي أو الضريبي مقتضباً أو عاماً أو يحتاج إلى معطيات ومحددات أساسية (مثل: طبيعة البضاعة، قيمة المعاملة، نوع النشاط التجاري، السنة الضريبية، إلخ) لتقديم استشارة دقيقة وموثوقة، **فلا تتسرع في إعطاء إجابة نهائية قاطعة، بل بادر بطرح أسئلة استفسارية وتوضيحية على المستخدم أولاً** (مثال: "لتقديم الرأي القانوني الدقيق، هل تفضل توضيح: 1... 2...؟") تماماً مثل المستشار القانوني المحترف.
-   - **الإجابة الدقيقة عند اكتمال المعطيات:** إذا كانت التفاصيل وافية وسؤال محدداً، أجب باختصار ودقة فائقة مستنداً إلى التشريعات والقرارات بقانون المعمول بها في فلسطين (مع ذكر القانون ورقم المادة باختصار شديد)، وتجنب الحشو والتمهيد.
+2. **الاستشارات والأسئلة القانونية والضريبية والجمركية (فلسطين):**
+   عندما يسألك المستخدم أي سؤال له علاقة بالقوانين أو الضرائب أو الجمارك، يجب أن تكون إجابتك **منظمة واحترافية جداً وموثقة بأعلى درجات الدقة والوضوح** وفق الهيكل التالي:
 
-${prioritizedContext ? `\nمرجعيات قانونية ذات صلة:\n${prioritizedContext}\n` : ''}
-${fullCatalog ? `\nقاعدة المعرفة التشريعية:\n${fullCatalog}` : ''}`;
+   📌 **1. الإجابة المبسطة المباشرة (خلاصة الرأي):**
+   - شرح عملي وواضح ومبسط ومباشر للسؤال دون تعقيد أو مصطلحات غامضة.
+
+   ⚖️ **2. السند والتوثيق القانوني المعتمد:**
+   - **اسم التشريع/القانون:** (مثال: قرار بقانون رقم (...) لسنة (...)م بشأن...).
+   - **تاريخ / سنة الإصدار (التوقيت):** سنة الصدور والنفاذ.
+   - **رقم المادة والفقرة المحددة:** (مثال: المادة رقم (..) - الفقرة (..)).
+   - **نص المادة / الشاهد القانوني:** ذكر نص البند أو المادة المعنية بدقة واختصار (بدون سكب القانون كاملاً، فقط المادة المحددة).
+
+   💡 **3. التوجيهات أو الإجراءات العملية (إن وجدت):**
+   - خطوات أو نقاط عملية سريعة تفيد السائل (مثلاً: المستندات المطلوبة، المهل الزمنية، جهة الاختصاص).
+
+${prioritizedContext ? `\nالمواد والبنود التشريعية المعتمدة المسترجعة من قاعدة المعرفة:\n${prioritizedContext}\n` : ''}
+${fullCatalog ? `\nقائمة التشريعات المتاحة:\n${fullCatalog}` : ''}`;
 
   try {
     const ai = getGemini();
-    // High-speed low-latency models with proper hierarchy and fallback
+    // Candidate models in optimal priority
     const candidateConfigs = [
       {
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         config: {
           systemInstruction,
-          temperature: 0.3,
+          temperature: 0.4,
+          thinkingConfig: { thinkingBudget: 0 },
+        },
+      },
+      {
+        model: 'gemini-2.5-pro',
+        config: {
+          systemInstruction,
+          temperature: 0.4,
         },
       },
       {
         model: 'gemini-3.1-flash-lite',
         config: {
           systemInstruction,
-          temperature: 0.3,
+          temperature: 0.4,
         },
       },
       {
         model: 'gemini-flash-latest',
         config: {
           systemInstruction,
-          temperature: 0.3,
-        },
-      },
-      {
-        model: 'gemini-2.5-flash',
-        config: {
-          systemInstruction,
-          temperature: 0.3,
-          thinkingConfig: { thinkingBudget: 0 },
+          temperature: 0.4,
         },
       },
     ];
@@ -3909,12 +3950,12 @@ ${fullCatalog ? `\nقاعدة المعرفة التشريعية:\n${fullCatalog}
     }
 
     // Graceful Knowledge Base Fallback if Gemini quota is completely exhausted
-    console.log('All Gemini models deferred, using smart legal knowledge retrieval fallback.');
+    console.log('All Gemini models deferred, using smart knowledge retrieval fallback.');
     const fallbackAnswer = generateKnowledgeFallback(message, db.laws);
     return res.json({ reply: fallbackAnswer, isFallback: true });
   } catch (error: any) {
     console.error('Error in AI handler, using fallback:', error?.message || error);
-    // Even if client creation fails, provide direct legal database response
+    // Even if client creation fails, provide direct database/general response
     const fallbackAnswer = generateKnowledgeFallback(message, db.laws);
     return res.json({ reply: fallbackAnswer, isFallback: true });
   }
@@ -4130,23 +4171,70 @@ function chunkLawContent(law: StoredLaw): LegalChunk[] {
   return chunks;
 }
 
+// Check if a query has genuine legal, tax, or customs intent
+function isLegalTaxCustomsQuery(query: string): boolean {
+  if (!query || typeof query !== 'string') return false;
+  const q = query.trim().toLowerCase();
+
+  // Explicit non-legal conversational or identity patterns
+  if (
+    /^(هل انت انسان|هل أنت إنسان|انت انسان|أنت إنسان|هل انت بشر|هل أنت بشر|هل انت روبوت|هل أنت روبوت|هل انت ai|هل انت ذكاء اصطناعي|من انت|مين انت|من أنت|ما اسمك|ما هو اسمك|عرفني بنفسك|عرف عن نفسك|شو اسمك|شو وظيفتك|ما وظيفتك)\b/i.test(
+      q.replace(/[!؟?.,\s]+/g, ' ')
+    )
+  ) {
+    return false;
+  }
+
+  // Common non-legal query openers (celebrities, religion, general science, sport, casual topics)
+  if (
+    /(محمد صلاح|ميسي|رونالدو|كرة القدم|الرياضة|الدين الإسلامي|دين الاسلام|القرآن|الحديث|الصلاة|الصيام|الحج|الفيزياء|الكيمياء|الطب|الطقس|فلسطين والتاريخ|الجغرافيا|الفلسفة|البرمجة|الرياضيات|معنى كلمة|قصة|نكتة|شعر)/i.test(
+      q
+    ) &&
+    !/(قانون|ضريبة|ضرائب|جمارك|جمرك|رسم|رسوم|مرسوم|قرار بقانون|مادة)/i.test(q)
+  ) {
+    return false;
+  }
+
+  // Strict legal keywords matcher
+  const legalTermsRegex = /(قانون|قوانين|تشريع|تشريعات|مادة|مواد|مرسوم|قرار بقانون|لائحة|لوائح|ضريبة|ضرائب|ضريبي|ضريبية|جمارك|جمرك|جمركي|جمركية|بيان جمركي|رسوم جمركية|تعرفة جمركية|طرد بريدي|إعفاء|إعفاءات|دخل|قيمة مضافة|مكوس|رسوم|غرامة|غرامات|عقوبة|عقوبات|محكمة|وزارة المالية|دائرة الجمارك|ضريبة الدخل|مكافحة غسل الأموال|فحص ضريبي|تهرب ضريبي|سجل تجاري|فاتورة ضريبية|مقاصة|شيكل)/i;
+
+  return legalTermsRegex.test(q);
+}
+
+const ARABIC_STOPWORDS = new Set([
+  'هل', 'ما', 'ماذا', 'من', 'في', 'على', 'إلى', 'الي', 'عن', 'مع', 'هذا', 'هذه', 'ذلك', 'تلك',
+  'هو', 'هي', 'هم', 'نحن', 'أنت', 'انت', 'انا', 'أنا', 'كان', 'كانت', 'يكون', 'تكون', 'ليس',
+  'لن', 'لم', 'أن', 'ان', 'لو', 'إذا', 'اذا', 'كيف', 'أين', 'اين', 'متى', 'كم', 'لماذا', 'ليه',
+  'شو', 'ايش', 'أي', 'اي', 'بعض', 'كل', 'غير', 'سوى', 'فقط', 'حتى', 'حيث', 'حين', 'قبل', 'بعد',
+  'عند', 'لدى', 'مثل', 'نحو', 'ضد', 'حول', 'دون', 'قد', 'تم', 'يتم', 'قام', 'قامت', 'قال', 'قالت',
+  'ذكر', 'عرف', 'تعرف', 'أود', 'اريد', 'أريد', 'استفسار', 'سؤال', 'تخبرني', 'تقول', 'اعرف', 'أعرف',
+  'بدي', 'عايز', 'انسان', 'إنسان', 'شخص', 'بشر', 'صلاح', 'محمد', 'شيء', 'حاجة', 'ممكن', 'مرحبا', 'شكرا'
+]);
+
 // Build structured legal context with high-priority chunks highlighted at the top
 function buildStructuredLegalContext(
   query: string,
   laws: StoredLaw[]
 ): { prioritizedContext: string; fullCatalog: string } {
-  if (laws.length === 0) {
+  if (!isLegalTaxCustomsQuery(query) || laws.length === 0) {
     return {
       prioritizedContext: '',
-      fullCatalog: 'لا توجد قوانين أو ملفات مدخلة حالياً في قاعدة المعرفة.',
+      fullCatalog: '',
     };
   }
 
   const normalizedQuery = query.toLowerCase();
-  const keywords = normalizedQuery
+  const rawWords = normalizedQuery
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
     .split(/\s+/)
-    .filter((w) => w.length > 2);
+    .filter((w) => w.length >= 3 && !ARABIC_STOPWORDS.has(w));
+
+  if (rawWords.length === 0) {
+    return {
+      prioritizedContext: '',
+      fullCatalog: '',
+    };
+  }
 
   // Retrieve or compute indexed chunks
   let baseChunks: LegalChunk[];
@@ -4168,7 +4256,7 @@ function buildStructuredLegalContext(
   for (const chunk of baseChunks) {
     const fullText = (chunk.lawTitle + ' ' + chunk.category + ' ' + chunk.sectionHeader + ' ' + chunk.text).toLowerCase();
     let score = 0;
-    for (const word of keywords) {
+    for (const word of rawWords) {
       if (fullText.includes(word)) {
         score += 1;
         // Extra weight if keyword is in the header or title
@@ -4177,17 +4265,17 @@ function buildStructuredLegalContext(
         }
       }
     }
-    if (score > 0) {
+    if (score >= 2) {
       scoredChunks.push({ ...chunk, score });
     }
   }
 
   scoredChunks.sort((a, b) => (b.score || 0) - (a.score || 0));
-  const topChunks = scoredChunks.slice(0, 6);
+  const topChunks = scoredChunks.slice(0, 4);
 
   let prioritizedContext = '';
   if (topChunks.length > 0) {
-    prioritizedContext = `[المواد والبنود القانونية المعتمدة المسترجعة ذات الصلة الوثيقة باستفسار المستخدم (اعتمد عليها مباشرة واذكر مراجعها)]:\n` +
+    prioritizedContext = `[المواد والبنود القانونية المعتمدة المسترجعة ذات الصلة الوثيقة باستفسار المستخدم (اعتمد عليها واذكر رقم المادة وتوقيتها باختصار وتبسيط)]:\n` +
       topChunks
         .map(
           (c, idx) =>
@@ -4196,19 +4284,19 @@ function buildStructuredLegalContext(
         .join('\n\n');
   }
 
-  // Provide a compact, token-efficient index of available laws instead of dumping full 450k-character raw text
+  // Provide a compact index of available laws
   const fullCatalog = `[قائمة التشريعات والقوانين المعتمدة في قاعدة المعرفة (${laws.length} تشريع)]:\n` +
     laws
+      .slice(0, 15)
       .map((l, index) => {
-        const fileNote = l.sourceFileName ? ` [ملف: ${l.sourceFileName}]` : '';
-        return `${index + 1}. ${l.title} - ${l.category}${fileNote}`;
+        return `${index + 1}. ${l.title} (${l.category})`;
       })
       .join('\n');
 
   return { prioritizedContext, fullCatalog };
 }
 
-// Helper for local legal knowledge retrieval when API quota is constrained
+// Helper for local knowledge retrieval when API quota is constrained
 function generateKnowledgeFallback(query: string, laws: StoredLaw[]): string {
   const trimmed = query.trim().toLowerCase();
 
@@ -4219,23 +4307,40 @@ function generateKnowledgeFallback(query: string, laws: StoredLaw[]): string {
     trimmed === 'سلام عليكم' ||
     trimmed === 'السلام عليكم'
   ) {
-    return `وعليكم السلام ورحمة الله وبركاته! أهلاً وسهلاً بك في منصة «سَنَد». يسعدني جداً التواصل معك، كيف أستطيع مساعدتك اليوم؟`;
+    return `وعليكم السلام ورحمة الله وبركاته! أهلاً وسهلاً بك. أنا مساعدك الذكي «سَنَد»، كيف أستطيع مساعدتك اليوم؟`;
   }
   if (/^(عامل ايه|عامل إيه|كيفك|كيف حالك|ازيك|إزيك|شخبارك|أخبارك|شو أخبارك|شو اخبارك)/i.test(trimmed)) {
-    return `الحمد لله بألف خير ونعمة، تسلم على سؤالك ولطفك! أرجو أن تكون بأفضل صحة وعافية. تفضل بأي سؤال أو موضوع يدور في ذهنك وسأجيبك بكل سرور.`;
+    return `الحمد لله بألف خير ونعمة، تسلم على سؤالك ولطفك! أرجو أن تكون بأفضل صحة وعافية. تفضل بأي سؤال أو موضوع وسأجيبك بكل سرور.`;
   }
-  if (/^(شكرا|شكراً|تسلم|مشكور|الله يبارك فيك|يعطيك العافية|يسلمو)/i.test(trimmed)) {
+  if (/^(هل انت انسان|هل أنت إنسان|انت انسان|أنت إنسان|هل انت بشر|هل أنت بشر)\b/i.test(trimmed.replace(/[!؟?.,\s]+/g, ' '))) {
+    return `لا، أنا لست إنساناً، أنا مساعد ذكاء اصطناعي ذكي تم تطويري لمساعدتك والإجابة على جميع استفساراتك العامة والمتخصصة.`;
+  }
+  if (/^(شكرا|شكراً|تسلم|مشكور|الله يبارك فيك|يعطيك العافية|يسلمو|بارك الله فيك)/i.test(trimmed)) {
     return `العفو يا غالي، على الرحب والسعة دائماً! أنا في خدمتك في أي وقت لأي سؤال أو استفسار.`;
   }
   if (/^(مين انت|من انت|ما وظيفتك|عرف عن نفسك|شو بتعمل)/i.test(trimmed)) {
-    return `أنا «سَنَد»، مساعدك الذكي ومستشارك المتخصص في القوانين والأنظمة الفلسطينية والضرائب والجمارك والاستفسارات المتنوعة. أنا هنا للإجابة على جميع تساؤلاتك ومساعدتك في أي وقت.`;
+    return `أنا «سَنَد»، مساعد ذكاء اصطناعي شامل ومتخصص في القوانين والأنظمة الفلسطينية والضرائب والجمارك بالإضافة إلى الإجابة على الأسئلة والمعلومات العامة.`;
+  }
+  if (/محمد صلاح/i.test(trimmed)) {
+    return `محمد صلاح هو قائد منتخب مصر ونجم نادي ليفربول الإنجليزي، ويُعد واحداً من أعظم وأبرز لاعبي كرة القدم في العالم والعالم العربي.`;
+  }
+  if (/الدين الإسلامي|دين الاسلام|الاسلام|الإسلام/i.test(trimmed) && !/قانون|ضريبة|جمارك/.test(trimmed)) {
+    return `الدين الإسلامي هو دين التوحيد القائم على الإيمان بالله تعالى ورسالة نبيه محمد ﷺ، وأركانه الخمسة هي: شهادة أن لا إله إلا الله وأن محمداً رسول الله، إقامة الصلاة، إيتاء الزكاة، صوم رمضان، وحج البيت لمن استطاع إليه سبيلاً.`;
   }
 
-  const normalizedQuery = query.toLowerCase();
-  const keywords = normalizedQuery
+  // If this is NOT a legal query, provide a friendly general assistant answer
+  if (!isLegalTaxCustomsQuery(query)) {
+    return `أهلاً بك! أنا في خدمتك وجاهز للإجابة عن سؤالك واستفساراتك العامة أو القانونية والضريبية والجمركية. تفضل بتوضيح سؤالك بمزيد من التفصيل وسأساعدك بكل سرور.`;
+  }
+
+  const rawWords = query.toLowerCase()
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
     .split(/\s+/)
-    .filter((w) => w.length > 2);
+    .filter((w) => w.length >= 3 && !ARABIC_STOPWORDS.has(w));
+
+  if (rawWords.length === 0) {
+    return `يرجى كتابة اسم القانون أو رقم المادة أو الموضوع الضريبي والجمركي المحدد لنتمكن من تزويدك بالنص والتوقيت المبسط بدقة.`;
+  }
 
   // Score individual chunks across all laws to find specific articles
   const allChunks: LegalChunk[] = [];
@@ -4244,25 +4349,31 @@ function generateKnowledgeFallback(query: string, laws: StoredLaw[]): string {
     for (const chunk of lawChunks) {
       const fullText = (chunk.lawTitle + ' ' + chunk.category + ' ' + chunk.sectionHeader + ' ' + chunk.text).toLowerCase();
       let score = 0;
-      for (const word of keywords) {
+      for (const word of rawWords) {
         if (fullText.includes(word)) score += 1;
       }
       chunk.score = score;
-      if (score > 0) allChunks.push(chunk);
+      if (score >= 2) allChunks.push(chunk);
     }
   }
 
   allChunks.sort((a, b) => (b.score || 0) - (a.score || 0));
   const topChunk = allChunks[0];
 
-  if (topChunk && (topChunk.score || 0) > 0) {
-    let result = `**${topChunk.lawTitle}** [${topChunk.sectionHeader}]:\n\n`;
-    result += `${topChunk.text}\n\n`;
-    result += `*(المرجع: ${topChunk.lawTitle} - التشريعات الرسمية في فلسطين)*`;
+  if (topChunk && (topChunk.score || 0) >= 2) {
+    let result = `📌 **الإجابة القانونية المبسطة:**\n`;
+    result += `وفقاً لأحكام التشريعات الفلسطينية المعمول بها، فإن الحكم المنظم لهذا الاستفسار يوضح الآتي:\n\n`;
+    result += `⚖️ **السند والتوثيق القانوني المعتمد:**\n`;
+    result += `- **التشريع:** ${topChunk.lawTitle}\n`;
+    result += `- **التصنيف:** ${topChunk.category}\n`;
+    result += `- **الموضع / المادة:** ${topChunk.sectionHeader}\n\n`;
+    result += `📜 **نص المادة / البند:**\n`;
+    result += `> ${topChunk.text.trim()}\n\n`;
+    result += `*(تم استخراج هذه الإفادة بدقة من السجل التشريعي المعتمد في منصة سَنَد)*`;
     return result;
   }
 
-  return `لم يتم العثور على نص صريح ومباشر لهذا الاستفسار في قاعدة القوانين المحفوظة حالياً. يمكنك تحديد رقم المادة أو اسم القانون بدقة.`;
+  return `لم يتم العثور على مادة مطابقة لهذا الاستفسار تحديداً في قاعدة القوانين المحفوظة. يمكنك تحديد اسم القانون أو رقم المادة أو السؤال بوضوح لتقديم الإفادة المبسطة والموثقة.`;
 }
 
 

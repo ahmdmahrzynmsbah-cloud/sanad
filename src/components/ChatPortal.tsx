@@ -596,7 +596,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
                   <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-zinc-100 text-[11px] text-emerald-700 font-bold">
                     <span className="flex items-center gap-1.5">
                       <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                      {systemName} • إفادة نظامية
+                      {systemName} • المساعد الذكي
                     </span>
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] text-zinc-400 font-normal">{msg.timestamp}</span>
@@ -711,7 +711,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
               value={inputPrompt}
               onChange={(e) => setInputPrompt(e.target.value)}
               disabled={loading}
-              placeholder="اكتب استفسارك الضريبي أو الجمركي هنا (مثال: ما هي شروط إعفاء الطرد البريدي؟)..."
+              placeholder="اكتب استفسارك أو سؤالك هنا..."
               className="flex-1 px-3.5 py-2.5 text-xs sm:text-sm text-zinc-900 bg-transparent focus:outline-none placeholder-zinc-400"
             />
             <button
