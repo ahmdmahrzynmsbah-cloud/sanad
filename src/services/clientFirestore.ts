@@ -1,6 +1,12 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc, updateDoc } from 'firebase/firestore';
+import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc, updateDoc, setLogLevel } from 'firebase/firestore';
 import type { Law, User, LawRequest } from '../types';
+
+try {
+  setLogLevel('error');
+} catch {
+  // Ignore
+}
 
 const firebaseConfig = {
   projectId: 'pos1-d562e',
@@ -13,9 +19,34 @@ const firebaseConfig = {
 };
 
 let dbInstance: any = null;
+let clientQuotaExceededUntil = 0;
+
+export function isClientQuotaExceeded(): boolean {
+  return Date.now() < clientQuotaExceededUntil;
+}
+
+export function markClientQuotaExceeded() {
+  clientQuotaExceededUntil = Date.now() + 15 * 60 * 1000;
+  console.warn('[Client Firestore] Quota limit reached. Pausing direct client calls for 15 minutes and relying on cached state.');
+}
+
+export function handleClientFirestoreError(context: string, err: any) {
+  const errMsg = (err && (err.message || err.code || String(err))) || '';
+  if (
+    errMsg.includes('Quota limit exceeded') ||
+    errMsg.includes('RESOURCE_EXHAUSTED') ||
+    errMsg.includes('quota') ||
+    err?.code === 'resource-exhausted'
+  ) {
+    markClientQuotaExceeded();
+  } else {
+    console.warn(`[Client Firestore] ${context}:`, err);
+  }
+}
 
 export function getClientDb() {
   if (typeof window === 'undefined') return null;
+  if (isClientQuotaExceeded()) return null;
   try {
     const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
     if (!dbInstance) {
@@ -51,7 +82,7 @@ export async function directSaveLawToFirestore(law: Law): Promise<boolean> {
     console.log(`[Client Firestore] Successfully saved law directly: ${law.id}`);
     return true;
   } catch (err) {
-    console.error(`[Client Firestore] Error saving law directly:`, err);
+    handleClientFirestoreError(`directSaveLawToFirestore ${law.id}`, err);
     return false;
   }
 }
@@ -113,7 +144,7 @@ export async function directFetchLawsFromFirestore(): Promise<Law[] | null> {
     });
     return items;
   } catch (err) {
-    console.error('[Client Firestore] Error fetching laws directly:', err);
+    handleClientFirestoreError('directFetchLawsFromFirestore', err);
     return null;
   }
 }
@@ -131,7 +162,7 @@ export async function directDeleteLawFromFirestore(lawId: string): Promise<boole
     console.log(`[Client Firestore] Successfully deleted law directly: ${lawId}`);
     return true;
   } catch (err) {
-    console.error(`[Client Firestore] Error deleting law directly:`, err);
+    handleClientFirestoreError(`directDeleteLawFromFirestore ${lawId}`, err);
     return false;
   }
 }

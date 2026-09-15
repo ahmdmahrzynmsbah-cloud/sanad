@@ -72,6 +72,7 @@ import {
   updateLawRequestInFirestore,
   deleteLawRequestFromFirestore,
   onDatabaseChange,
+  isQuotaExceeded,
 } from './server/firestore.ts';
 import type {
   StoredPartner,
@@ -85,6 +86,31 @@ import type {
 } from './server/firestore.ts';
 
 dotenv.config();
+
+// Global safety handler for background stream lifecycle events and unhandled promise rejections
+process.on('unhandledRejection', (reason: any) => {
+  const msg = String(reason?.message || reason || '');
+  if (
+    msg.includes('Disconnecting idle stream') ||
+    msg.includes('Timed out waiting for new targets') ||
+    msg.includes('CANCELLED')
+  ) {
+    return;
+  }
+  console.warn('Notice: Background promise rejected gracefully:', msg || reason);
+});
+
+process.on('uncaughtException', (err: any) => {
+  const msg = String(err?.message || err || '');
+  if (
+    msg.includes('Disconnecting idle stream') ||
+    msg.includes('Timed out waiting for new targets') ||
+    msg.includes('CANCELLED')
+  ) {
+    return;
+  }
+  console.error('Unhandled process exception caught:', err);
+});
 
 const app = express();
 const PORT = 3000;
@@ -182,23 +208,8 @@ async function ensureDbSynced() {
   ]);
 }
 
-// 5. Ensure DB synced for heavy API queries, excluding auth endpoints for instant response
-// 5. Ensure DB synced for heavy API queries, excluding auth endpoints for instant response
+// 5. Lightweight middleware (skip eager Firestore queries on every GET to conserve daily read quota)
 app.use(async (req, res, next) => {
-  const p = req.path || '';
-  if (
-    req.method === 'GET' &&
-    p.startsWith('/api/') &&
-    !p.startsWith('/api/auth/') &&
-    p !== '/api/admin/login' &&
-    p !== '/api/health'
-  ) {
-    try {
-      await ensureDbSynced();
-    } catch (err) {
-      console.error('ensureDbSynced error:', err);
-    }
-  }
   next();
 });
 
@@ -833,6 +844,10 @@ function toSafeUser(user: StoredUser) {
 
 async function syncWithFirestore() {
   try {
+    if (isQuotaExceeded()) {
+      console.log('ℹ️ Firestore quota limit exceeded. Using cached local database storage.');
+      return;
+    }
     console.log('🔄 Initializing Cloud Firestore sync in background...');
     initFirestore();
     if (!db.categories || db.categories.length === 0) {
@@ -847,46 +862,14 @@ async function syncWithFirestore() {
     if (!db.partners || db.partners.length === 0) {
       db.partners = [...DEFAULT_PARTNERS];
     }
-    await seedFirestoreIfEmpty(db.users, db.laws, db.categories, db.supervisors, db.relatedSites, db.partners);
 
-    // Fetch critical collections first (users & settings) concurrently for instant availability
+    // Attempt critical settings & users fetch first
     const [cloudSettings, cloudUsers] = await Promise.all([
       fetchSettingsFromFirestore().catch(() => null),
       fetchUsersFromFirestore().catch(() => null),
     ]);
 
-    const cloudAbout = await fetchPlatformAboutFromFirestore();
-    const cloudContact = await fetchContactInfoFromFirestore();
-    const cloudCategories = await fetchCategoriesFromFirestore();
-    const cloudSupervisors = await fetchSupervisorsFromFirestore();
-    const cloudRelatedSites = await fetchRelatedSitesFromFirestore();
-    const cloudPartners = await fetchPartnersFromFirestore();
-    
-    // Fetch heavy laws collection
-    const cloudLaws = await fetchLawsFromFirestore();
-
     let changed = false;
-
-    if (cloudContact) {
-      db.contactInfo = cloudContact;
-      changed = true;
-      console.log('✅ Loaded contact info from Cloud Firestore.');
-    } else if (db.contactInfo) {
-      saveContactInfoToFirestore(db.contactInfo).catch((e) => console.error('Error saving initial contact info to Firestore:', e));
-    }
-
-    if (cloudAbout) {
-      if (cloudAbout.customSections) {
-        cloudAbout.customSections = cloudAbout.customSections.filter(
-          (sec) => sec.id !== 'sec-goals' && sec.id !== 'sec-values'
-        );
-      }
-      db.platformAbout = cloudAbout;
-      changed = true;
-      console.log('✅ Loaded platform about content from Cloud Firestore.');
-    } else if (db.platformAbout) {
-      savePlatformAboutToFirestore(db.platformAbout).catch((e) => console.error('Error saving initial platform about to Firestore:', e));
-    }
 
     if (cloudSettings) {
       db.settings = {
@@ -909,29 +892,10 @@ async function syncWithFirestore() {
         siteOverview: cloudSettings.siteOverview || db.settings?.siteOverview || DEFAULT_FOUNDER.siteOverview,
       };
       changed = true;
-      console.log(`✅ Loaded settings from Cloud Firestore (Default trial: ${db.settings.defaultTrialDays} days, System: "${db.settings.systemName}").`);
-    } else if (db.settings) {
-      saveSettingsToFirestore({
-        autoApproveNewUsers: db.settings.autoApproveNewUsers !== false,
-        defaultTrialDays: db.settings.defaultTrialDays || 7,
-        trialPolicyEnabled: true,
-        systemName: db.settings.systemName || DEFAULT_BRANDING.systemName,
-        systemSubtitle: db.settings.systemSubtitle || DEFAULT_BRANDING.systemSubtitle,
-        systemBadge: db.settings.systemBadge || DEFAULT_BRANDING.systemBadge,
-        logoType: db.settings.logoType || DEFAULT_BRANDING.logoType,
-        logoPreset: db.settings.logoPreset || DEFAULT_BRANDING.logoPreset,
-        logoUrl: db.settings.logoUrl || '',
-        logoAccentColor: db.settings.logoAccentColor || DEFAULT_BRANDING.logoAccentColor,
-        founderName: db.settings.founderName || DEFAULT_FOUNDER.founderName,
-        founderTitle: db.settings.founderTitle || DEFAULT_FOUNDER.founderTitle,
-        founderBio: db.settings.founderBio || DEFAULT_FOUNDER.founderBio,
-        founderPhotoUrl: db.settings.founderPhotoUrl || DEFAULT_FOUNDER.founderPhotoUrl,
-        founderQuote: db.settings.founderQuote || DEFAULT_FOUNDER.founderQuote,
-        siteOverview: db.settings.siteOverview || DEFAULT_FOUNDER.siteOverview,
-      }).catch((e) => console.error('Error saving initial settings to Firestore:', e));
+      console.log(`✅ Loaded settings from Cloud Firestore.`);
     }
 
-    if (cloudUsers) {
+    if (cloudUsers && cloudUsers.length > 0) {
       db.users = cloudUsers;
       changed = true;
       console.log(`✅ Loaded ${cloudUsers.length} users from Cloud Firestore.`);
@@ -942,41 +906,51 @@ async function syncWithFirestore() {
       checkAndUpdateUserTrialStatus(u, false);
     }
 
-    if (cloudLaws && cloudLaws.length > 0) {
-      db.laws = cloudLaws;
-      changed = true;
-      console.log(`✅ Loaded ${cloudLaws.length} laws from Cloud Firestore.`);
-    }
+    // If quota hasn't been exceeded, sync remaining collections
+    if (!isQuotaExceeded()) {
+      const [cloudAbout, cloudContact, cloudCategories, cloudSupervisors, cloudRelatedSites, cloudPartners, cloudLaws, cloudLawRequests] = await Promise.all([
+        fetchPlatformAboutFromFirestore().catch(() => null),
+        fetchContactInfoFromFirestore().catch(() => null),
+        fetchCategoriesFromFirestore().catch(() => null),
+        fetchSupervisorsFromFirestore().catch(() => null),
+        fetchRelatedSitesFromFirestore().catch(() => null),
+        fetchPartnersFromFirestore().catch(() => null),
+        fetchLawsFromFirestore().catch(() => null),
+        fetchLawRequestsFromFirestore().catch(() => null),
+      ]);
 
-    if (cloudCategories && cloudCategories.length > 0) {
-      db.categories = cloudCategories;
-      changed = true;
-      console.log(`✅ Loaded ${cloudCategories.length} categories from Cloud Firestore.`);
-    }
-
-    if (cloudSupervisors && cloudSupervisors.length > 0) {
-      db.supervisors = cloudSupervisors;
-      changed = true;
-      console.log(`✅ Loaded ${cloudSupervisors.length} supervisors from Cloud Firestore.`);
-    }
-
-    if (cloudRelatedSites && cloudRelatedSites.length > 0) {
-      db.relatedSites = cloudRelatedSites;
-      changed = true;
-      console.log(`✅ Loaded ${cloudRelatedSites.length} related sites from Cloud Firestore.`);
-    }
-
-    if (cloudPartners && cloudPartners.length > 0) {
-      db.partners = cloudPartners;
-      changed = true;
-      console.log(`✅ Loaded ${cloudPartners.length} partners from Cloud Firestore.`);
-    }
-
-    const cloudLawRequests = await fetchLawRequestsFromFirestore();
-    if (cloudLawRequests && cloudLawRequests.length > 0) {
-      db.lawRequests = cloudLawRequests;
-      changed = true;
-      console.log(`✅ Loaded ${cloudLawRequests.length} law requests from Cloud Firestore.`);
+      if (cloudContact) {
+        db.contactInfo = cloudContact;
+        changed = true;
+      }
+      if (cloudAbout) {
+        db.platformAbout = cloudAbout;
+        changed = true;
+      }
+      if (cloudLaws && cloudLaws.length > 0) {
+        db.laws = cloudLaws;
+        changed = true;
+      }
+      if (cloudCategories && cloudCategories.length > 0) {
+        db.categories = cloudCategories;
+        changed = true;
+      }
+      if (cloudSupervisors && cloudSupervisors.length > 0) {
+        db.supervisors = cloudSupervisors;
+        changed = true;
+      }
+      if (cloudRelatedSites && cloudRelatedSites.length > 0) {
+        db.relatedSites = cloudRelatedSites;
+        changed = true;
+      }
+      if (cloudPartners && cloudPartners.length > 0) {
+        db.partners = cloudPartners;
+        changed = true;
+      }
+      if (cloudLawRequests && cloudLawRequests.length > 0) {
+        db.lawRequests = cloudLawRequests;
+        changed = true;
+      }
     }
 
     if (changed) {
@@ -984,7 +958,7 @@ async function syncWithFirestore() {
     }
     console.log('⚡ Cloud Firestore synchronization complete.');
   } catch (err) {
-    console.error('❌ Error during Cloud Firestore synchronization:', err);
+    console.warn('Notice: Cloud Firestore sync gracefully handled:', err);
   }
 }
 
@@ -993,13 +967,18 @@ let firestoreInitPromise: Promise<void> | null = null;
 
 export async function ensureFirestoreReady() {
   if (firestoreInitialized) return;
+  if (isQuotaExceeded()) {
+    firestoreInitialized = true;
+    return;
+  }
   if (!firestoreInitPromise) {
     firestoreInitPromise = (async () => {
       try {
         await syncWithFirestore();
         firestoreInitialized = true;
       } catch (err) {
-        console.error('ensureFirestoreReady error:', err);
+        console.warn('ensureFirestoreReady handled notice:', err);
+        firestoreInitialized = true;
       }
     })();
   }
@@ -1009,14 +988,14 @@ export async function ensureFirestoreReady() {
 // Ensure database is initialized in serverless environments (e.g. Vercel)
 app.use(async (req, res, next) => {
   try {
-    if (!firestoreInitialized) {
+    if (!firestoreInitialized && !isQuotaExceeded()) {
       await Promise.race([
         ensureFirestoreReady(),
-        new Promise((r) => setTimeout(r, 800)),
+        new Promise((r) => setTimeout(r, 400)),
       ]);
     }
   } catch (err) {
-    console.error('Middleware ensureFirestoreReady error:', err);
+    // Graceful continuation
   }
   next();
 });

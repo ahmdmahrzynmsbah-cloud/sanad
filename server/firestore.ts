@@ -11,7 +11,37 @@ import {
   deleteDoc as firebaseDeleteDoc,
   Firestore,
   DocumentReference,
+  setLogLevel,
 } from 'firebase/firestore';
+
+// Suppress internal Firestore connection state logs such as idle stream disconnects
+try {
+  setLogLevel('error');
+} catch {
+  // Ignore
+}
+
+// Filter console to ignore non-critical Firebase idle stream disconnect warnings
+const originalWarn = console.warn;
+const originalError = console.error;
+const isIdleStreamNotice = (args: any[]): boolean => {
+  const text = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+  return (
+    text.includes('Disconnecting idle stream') ||
+    text.includes('Timed out waiting for new targets') ||
+    (text.includes('GrpcConnection') && text.includes('CANCELLED'))
+  );
+};
+
+console.warn = (...args: any[]) => {
+  if (isIdleStreamNotice(args)) return;
+  originalWarn.apply(console, args);
+};
+
+console.error = (...args: any[]) => {
+  if (isIdleStreamNotice(args)) return;
+  originalError.apply(console, args);
+};
 
 export type ChangeCallback = (collectionName: string) => void;
 const changeListeners: ChangeCallback[] = [];
@@ -155,6 +185,43 @@ export interface StoredCategory {
 let firestoreDb: Firestore | null = null;
 let isInitialized = false;
 
+// Quota circuit-breaker: When Firestore free quota is exceeded, suspend cloud calls
+// and cleanly fall back to local persistence for 15 minutes before retrying.
+let isFirestoreQuotaExceeded = false;
+let quotaExceededResetTime = 0;
+
+export function isQuotaExceeded(): boolean {
+  if (!isFirestoreQuotaExceeded) return false;
+  if (Date.now() > quotaExceededResetTime) {
+    // Reset circuit breaker to attempt again
+    isFirestoreQuotaExceeded = false;
+    quotaExceededResetTime = 0;
+    console.log('🔄 Firestore quota cooldown elapsed. Re-enabling Firestore connection attempts.');
+    return false;
+  }
+  return true;
+}
+
+export function handleFirestoreError(context: string, err: any): void {
+  const errMsg = String(err?.message || err || '');
+  const errCode = String(err?.code || '');
+  if (
+    errMsg.includes('Quota limit exceeded') ||
+    errMsg.includes('quota metric') ||
+    errMsg.includes('RESOURCE_EXHAUSTED') ||
+    errCode === 'resource-exhausted'
+  ) {
+    if (!isFirestoreQuotaExceeded) {
+      isFirestoreQuotaExceeded = true;
+      // 15-minute cooldown before re-attempting cloud reads/writes
+      quotaExceededResetTime = Date.now() + 15 * 60 * 1000;
+      console.warn(`⚠️ [Firestore Free-Tier Quota] Daily quota limit reached during [${context}]. Gracefully activating local caching & fallback mode for 15 minutes.`);
+    }
+  } else {
+    console.error(`Error in [${context}]:`, err);
+  }
+}
+
 const DEFAULT_FIREBASE_CONFIG = {
   projectId: "pos1-d562e",
   appId: "1:607061495520:web:86e73b21063ba9c494ca85",
@@ -194,6 +261,7 @@ export function initFirestore(): Firestore | null {
 }
 
 export async function fetchUsersFromFirestore(): Promise<StoredUser[] | null> {
+  if (isQuotaExceeded()) return null;
   const db = initFirestore();
   if (!db) return null;
 
@@ -214,12 +282,13 @@ export async function fetchUsersFromFirestore(): Promise<StoredUser[] | null> {
     });
     return users;
   } catch (err) {
-    console.error('Error fetching users from Firestore:', err);
+    handleFirestoreError('fetchUsersFromFirestore', err);
     return null;
   }
 }
 
 export async function saveUserToFirestore(user: StoredUser): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
   const db = initFirestore();
   if (!db) return false;
 
@@ -248,7 +317,7 @@ export async function saveUserToFirestore(user: StoredUser): Promise<boolean> {
     });
     return true;
   } catch (err) {
-    console.error(`Error saving user ${user.id} to Firestore:`, err);
+    handleFirestoreError(`saveUserToFirestore ${user.id}`, err);
     return false;
   }
 }
@@ -285,6 +354,7 @@ export interface StoredSettings {
 }
 
 export async function fetchSettingsFromFirestore(): Promise<StoredSettings | null> {
+  if (isQuotaExceeded()) return null;
   const db = initFirestore();
   if (!db) return null;
 
@@ -302,12 +372,13 @@ export async function fetchSettingsFromFirestore(): Promise<StoredSettings | nul
     });
     return found;
   } catch (err) {
-    console.error('Error fetching settings from Firestore:', err);
+    handleFirestoreError('fetchSettingsFromFirestore', err);
     return null;
   }
 }
 
 export async function saveSettingsToFirestore(settings: StoredSettings): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
   const db = initFirestore();
   if (!db) return false;
 
@@ -318,7 +389,7 @@ export async function saveSettingsToFirestore(settings: StoredSettings): Promise
     await setDoc(settingsRef, cleanSettings, { merge: true });
     return true;
   } catch (err) {
-    console.error('Error saving settings to Firestore:', err);
+    handleFirestoreError('saveSettingsToFirestore', err);
     return false;
   }
 }
@@ -327,6 +398,7 @@ export async function updateUserInFirestore(
   userId: string,
   partial: Partial<StoredUser>
 ): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
   const db = initFirestore();
   if (!db) return false;
 
@@ -335,12 +407,13 @@ export async function updateUserInFirestore(
     await setDoc(userRef, partial as any, { merge: true });
     return true;
   } catch (err) {
-    console.error(`Error updating user ${userId} in Firestore:`, err);
+    handleFirestoreError(`updateUserInFirestore ${userId}`, err);
     return false;
   }
 }
 
 export async function deleteUserFromFirestore(userId: string): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
   const db = initFirestore();
   if (!db) {
     console.error(`Error deleting user ${userId} from Firestore: DB not initialized.`);
@@ -353,12 +426,13 @@ export async function deleteUserFromFirestore(userId: string): Promise<boolean> 
     console.log(`Successfully deleted user ${userId} from Firestore.`);
     return true;
   } catch (err) {
-    console.error(`Error deleting user ${userId} from Firestore:`, err);
+    handleFirestoreError(`deleteUserFromFirestore ${userId}`, err);
     throw err; // Re-throw to allow the route handler to catch it
   }
 }
 
 export async function fetchLawsFromFirestore(): Promise<StoredLaw[] | null> {
+  if (isQuotaExceeded()) return null;
   const db = initFirestore();
   if (!db) return null;
 
@@ -379,12 +453,13 @@ export async function fetchLawsFromFirestore(): Promise<StoredLaw[] | null> {
     });
     return laws;
   } catch (err) {
-    console.error('Error fetching laws from Firestore:', err);
+    handleFirestoreError('fetchLawsFromFirestore', err);
     return null;
   }
 }
 
 export async function saveLawToFirestore(law: StoredLaw): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
   const db = initFirestore();
   if (!db) return false;
 
@@ -403,7 +478,7 @@ export async function saveLawToFirestore(law: StoredLaw): Promise<boolean> {
     });
     return true;
   } catch (err) {
-    console.error(`Error saving law ${law.id} to Firestore:`, err);
+    handleFirestoreError(`saveLawToFirestore ${law.id}`, err);
     return false;
   }
 }
@@ -412,6 +487,7 @@ export async function updateLawInFirestore(
   lawId: string,
   partial: Partial<StoredLaw>
 ): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
   const db = initFirestore();
   if (!db) return false;
 
@@ -420,12 +496,13 @@ export async function updateLawInFirestore(
     await updateDoc(lawRef, partial as any);
     return true;
   } catch (err) {
-    console.error(`Error updating law ${lawId} in Firestore:`, err);
+    handleFirestoreError(`updateLawInFirestore ${lawId}`, err);
     return false;
   }
 }
 
 export async function deleteLawFromFirestore(lawId: string): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
   const db = initFirestore();
   if (!db) return false;
 
@@ -434,12 +511,13 @@ export async function deleteLawFromFirestore(lawId: string): Promise<boolean> {
     await deleteDoc(lawRef);
     return true;
   } catch (err) {
-    console.error(`Error deleting law ${lawId} from Firestore:`, err);
+    handleFirestoreError(`deleteLawFromFirestore ${lawId}`, err);
     return false;
   }
 }
 
 export async function fetchLawRequestsFromFirestore(): Promise<StoredLawRequest[] | null> {
+  if (isQuotaExceeded()) return null;
   const db = initFirestore();
   if (!db) return null;
 
@@ -460,12 +538,13 @@ export async function fetchLawRequestsFromFirestore(): Promise<StoredLawRequest[
     });
     return requests;
   } catch (err) {
-    console.error('Error fetching law requests from Firestore:', err);
+    handleFirestoreError('fetchLawRequestsFromFirestore', err);
     return null;
   }
 }
 
 export async function saveLawRequestToFirestore(request: StoredLawRequest): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
   const db = initFirestore();
   if (!db) return false;
 
@@ -492,7 +571,7 @@ export async function saveLawRequestToFirestore(request: StoredLawRequest): Prom
     });
     return true;
   } catch (err) {
-    console.error(`Error saving law request ${request.id} to Firestore:`, err);
+    handleFirestoreError(`saveLawRequestToFirestore ${request.id}`, err);
     return false;
   }
 }
@@ -501,6 +580,7 @@ export async function updateLawRequestInFirestore(
   requestId: string,
   partial: Partial<StoredLawRequest>
 ): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
   const db = initFirestore();
   if (!db) return false;
 
@@ -509,12 +589,13 @@ export async function updateLawRequestInFirestore(
     await updateDoc(docRef, partial as any);
     return true;
   } catch (err) {
-    console.error(`Error updating law request ${requestId} in Firestore:`, err);
+    handleFirestoreError(`updateLawRequestInFirestore ${requestId}`, err);
     return false;
   }
 }
 
 export async function deleteLawRequestFromFirestore(requestId: string): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
   const db = initFirestore();
   if (!db) return false;
 
@@ -523,12 +604,13 @@ export async function deleteLawRequestFromFirestore(requestId: string): Promise<
     await deleteDoc(docRef);
     return true;
   } catch (err) {
-    console.error(`Error deleting law request ${requestId} from Firestore:`, err);
+    handleFirestoreError(`deleteLawRequestFromFirestore ${requestId}`, err);
     return false;
   }
 }
 
 export async function fetchCategoriesFromFirestore(): Promise<StoredCategory[] | null> {
+  if (isQuotaExceeded()) return null;
   const db = initFirestore();
   if (!db) return null;
 
@@ -549,12 +631,13 @@ export async function fetchCategoriesFromFirestore(): Promise<StoredCategory[] |
     });
     return categories;
   } catch (err) {
-    console.error('Error fetching categories from Firestore:', err);
+    handleFirestoreError('fetchCategoriesFromFirestore', err);
     return null;
   }
 }
 
 export async function saveCategoryToFirestore(category: StoredCategory): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
   const db = initFirestore();
   if (!db) return false;
 
@@ -568,12 +651,13 @@ export async function saveCategoryToFirestore(category: StoredCategory): Promise
     });
     return true;
   } catch (err) {
-    console.error(`Error saving category ${category.id} to Firestore:`, err);
+    handleFirestoreError(`saveCategoryToFirestore ${category.id}`, err);
     return false;
   }
 }
 
 export async function deleteCategoryFromFirestore(categoryId: string): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
   const db = initFirestore();
   if (!db) return false;
 
@@ -582,7 +666,7 @@ export async function deleteCategoryFromFirestore(categoryId: string): Promise<b
     await deleteDoc(catRef);
     return true;
   } catch (err) {
-    console.error(`Error deleting category ${categoryId} from Firestore:`, err);
+    handleFirestoreError(`deleteCategoryFromFirestore ${categoryId}`, err);
     return false;
   }
 }
@@ -604,6 +688,7 @@ export interface StoredSupervisor {
 }
 
 export async function fetchSupervisorsFromFirestore(): Promise<StoredSupervisor[] | null> {
+  if (isQuotaExceeded()) return null;
   const db = initFirestore();
   if (!db) return null;
 
@@ -624,12 +709,13 @@ export async function fetchSupervisorsFromFirestore(): Promise<StoredSupervisor[
     items.sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
     return items;
   } catch (err) {
-    console.error('Error fetching supervisors from Firestore:', err);
+    handleFirestoreError('fetchSupervisorsFromFirestore', err);
     return null;
   }
 }
 
 export async function saveSupervisorToFirestore(supervisor: StoredSupervisor): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
   const db = initFirestore();
   if (!db) return false;
 
@@ -649,12 +735,13 @@ export async function saveSupervisorToFirestore(supervisor: StoredSupervisor): P
     });
     return true;
   } catch (err) {
-    console.error(`Error saving supervisor ${supervisor.id} to Firestore:`, err);
+    handleFirestoreError(`saveSupervisorToFirestore ${supervisor.id}`, err);
     return false;
   }
 }
 
 export async function deleteSupervisorFromFirestore(supervisorId: string): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
   const db = initFirestore();
   if (!db) return false;
 
@@ -663,7 +750,7 @@ export async function deleteSupervisorFromFirestore(supervisorId: string): Promi
     await deleteDoc(docRef);
     return true;
   } catch (err) {
-    console.error(`Error deleting supervisor ${supervisorId} from Firestore:`, err);
+    handleFirestoreError(`deleteSupervisorFromFirestore ${supervisorId}`, err);
     return false;
   }
 }
@@ -683,6 +770,7 @@ export interface StoredRelatedSite {
 }
 
 export async function fetchRelatedSitesFromFirestore(): Promise<StoredRelatedSite[] | null> {
+  if (isQuotaExceeded()) return null;
   const db = initFirestore();
   if (!db) return null;
 
@@ -701,12 +789,13 @@ export async function fetchRelatedSitesFromFirestore(): Promise<StoredRelatedSit
     });
     return items;
   } catch (err) {
-    console.error('Error fetching related sites from Firestore:', err);
+    handleFirestoreError('fetchRelatedSitesFromFirestore', err);
     return null;
   }
 }
 
 export async function saveRelatedSiteToFirestore(site: StoredRelatedSite): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
   const db = initFirestore();
   if (!db) return false;
 
@@ -724,12 +813,13 @@ export async function saveRelatedSiteToFirestore(site: StoredRelatedSite): Promi
     });
     return true;
   } catch (err) {
-    console.error(`Error saving related site ${site.id} to Firestore:`, err);
+    handleFirestoreError(`saveRelatedSiteToFirestore ${site.id}`, err);
     return false;
   }
 }
 
 export async function deleteRelatedSiteFromFirestore(siteId: string): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
   const db = initFirestore();
   if (!db) return false;
 
@@ -738,7 +828,7 @@ export async function deleteRelatedSiteFromFirestore(siteId: string): Promise<bo
     await deleteDoc(docRef);
     return true;
   } catch (err) {
-    console.error(`Error deleting related site ${siteId} from Firestore:`, err);
+    handleFirestoreError(`deleteRelatedSiteFromFirestore ${siteId}`, err);
     return false;
   }
 }
@@ -835,6 +925,7 @@ export const DEFAULT_PARTNERS: StoredPartner[] = [
 ];
 
 export async function fetchPartnersFromFirestore(): Promise<StoredPartner[] | null> {
+  if (isQuotaExceeded()) return null;
   const db = initFirestore();
   if (!db) return null;
 
@@ -853,12 +944,13 @@ export async function fetchPartnersFromFirestore(): Promise<StoredPartner[] | nu
     });
     return items;
   } catch (err) {
-    console.error('Error fetching partners from Firestore:', err);
+    handleFirestoreError('fetchPartnersFromFirestore', err);
     return null;
   }
 }
 
 export async function savePartnerToFirestore(partner: StoredPartner): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
   const db = initFirestore();
   if (!db) return false;
 
@@ -878,12 +970,13 @@ export async function savePartnerToFirestore(partner: StoredPartner): Promise<bo
     });
     return true;
   } catch (err) {
-    console.error(`Error saving partner ${partner.id} to Firestore:`, err);
+    handleFirestoreError(`savePartnerToFirestore ${partner.id}`, err);
     return false;
   }
 }
 
 export async function deletePartnerFromFirestore(partnerId: string): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
   const db = initFirestore();
   if (!db) return false;
 
@@ -892,7 +985,7 @@ export async function deletePartnerFromFirestore(partnerId: string): Promise<boo
     await deleteDoc(docRef);
     return true;
   } catch (err) {
-    console.error(`Error deleting partner ${partnerId} from Firestore:`, err);
+    handleFirestoreError(`deletePartnerFromFirestore ${partnerId}`, err);
     return false;
   }
 }
@@ -936,11 +1029,11 @@ export const DEFAULT_PLATFORM_ABOUT: StoredPlatformAbout = {
 };
 
 export async function fetchPlatformAboutFromFirestore(): Promise<StoredPlatformAbout | null> {
+  if (isQuotaExceeded()) return null;
   const db = initFirestore();
   if (!db) return null;
 
   try {
-    const docRef = doc(db, 'system_settings', 'platform_about');
     const docSnap = await getDocs(collection(db, 'system_settings'));
     let found: StoredPlatformAbout | null = null;
     docSnap.forEach((snap) => {
@@ -950,12 +1043,13 @@ export async function fetchPlatformAboutFromFirestore(): Promise<StoredPlatformA
     });
     return found;
   } catch (err) {
-    console.error('Error fetching platform_about from Firestore:', err);
+    handleFirestoreError('fetchPlatformAboutFromFirestore', err);
     return null;
   }
 }
 
 export async function savePlatformAboutToFirestore(data: StoredPlatformAbout): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
   const db = initFirestore();
   if (!db) return false;
 
@@ -1036,6 +1130,7 @@ export const DEFAULT_CONTACT_INFO: StoredContactInfo = {
 };
 
 export async function fetchContactInfoFromFirestore(): Promise<StoredContactInfo | null> {
+  if (isQuotaExceeded()) return null;
   const db = initFirestore();
   if (!db) return null;
 
@@ -1049,12 +1144,13 @@ export async function fetchContactInfoFromFirestore(): Promise<StoredContactInfo
     });
     return found;
   } catch (err) {
-    console.error('Error fetching contact_info from Firestore:', err);
+    handleFirestoreError('fetchContactInfoFromFirestore', err);
     return null;
   }
 }
 
 export async function saveContactInfoToFirestore(data: StoredContactInfo): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
   const db = initFirestore();
   if (!db) return false;
 
@@ -1072,7 +1168,7 @@ export async function saveContactInfoToFirestore(data: StoredContactInfo): Promi
     }, { merge: true });
     return true;
   } catch (err) {
-    console.error('Error saving contact_info to Firestore:', err);
+    handleFirestoreError('saveContactInfoToFirestore', err);
     return false;
   }
 }
@@ -1096,6 +1192,7 @@ export interface StoredConversation {
 }
 
 export async function fetchConversationsFromFirestore(userId?: string): Promise<StoredConversation[] | null> {
+  if (isQuotaExceeded()) return null;
   const db = initFirestore();
   if (!db) return null;
 
@@ -1119,12 +1216,13 @@ export async function fetchConversationsFromFirestore(userId?: string): Promise<
     items.sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
     return items;
   } catch (err) {
-    console.error('Error fetching conversations from Firestore:', err);
+    handleFirestoreError('fetchConversationsFromFirestore', err);
     return null;
   }
 }
 
 export async function saveConversationToFirestore(conv: StoredConversation): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
   const db = initFirestore();
   if (!db) return false;
 
@@ -1140,12 +1238,13 @@ export async function saveConversationToFirestore(conv: StoredConversation): Pro
     });
     return true;
   } catch (err) {
-    console.error(`Error saving conversation ${conv.id} to Firestore:`, err);
+    handleFirestoreError(`saveConversationToFirestore ${conv.id}`, err);
     return false;
   }
 }
 
 export async function deleteConversationFromFirestore(convId: string): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
   const db = initFirestore();
   if (!db) return false;
 
@@ -1154,12 +1253,13 @@ export async function deleteConversationFromFirestore(convId: string): Promise<b
     await deleteDoc(docRef);
     return true;
   } catch (err) {
-    console.error(`Error deleting conversation ${convId} from Firestore:`, err);
+    handleFirestoreError(`deleteConversationFromFirestore ${convId}`, err);
     return false;
   }
 }
 
 export async function clearUserConversationsFromFirestore(userId: string): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
   const db = initFirestore();
   if (!db) return false;
 
@@ -1176,7 +1276,7 @@ export async function clearUserConversationsFromFirestore(userId: string): Promi
     await Promise.all(deleteTasks);
     return true;
   } catch (err) {
-    console.error(`Error clearing conversations for user ${userId} from Firestore:`, err);
+    handleFirestoreError(`clearUserConversationsFromFirestore ${userId}`, err);
     return false;
   }
 }
@@ -1195,6 +1295,7 @@ export async function seedFirestoreIfEmpty(
   initialPartners?: StoredPartner[]
 ) {
   if (isAlreadySeeded) return;
+  if (isQuotaExceeded()) return;
   const db = initFirestore();
   if (!db) return;
 
@@ -1270,6 +1371,6 @@ export async function seedFirestoreIfEmpty(
     }
     isAlreadySeeded = true;
   } catch (err) {
-    console.error('Error during Firestore database seeding:', err);
+    handleFirestoreError('seedFirestoreIfEmpty', err);
   }
 }
