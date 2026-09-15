@@ -591,10 +591,23 @@ function initDB(): DBData {
     // Read-only filesystem in Vercel/Lambda
   }
 
-  if (fs.existsSync(DB_FILE)) {
+  const localRepoFile = path.join(process.cwd(), 'data', 'db.json');
+  let targetFile = DB_FILE;
+  if (!fs.existsSync(targetFile) && fs.existsSync(localRepoFile)) {
+    targetFile = localRepoFile;
+  }
+
+  if (fs.existsSync(targetFile)) {
     try {
-      const content = fs.readFileSync(DB_FILE, 'utf-8');
+      const content = fs.readFileSync(targetFile, 'utf-8');
       const data = JSON.parse(content) as DBData;
+      if (targetFile === localRepoFile && targetFile !== DB_FILE) {
+        try {
+          fs.writeFileSync(DB_FILE, content, 'utf-8');
+        } catch {
+          // Ephemeral /tmp write notice
+        }
+      }
       if (!data.settings) {
         data.settings = { autoApproveNewUsers: true, defaultTrialDays: 7, trialPolicyEnabled: true, ...DEFAULT_BRANDING };
       } else {
@@ -676,14 +689,14 @@ function initDB(): DBData {
 let db = initDB();
 
 function saveDB() {
-  if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+  if (process.env.VERCEL) {
     // Skip saving to local disk on Vercel to prevent OOM crashes and EROFS errors
     return;
   }
   try {
     fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf-8');
   } catch (err) {
-    console.error('Error saving DB:', err);
+    // Gracefully ignore write errors on read-only environments
   }
 }
 
