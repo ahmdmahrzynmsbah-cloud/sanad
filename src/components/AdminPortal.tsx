@@ -1401,7 +1401,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
 
       const cleanTitle = sanitizeLawTitle(file.name);
 
-      const isTooBig = file.size > 35 * 1024 * 1024;
+      const isTooBig = file.size > 150 * 1024 * 1024;
 
       newItems.push({
         id: `pdf-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -1410,7 +1410,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         fileSizeFormatted: formatBytes(file.size),
         pageCount: 1,
         status: isTooBig ? 'error' : 'pending',
-        error: isTooBig ? 'حجم الملف يتجاوز الحد الأقصى (35 ميجابايت)' : undefined,
+        error: isTooBig ? 'حجم الملف يتجاوز الحد الأقصى (150 ميجابايت)' : undefined,
         progressPercent: 0,
         statusText: isTooBig ? 'حجم الملف كبير جداً' : 'في انتظار بدء الاستخراج...',
         title: cleanTitle,
@@ -2789,7 +2789,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                       استعراض واختيار عدة ملفات دفعة واحدة
                     </div>
                     <div className="mt-3 text-[11px] text-slate-400 font-medium">
-                      الصيغ المدعومة: PDF, DOCX, PPTX حتى 35 ميجابايت لكل ملف
+                      الصيغ المدعومة: PDF, DOCX, PPTX حتى 150 ميجابايت لكل ملف
                     </div>
                   </div>
                 ) : (

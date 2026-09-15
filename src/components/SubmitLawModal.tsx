@@ -155,10 +155,10 @@ export const SubmitLawModal: React.FC<SubmitLawModalProps> = ({
       return;
     }
 
-    if (file.size > 35 * 1024 * 1024) {
+    if (file.size > 150 * 1024 * 1024) {
       setFeedback({
         type: 'error',
-        message: 'حجم الملف يتجاوز 35 ميجابايت. يرجى اختيار ملف أصغر.',
+        message: 'حجم الملف يتجاوز 150 ميجابايت. يرجى اختيار ملف أصغر.',
       });
       return;
     }
@@ -430,7 +430,7 @@ export const SubmitLawModal: React.FC<SubmitLawModalProps> = ({
                   <p className="text-[11px] text-gray-500 mt-1">
                     {fileMeta
                       ? `الحجم: ${fileMeta.fileSizeFormatted} • عدد الصفحات المقدر: ${fileMeta.pageCount}`
-                      : 'يدعم كافة صيغ المستندات الرسمية حتى 35 ميجابايت'}
+                      : 'يدعم كافة صيغ المستندات الرسمية حتى 150 ميجابايت'}
                   </p>
                 </div>
               </div>

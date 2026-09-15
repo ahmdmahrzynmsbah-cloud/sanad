@@ -149,8 +149,8 @@ app.use((req, res, next) => {
   }
   next();
 });
-app.use(express.json({ limit: '60mb' }));
-app.use(express.urlencoded({ extended: true, limit: '60mb' }));
+app.use(express.json({ limit: '200mb' }));
+app.use(express.urlencoded({ extended: true, limit: '200mb' }));
 
 // 4. Quick health check endpoint (essential for Vercel/Cloud diagnostics)
 app.get(['/api/health', '/health'], (req, res) => {
@@ -4387,7 +4387,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
     return res.status(400).json({ error: 'حجم البيانات كبير جداً أو التنسيق غير صحيح. يرجى اختيار صورة أصغر حجماً.' });
   }
   if (err?.type === 'entity.too.large' || err?.status === 413) {
-    return res.status(413).json({ error: 'حجم الملف أو البيانات المرسلة كبير جداً. الحد الأقصى المسموح به هو 50 ميجابايت.' });
+    return res.status(413).json({ error: 'حجم الملف أو البيانات المرسلة كبير جداً. الحد الأقصى المسموح به هو 200 ميجابايت.' });
   }
   res.status(500).json({ error: 'خطأ داخلي في الخادم: ' + (err?.message || 'خطأ غير معروف') });
 });
