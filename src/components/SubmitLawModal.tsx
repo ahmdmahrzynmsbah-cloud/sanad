@@ -374,6 +374,7 @@ export const SubmitLawModal: React.FC<SubmitLawModalProps> = ({
         if (!Array.isArray(existingRequests)) existingRequests = [];
         const updated = [payload, ...existingRequests.filter((r) => r.id !== payload.id)];
         localStorage.setItem('sanad_cached_law_requests', JSON.stringify(updated));
+        window.dispatchEvent(new Event('sanad_uploads_updated'));
       } catch (e) {}
 
       setFeedback({

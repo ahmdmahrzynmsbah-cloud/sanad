@@ -25,6 +25,7 @@ import Markdown from 'react-markdown';
 import { User, ChatMessage, Conversation, SystemBranding, Law } from '../types';
 import { ChatSidebar } from './ChatSidebar';
 import { SanadServicesSidebar } from './SanadServicesSidebar';
+import { UserUploadQuotaBadge } from './UserUploadQuotaBadge';
 import { useSync } from '../utils/sync';
 import { directFetchLawsFromFirestore } from '../services/clientFirestore';
 import { generateClientKnowledgeFallback, isLegalTaxCustomsQuery } from '../utils/localLegalSearch';
@@ -556,7 +557,13 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:flex-nowrap">
+            {/* User Daily Upload & Storage Quota Badge */}
+            <UserUploadQuotaBadge
+              currentUser={currentUser}
+              onOpenSubmitLaw={onOpenSubmitLaw}
+            />
+
             {currentUser.isSubscribed ? (
               <span className="bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-semibold px-2.5 py-0.5 rounded-full flex items-center gap-1">
                 <Crown className="w-3 h-3 text-amber-600" />
@@ -567,19 +574,6 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
                 <Clock className="w-3 h-3 text-emerald-700" />
                 تجريبي ({currentUser.remainingTrialDays ?? currentUser.trialDays ?? 7} يوم)
               </span>
-            )}
-
-            {onOpenSubmitLaw && (
-              <button
-                id="chat-submit-law-btn"
-                onClick={onOpenSubmitLaw}
-                className="bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 flex items-center gap-1 text-[11px] font-bold px-2.5 sm:px-3 py-1.5 rounded-xl transition-all shadow-2xs cursor-pointer shrink-0 min-h-[36px]"
-                title="اقتراح أو رفع قانون جديد لمراجعته من المشرفين"
-              >
-                <FileUp className="w-3.5 h-3.5 text-emerald-700" />
-                <span className="hidden sm:inline">اقتراح قانون</span>
-                <span className="sm:hidden">رفع</span>
-              </button>
             )}
 
             <button
