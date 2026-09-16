@@ -268,16 +268,16 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
       )}
 
       {/* Top Header & Actions */}
-      <div className="bg-white rounded-2xl p-5 border border-gray-200 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-2">
-            <Users className="w-5 h-5 text-[#12281e]" />
+          <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+            <Users className="w-5 h-5 text-emerald-700" />
             <span>إدارة هيئة المشرفين والخبراء القانونيين</span>
-            <span className="text-xs font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+            <span className="text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-0.5 rounded-full">
               {supervisors.length} مشرف معتمد
             </span>
           </h2>
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-slate-500 mt-1">
             يمكنك إضافة صورة المشرف واسمه ونبذة كاملة عن خبراته، ليتم عرضها في الصفحة العامة للمشرفين لكافة الزوار.
           </p>
         </div>
@@ -285,7 +285,7 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <button
             onClick={fetchSupervisors}
-            className="p-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-colors cursor-pointer"
+            className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors cursor-pointer"
             title="تحديث القائمة"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -293,9 +293,9 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
           <button
             id="admin-add-supervisor-btn"
             onClick={openAddModal}
-            className="flex-1 sm:flex-initial px-4 py-2.5 bg-[#12281e] hover:bg-[#1b3d2d] text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+            className="flex-1 sm:flex-initial px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
           >
-            <Plus className="w-4 h-4 text-[#d4af37]" />
+            <Plus className="w-4 h-4 text-emerald-200" />
             <span>إضافة مشرف جديد</span>
           </button>
         </div>
@@ -308,9 +308,9 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="بحث في أسماء وتخصصات ونبذات المشرفين..."
-          className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#12281e]/20 focus:border-[#12281e] transition-all"
+          className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-all"
         />
-        <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+        <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
       </div>
 
       {/* Supervisors List Table & Cards */}
@@ -637,7 +637,7 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-5 py-2.5 bg-[#12281e] hover:bg-[#1b3d2d] text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   {saving ? 'جارٍ الحفظ...' : editingSupervisor ? 'تحديث البيانات' : 'إضافة المشرف'}
                 </button>

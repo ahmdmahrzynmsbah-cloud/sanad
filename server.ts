@@ -57,6 +57,10 @@ import {
   savePartnerToFirestore,
   deletePartnerFromFirestore,
   DEFAULT_PARTNERS,
+  fetchSubscriptionPlansFromFirestore,
+  saveSubscriptionPlanToFirestore,
+  deleteSubscriptionPlanFromFirestore,
+  DEFAULT_SUBSCRIPTION_PLANS,
   fetchPlatformAboutFromFirestore,
   savePlatformAboutToFirestore,
   DEFAULT_PLATFORM_ABOUT,
@@ -76,6 +80,7 @@ import {
 } from './server/firestore.ts';
 import type {
   StoredPartner,
+  StoredSubscriptionPlan,
   StoredAboutCard,
   StoredPlatformAbout,
   StoredContactInfo,
@@ -523,6 +528,7 @@ interface DBData {
   relatedSites?: StoredRelatedSite[];
   relatedSiteCategories?: string[];
   partners?: StoredPartner[];
+  subscriptionPlans?: StoredSubscriptionPlan[];
   platformAbout?: StoredPlatformAbout;
   contactInfo?: StoredContactInfo;
   conversations?: StoredConversation[];
@@ -671,6 +677,7 @@ function initDB(): DBData {
     supervisors: [...DEFAULT_SUPERVISORS],
     relatedSites: [...DEFAULT_RELATED_SITES],
     partners: [...DEFAULT_PARTNERS],
+    subscriptionPlans: [...DEFAULT_SUBSCRIPTION_PLANS],
     platformAbout: { ...DEFAULT_PLATFORM_ABOUT },
     contactInfo: { ...DEFAULT_CONTACT_INFO },
     users: [],
@@ -687,6 +694,9 @@ function initDB(): DBData {
 }
 
 let db = initDB();
+if (!db.subscriptionPlans || db.subscriptionPlans.length === 0) {
+  db.subscriptionPlans = [...DEFAULT_SUBSCRIPTION_PLANS];
+}
 
 function saveDB() {
   if (process.env.VERCEL) {
@@ -921,13 +931,14 @@ async function syncWithFirestore() {
 
     // If quota hasn't been exceeded, sync remaining collections
     if (!isQuotaExceeded()) {
-      const [cloudAbout, cloudContact, cloudCategories, cloudSupervisors, cloudRelatedSites, cloudPartners, cloudLaws, cloudLawRequests] = await Promise.all([
+      const [cloudAbout, cloudContact, cloudCategories, cloudSupervisors, cloudRelatedSites, cloudPartners, cloudPlans, cloudLaws, cloudLawRequests] = await Promise.all([
         fetchPlatformAboutFromFirestore().catch(() => null),
         fetchContactInfoFromFirestore().catch(() => null),
         fetchCategoriesFromFirestore().catch(() => null),
         fetchSupervisorsFromFirestore().catch(() => null),
         fetchRelatedSitesFromFirestore().catch(() => null),
         fetchPartnersFromFirestore().catch(() => null),
+        fetchSubscriptionPlansFromFirestore().catch(() => null),
         fetchLawsFromFirestore().catch(() => null),
         fetchLawRequestsFromFirestore().catch(() => null),
       ]);
@@ -958,6 +969,10 @@ async function syncWithFirestore() {
       }
       if (cloudPartners && cloudPartners.length > 0) {
         db.partners = cloudPartners;
+        changed = true;
+      }
+      if (cloudPlans && cloudPlans.length > 0) {
+        db.subscriptionPlans = cloudPlans;
         changed = true;
       }
       if (cloudLawRequests && cloudLawRequests.length > 0) {
@@ -1420,6 +1435,8 @@ app.get('/api/admin/init', async (req, res) => {
     categories: db.categories || [],
     supervisors: (db.supervisors || []).sort((a, b) => (a.order || 0) - (b.order || 0)),
     relatedSites: db.relatedSites || [],
+    partners: (db.partners || []).sort((a, b) => (a.order || 0) - (b.order || 0)),
+    subscriptionPlans: (db.subscriptionPlans || []).sort((a, b) => (a.order || 0) - (b.order || 0)),
     platformAbout: db.platformAbout || DEFAULT_PLATFORM_ABOUT,
     contactInfo: db.contactInfo || DEFAULT_CONTACT_INFO,
     autoApprove: db.settings?.autoApproveNewUsers !== false,
@@ -2129,6 +2146,235 @@ app.delete('/api/admin/partners/:id', async (req, res) => {
     deletedId: id,
     partners: db.partners,
   });
+});
+
+// ----------------------------------------------------
+// Subscription Plans Management Endpoints (إدارة باقات وخطط الاشتراك)
+// ----------------------------------------------------
+app.get('/api/subscription-plans', (req, res) => {
+  if (!db.subscriptionPlans || db.subscriptionPlans.length === 0) {
+    db.subscriptionPlans = [...DEFAULT_SUBSCRIPTION_PLANS];
+  }
+  const all = req.query.all === 'true';
+  const plans = (db.subscriptionPlans || [])
+    .filter((p) => all || p.isActive !== false)
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
+  res.json({ plans });
+});
+
+app.post('/api/admin/subscription-plans', async (req, res, next) => {
+  try {
+    const {
+      name,
+      badge,
+      price,
+      currency,
+      billingPeriod,
+      description,
+      features,
+      notIncludedFeatures,
+      isPopular,
+      buttonText,
+      buttonActionType,
+      buttonLink,
+      whatsappCustomMessage,
+      order,
+      isActive,
+    } = req.body;
+
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ error: 'اسم خطة الاشتراك مطلوب' });
+    }
+
+    if (!db.subscriptionPlans) {
+      db.subscriptionPlans = [...DEFAULT_SUBSCRIPTION_PLANS];
+    }
+
+    const newPlan: StoredSubscriptionPlan = {
+      id: `plan-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      name: String(name).trim(),
+      badge: badge ? String(badge).trim() : '',
+      price: price !== undefined && price !== '' ? (isNaN(Number(price)) ? String(price).trim() : Number(price)) : 0,
+      currency: currency ? String(currency).trim() : '₪',
+      billingPeriod: billingPeriod ? String(billingPeriod).trim() : 'شهرياً',
+      description: description ? String(description).trim() : '',
+      features: Array.isArray(features) ? features.filter((f: any) => Boolean(String(f).trim())).map((f: any) => String(f).trim()) : [],
+      notIncludedFeatures: Array.isArray(notIncludedFeatures) ? notIncludedFeatures.filter((f: any) => Boolean(String(f).trim())).map((f: any) => String(f).trim()) : [],
+      isPopular: Boolean(isPopular),
+      buttonText: buttonText ? String(buttonText).trim() : 'اشترك الآن',
+      buttonActionType: buttonActionType || 'register',
+      buttonLink: buttonLink ? String(buttonLink).trim() : '',
+      whatsappCustomMessage: whatsappCustomMessage ? String(whatsappCustomMessage).trim() : '',
+      order: typeof order === 'number' ? order : db.subscriptionPlans.length + 1,
+      isActive: isActive !== false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    db.subscriptionPlans.push(newPlan);
+    db.subscriptionPlans.sort((a, b) => (a.order || 0) - (b.order || 0));
+    saveDB();
+    saveSubscriptionPlanToFirestore(newPlan).catch((e) => console.error('Firestore save plan error:', e));
+
+    res.status(201).json({
+      success: true,
+      message: `تمت إضافة خطة الاشتراك "${newPlan.name}" بنجاح`,
+      plan: newPlan,
+      plans: db.subscriptionPlans,
+    });
+  } catch (err: any) {
+    next(err);
+  }
+});
+
+app.put('/api/admin/subscription-plans/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const {
+      name,
+      badge,
+      price,
+      currency,
+      billingPeriod,
+      description,
+      features,
+      notIncludedFeatures,
+      isPopular,
+      buttonText,
+      buttonActionType,
+      buttonLink,
+      whatsappCustomMessage,
+      order,
+      isActive,
+    } = req.body;
+
+    if (!db.subscriptionPlans) {
+      db.subscriptionPlans = [...DEFAULT_SUBSCRIPTION_PLANS];
+    }
+
+    const index = db.subscriptionPlans.findIndex((p) => p.id === id);
+    if (index === -1) {
+      return res.status(404).json({ error: 'خطة الاشتراك غير موجودة' });
+    }
+
+    const existing = db.subscriptionPlans[index];
+    const updated: StoredSubscriptionPlan = {
+      ...existing,
+      name: name !== undefined ? String(name).trim() : existing.name,
+      badge: badge !== undefined ? String(badge).trim() : existing.badge,
+      price: price !== undefined && price !== '' ? (isNaN(Number(price)) ? String(price).trim() : Number(price)) : existing.price,
+      currency: currency !== undefined ? String(currency).trim() : existing.currency,
+      billingPeriod: billingPeriod !== undefined ? String(billingPeriod).trim() : existing.billingPeriod,
+      description: description !== undefined ? String(description).trim() : existing.description,
+      features: Array.isArray(features) ? features.filter((f: any) => Boolean(String(f).trim())).map((f: any) => String(f).trim()) : existing.features,
+      notIncludedFeatures: Array.isArray(notIncludedFeatures) ? notIncludedFeatures.filter((f: any) => Boolean(String(f).trim())).map((f: any) => String(f).trim()) : existing.notIncludedFeatures,
+      isPopular: isPopular !== undefined ? Boolean(isPopular) : existing.isPopular,
+      buttonText: buttonText !== undefined ? String(buttonText).trim() : existing.buttonText,
+      buttonActionType: buttonActionType !== undefined ? buttonActionType : existing.buttonActionType,
+      buttonLink: buttonLink !== undefined ? String(buttonLink).trim() : existing.buttonLink,
+      whatsappCustomMessage: whatsappCustomMessage !== undefined ? String(whatsappCustomMessage).trim() : existing.whatsappCustomMessage,
+      order: order !== undefined ? Number(order) : existing.order,
+      isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive,
+      updatedAt: new Date().toISOString(),
+    };
+
+    db.subscriptionPlans[index] = updated;
+    db.subscriptionPlans.sort((a, b) => (a.order || 0) - (b.order || 0));
+    saveDB();
+    saveSubscriptionPlanToFirestore(updated).catch((e) => console.error('Firestore update plan error:', e));
+
+    res.json({
+      success: true,
+      message: `تم تحديث خطة الاشتراك "${updated.name}" بنجاح`,
+      plan: updated,
+      plans: db.subscriptionPlans,
+    });
+  } catch (err: any) {
+    next(err);
+  }
+});
+
+app.delete('/api/admin/subscription-plans/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    if (!db.subscriptionPlans) {
+      db.subscriptionPlans = [...DEFAULT_SUBSCRIPTION_PLANS];
+    }
+
+    const index = db.subscriptionPlans.findIndex((p) => p.id === id);
+    if (index === -1) {
+      return res.status(404).json({ error: 'خطة الاشتراك غير موجودة' });
+    }
+
+    const removed = db.subscriptionPlans[index];
+    db.subscriptionPlans.splice(index, 1);
+    saveDB();
+    await deleteSubscriptionPlanFromFirestore(id);
+
+    res.json({
+      success: true,
+      message: `تم حذف خطة الاشتراك "${removed.name}" بنجاح`,
+      deletedId: id,
+      plans: db.subscriptionPlans,
+    });
+  } catch (err: any) {
+    next(err);
+  }
+});
+
+// Reorder subscription plans
+app.post('/api/admin/subscription-plans/reorder', async (req, res, next) => {
+  try {
+    const { orderMap } = req.body;
+    if (!db.subscriptionPlans) {
+      db.subscriptionPlans = [...DEFAULT_SUBSCRIPTION_PLANS];
+    }
+
+    if (Array.isArray(orderMap)) {
+      orderMap.forEach((id: string, index: number) => {
+        const plan = db.subscriptionPlans!.find((p) => p.id === id);
+        if (plan) plan.order = index + 1;
+      });
+    } else if (orderMap && typeof orderMap === 'object') {
+      Object.keys(orderMap).forEach((id) => {
+        const plan = db.subscriptionPlans!.find((p) => p.id === id);
+        if (plan) plan.order = Number(orderMap[id]);
+      });
+    }
+
+    db.subscriptionPlans.sort((a, b) => (a.order || 0) - (b.order || 0));
+    saveDB();
+    Promise.all(db.subscriptionPlans.map((p) => saveSubscriptionPlanToFirestore(p))).catch((e) =>
+      console.error('Firestore reorder plans error:', e)
+    );
+
+    res.json({
+      success: true,
+      message: 'تم حفظ ترتيب خطط الاشتراك بنجاح',
+      plans: db.subscriptionPlans,
+    });
+  } catch (err: any) {
+    next(err);
+  }
+});
+
+// Reset subscription plans to defaults
+app.post('/api/admin/subscription-plans/reset', async (req, res, next) => {
+  try {
+    db.subscriptionPlans = [...DEFAULT_SUBSCRIPTION_PLANS];
+    saveDB();
+    Promise.all(db.subscriptionPlans.map((p) => saveSubscriptionPlanToFirestore(p))).catch((e) =>
+      console.error('Firestore reset plans error:', e)
+    );
+
+    res.json({
+      success: true,
+      message: 'تمت استعادة خطط الاشتراك الافتراضية بنجاح',
+      plans: db.subscriptionPlans,
+    });
+  } catch (err: any) {
+    next(err);
+  }
 });
 
 // Reset Branding to Default

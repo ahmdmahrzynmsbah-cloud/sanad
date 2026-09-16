@@ -105,21 +105,18 @@ export const AboutPlatformView: React.FC<AboutPlatformViewProps> = ({
   return (
     <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-5 sm:space-y-6 lg:space-y-8 animate-in fade-in duration-300" dir="rtl">
       {/* Top Banner */}
-      <div className="relative bg-linear-to-r from-[#12281e] via-[#1a382b] to-[#12281e] px-4 py-5 sm:px-8 sm:py-7 text-white rounded-2xl sm:rounded-3xl shadow-xl overflow-hidden border border-[#d4af37]/30">
-        {/* Subtle Islamic pattern or luxury accent */}
-        <div className="absolute inset-0 opacity-10 pointer-events-none bg-[radial-gradient(#d4af37_1px,transparent_1px)] [background-size:16px_16px]" />
-        
+      <div className="relative bg-[#12281e] px-4 py-5 sm:px-8 sm:py-7 text-white rounded-2xl sm:rounded-3xl shadow-xs overflow-hidden border border-emerald-900/60">
         <div className="relative flex flex-col md:flex-row items-center justify-between gap-4 sm:gap-6">
           <div className="flex items-center gap-3 sm:gap-5 w-full md:w-auto">
-            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-linear-to-br from-[#d4af37]/30 to-[#d4af37]/10 border border-[#d4af37]/50 flex items-center justify-center shadow-lg shrink-0">
-              <Eye className="w-6 h-6 sm:w-8 sm:h-8 text-[#d4af37]" />
+            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-white/10 border border-white/15 flex items-center justify-center shadow-xs shrink-0">
+              <Eye className="w-6 h-6 sm:w-8 sm:h-8 text-emerald-400" />
             </div>
             <div>
               <div className="flex items-center gap-1.5 sm:gap-2 mb-1">
-                <span className="px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold bg-[#d4af37] text-[#12281e]">
+                <span className="px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold bg-emerald-600 text-white">
                   PS المنظومة الوطنية الأولى
                 </span>
-                <span className="text-[10px] sm:text-[11px] text-emerald-300 flex items-center gap-1">
+                <span className="text-[10px] sm:text-[11px] text-slate-300 flex items-center gap-1">
                   <span className="w-1 h-1 rounded-full bg-emerald-400"></span>
                   تشريعات، ضرائب، وتدقيق مالي ذكي
                 </span>
@@ -138,8 +135,8 @@ export const AboutPlatformView: React.FC<AboutPlatformViewProps> = ({
             onClick={() => setActiveTab('all')}
             className={`px-4 py-2 rounded-xl font-bold transition-all shrink-0 cursor-pointer ${
               activeTab === 'all'
-                ? 'bg-[#d4af37] text-[#12281e] shadow-md'
-                : 'bg-white/10 text-white/80 hover:bg-white/15 hover:text-white'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'bg-white/10 text-slate-300 hover:bg-white/15 hover:text-white'
             }`}
           >
             عرض الكل
@@ -149,8 +146,8 @@ export const AboutPlatformView: React.FC<AboutPlatformViewProps> = ({
             onClick={() => setActiveTab('overview')}
             className={`px-4 py-2 rounded-xl font-bold transition-all shrink-0 cursor-pointer flex items-center gap-2 ${
               activeTab === 'overview'
-                ? 'bg-[#d4af37] text-[#12281e] shadow-md'
-                : 'bg-white/10 text-white/80 hover:bg-white/15 hover:text-white'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'bg-white/10 text-slate-300 hover:bg-white/15 hover:text-white'
             }`}
           >
             <BookOpen className="w-4 h-4" />
@@ -161,8 +158,8 @@ export const AboutPlatformView: React.FC<AboutPlatformViewProps> = ({
             onClick={() => setActiveTab('vision-mission')}
             className={`px-4 py-2 rounded-xl font-bold transition-all shrink-0 cursor-pointer flex items-center gap-2 ${
               activeTab === 'vision-mission'
-                ? 'bg-[#d4af37] text-[#12281e] shadow-md'
-                : 'bg-white/10 text-white/80 hover:bg-white/15 hover:text-white'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'bg-white/10 text-slate-300 hover:bg-white/15 hover:text-white'
             }`}
           >
             <Compass className="w-4 h-4" />
@@ -174,8 +171,8 @@ export const AboutPlatformView: React.FC<AboutPlatformViewProps> = ({
               onClick={() => setActiveTab('custom')}
               className={`px-4 py-2 rounded-xl font-bold transition-all shrink-0 cursor-pointer flex items-center gap-2 ${
                 activeTab === 'custom'
-                  ? 'bg-[#d4af37] text-[#12281e] shadow-md'
-                  : 'bg-white/10 text-white/80 hover:bg-white/15 hover:text-white'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-white/10 text-slate-300 hover:bg-white/15 hover:text-white'
               }`}
             >
               <Layers className="w-4 h-4" />

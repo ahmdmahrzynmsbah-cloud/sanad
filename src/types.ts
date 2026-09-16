@@ -29,6 +29,27 @@ export interface User {
   remainingTrialHours?: number;
 }
 
+export interface SubscriptionPlan {
+  id: string;
+  name: string;
+  badge?: string;
+  price: number | string;
+  currency?: string;
+  billingPeriod: string;
+  description: string;
+  features: string[];
+  notIncludedFeatures?: string[];
+  isPopular?: boolean;
+  buttonText?: string;
+  buttonActionType?: 'register' | 'contact' | 'whatsapp' | 'custom_url';
+  buttonLink?: string;
+  whatsappCustomMessage?: string;
+  order: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export type LawCategory = string;
 
 export interface LegalCategory {

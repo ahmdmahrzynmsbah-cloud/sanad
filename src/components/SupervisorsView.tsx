@@ -89,14 +89,14 @@ export const SupervisorsView: React.FC<SupervisorsViewProps> = ({
             <span>العودة للرئيسية</span>
           </button>
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-emerald-800 text-white flex items-center justify-center font-bold shadow-sm shrink-0">
-              <Users className="w-5 h-5 text-[#d4af37]" />
+            <div className="w-10 h-10 rounded-xl bg-[#12281e] text-white flex items-center justify-center font-bold shadow-xs border border-emerald-900/60 shrink-0">
+              <Users className="w-5 h-5 text-emerald-400" />
             </div>
             <div>
-              <h1 className="text-xl sm:text-3xl font-extrabold text-slate-950 tracking-tight">
+              <h1 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight">
                 هيئة المشرفين والخبراء القانونيين والضريبيين
               </h1>
-              <p className="text-xs sm:text-sm text-slate-600 mt-1">
+              <p className="text-xs sm:text-sm text-slate-600 mt-1 font-normal">
                 نخبة من المستشارين والخبراء المعتمدين في فحص القوانين والأنظمة الجمركية والضريبية بدولة فلسطين
               </p>
             </div>
@@ -106,9 +106,9 @@ export const SupervisorsView: React.FC<SupervisorsViewProps> = ({
         {isAdmin && onGoToAdminPortal && (
           <button
             onClick={onGoToAdminPortal}
-            className="px-4 py-2 bg-[#12281e] text-white text-xs font-bold rounded-xl hover:bg-[#1a3a2d] transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm shrink-0"
+            className="px-4 py-2 bg-emerald-700 text-white text-xs font-bold rounded-xl hover:bg-emerald-800 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs shrink-0 border border-emerald-600"
           >
-            <ShieldCheck className="w-4 h-4 text-[#d4af37]" />
+            <ShieldCheck className="w-4 h-4 text-emerald-200" />
             <span>إدارة المشرفين في لوحة التحكم</span>
           </button>
         )}

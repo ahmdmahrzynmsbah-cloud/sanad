@@ -118,6 +118,30 @@
         "updatedAt": { "type": "string", "description": "ISO timestamp when conversation was last updated" }
       },
       "required": ["id", "userId", "title", "createdAt", "updatedAt"]
+    },
+    "subscription_plans": {
+      "description": "Customizable subscription tiers, pricing, features, and billing cycles",
+      "fields": {
+        "id": { "type": "string", "description": "Unique subscription plan identifier" },
+        "name": { "type": "string", "description": "Title/name of the plan (e.g. الباقة الاحترافية)" },
+        "badge": { "type": "string", "description": "Badge highlight (e.g. الأكثر طلباً)" },
+        "price": { "type": "string", "description": "Price value or display string" },
+        "currency": { "type": "string", "description": "Currency symbol or code (e.g. ₪)" },
+        "billingPeriod": { "type": "string", "description": "Billing recurrence (e.g. شهرياً, سنوياً)" },
+        "description": { "type": "string", "description": "Summary description of the plan target audience" },
+        "features": { "type": "array", "description": "List of included plan features" },
+        "notIncludedFeatures": { "type": "array", "description": "List of optional non-included features" },
+        "isPopular": { "type": "boolean", "description": "Whether this plan is highlighted as featured/popular" },
+        "buttonText": { "type": "string", "description": "Call-to-action button text" },
+        "buttonActionType": { "type": "string", "description": "Button action type (register, contact, whatsapp, custom_url)" },
+        "buttonLink": { "type": "string", "description": "Custom URL destination if applicable" },
+        "whatsappCustomMessage": { "type": "string", "description": "Custom WhatsApp query prefill" },
+        "order": { "type": "number", "description": "Display order index" },
+        "isActive": { "type": "boolean", "description": "Whether the plan is published and active" },
+        "createdAt": { "type": "string", "description": "ISO creation timestamp" },
+        "updatedAt": { "type": "string", "description": "ISO modification timestamp" }
+      },
+      "required": ["id", "name", "price", "billingPeriod", "description", "features", "createdAt"]
     }
   }
 }

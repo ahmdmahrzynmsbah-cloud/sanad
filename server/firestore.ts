@@ -990,6 +990,183 @@ export async function deletePartnerFromFirestore(partnerId: string): Promise<boo
   }
 }
 
+// --------------------------------------------------------------------------
+// Subscription Plans (خطط وباقات الاشتراك)
+// --------------------------------------------------------------------------
+export interface StoredSubscriptionPlan {
+  id: string;
+  name: string;
+  badge?: string;
+  price: number | string;
+  currency?: string;
+  billingPeriod: string;
+  description: string;
+  features: string[];
+  notIncludedFeatures?: string[];
+  isPopular?: boolean;
+  buttonText?: string;
+  buttonActionType?: 'register' | 'contact' | 'whatsapp' | 'custom_url';
+  buttonLink?: string;
+  whatsappCustomMessage?: string;
+  order: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export const DEFAULT_SUBSCRIPTION_PLANS: StoredSubscriptionPlan[] = [
+  {
+    id: 'plan-trial',
+    name: 'الخطة التجريبية (المجانية)',
+    badge: 'تجربة مجانية',
+    price: 0,
+    currency: '₪',
+    billingPeriod: 'لمدة 7 أيام',
+    description: 'استكشف قوة الذكاء الاصطناعي التشريعي وسهولة الاستعلام عن القوانين الفلسطينية مجاناً.',
+    features: [
+      'الوصول لجميع نصوص القوانين والتشريعات (52+ قانون وقرار بقانون)',
+      'استشارات ذكية وفورية مع المستشار القانوني سَنَد 24/7',
+      'تخريج أرقام المواد والفقرات القانونية مع كل إجابة',
+      'دعم العمل المزدوج عبر الهواتف الذكية وأجهزة الكمبيوتر',
+    ],
+    notIncludedFeatures: [
+      'تصدير المذكرات والاستشارات بصيغ رسمية قابلة للطباعة',
+      'دعم واستشارات مخصصة لملفات التدقيق والمقاصة المعقدة',
+    ],
+    isPopular: false,
+    buttonText: 'ابدأ تجربتك المجانية الآن',
+    buttonActionType: 'register',
+    order: 1,
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'plan-pro',
+    name: 'الباقة الاحترافية (المحاسبون والمحامون)',
+    badge: 'الأكثر طلباً',
+    price: 99,
+    currency: '₪',
+    billingPeriod: 'شهرياً',
+    description: 'الخيار الأمثل للمحاسبين القانونيين، المحامين، المستشارين الضريبيين، وأصحاب الأعمال.',
+    features: [
+      'استعلامات واستشارات غير محدودة على مدار الساعة',
+      'تغطية شاملة لكافة قوانين الجمارك، ضريبة الدخل، وضريبة القيمة المضافة',
+      'محاكاة حسابية فورية للضرائب والجمارك الفلسطينية بالشيكل',
+      'تصدير وتوثيق المذكرات والاستشارات القانونية والضريبية',
+      'إمكانية تقديم اقتراحات وإضافة قوانين ولوائح تنظيمية جديدة للمراجعة',
+      'دعم فني واستشاري ذو أولوية عبر واتساب',
+    ],
+    notIncludedFeatures: [],
+    isPopular: true,
+    buttonText: 'اشترك الآن في الباقة الاحترافية',
+    buttonActionType: 'whatsapp',
+    whatsappCustomMessage: 'مرحباً، أرغب بالاشتراك في الباقة الاحترافية (المحاسبون والمحامون) في منصة مساعد الجمارك والضرائب الفلسطينية',
+    order: 2,
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'plan-enterprise',
+    name: 'باقة الشركات والمؤسسات الكبرى',
+    badge: 'للشركات والمصانع',
+    price: 249,
+    currency: '₪',
+    billingPeriod: 'شهرياً',
+    description: 'حلول تشريعية وضريبية وجمركية متقدمة للشركات الكبرى، المصانع، والمكاتب الاستشارية متعددة الفروع.',
+    features: [
+      'كل مميزات الباقة الاحترافية مع صلاحيات وصول متعددة لفريق العمل',
+      'استشارات متقدمة في التجارة الخارجية وملفات المقاصة والبيانات الجمركية',
+      'أرشفة مركزية لتقارير واستفسارات الفريق مع سجل زمني كامل',
+      'إسناد تشريعي لاتفاقيات التجارة الحرة والتعرفة الجمركية التفضيلية',
+      'مدير حساب استشاري مخصص وجلسات تدريب وتأهيل لفريق المحاسبة',
+    ],
+    notIncludedFeatures: [],
+    isPopular: false,
+    buttonText: 'تواصل للاشتراك المؤسسي',
+    buttonActionType: 'whatsapp',
+    whatsappCustomMessage: 'مرحباً، نود الاستفسار عن باقة الشركات والمؤسسات الكبرى في منصة مساعد الجمارك والضرائب الفلسطينية',
+    order: 3,
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+];
+
+export async function fetchSubscriptionPlansFromFirestore(): Promise<StoredSubscriptionPlan[] | null> {
+  if (isQuotaExceeded()) return null;
+  const db = initFirestore();
+  if (!db) return null;
+
+  try {
+    const col = collection(db, 'subscription_plans');
+    const snapshot = await getDocs(col);
+    if (snapshot.empty) {
+      return [];
+    }
+    const items: StoredSubscriptionPlan[] = [];
+    snapshot.forEach((docSnap) => {
+      items.push({
+        id: docSnap.id,
+        ...(docSnap.data() as StoredSubscriptionPlan),
+      });
+    });
+    // Sort by order
+    items.sort((a, b) => (a.order || 0) - (b.order || 0));
+    return items;
+  } catch (err) {
+    handleFirestoreError('fetchSubscriptionPlansFromFirestore', err);
+    return null;
+  }
+}
+
+export async function saveSubscriptionPlanToFirestore(plan: StoredSubscriptionPlan): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
+  const db = initFirestore();
+  if (!db) return false;
+
+  try {
+    const docRef = doc(db, 'subscription_plans', plan.id);
+    await setDoc(docRef, {
+      id: plan.id,
+      name: plan.name,
+      badge: plan.badge || '',
+      price: plan.price,
+      currency: plan.currency || '₪',
+      billingPeriod: plan.billingPeriod || 'شهرياً',
+      description: plan.description || '',
+      features: plan.features || [],
+      notIncludedFeatures: plan.notIncludedFeatures || [],
+      isPopular: plan.isPopular ?? false,
+      buttonText: plan.buttonText || 'اشترك الآن',
+      buttonActionType: plan.buttonActionType || 'register',
+      buttonLink: plan.buttonLink || '',
+      whatsappCustomMessage: plan.whatsappCustomMessage || '',
+      order: plan.order || 0,
+      isActive: plan.isActive !== false,
+      createdAt: plan.createdAt || new Date().toISOString(),
+      updatedAt: plan.updatedAt || new Date().toISOString(),
+    });
+    return true;
+  } catch (err) {
+    handleFirestoreError(`saveSubscriptionPlanToFirestore ${plan.id}`, err);
+    return false;
+  }
+}
+
+export async function deleteSubscriptionPlanFromFirestore(planId: string): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
+  const db = initFirestore();
+  if (!db) return false;
+
+  try {
+    const docRef = doc(db, 'subscription_plans', planId);
+    await deleteDoc(docRef);
+    return true;
+  } catch (err) {
+    handleFirestoreError(`deleteSubscriptionPlanFromFirestore ${planId}`, err);
+    return false;
+  }
+}
+
 // ----------------------------------------------------
 // Platform About & Vision/Mission Management (عن المنصة والرؤية والرسالة)
 // ----------------------------------------------------
@@ -1307,9 +1484,10 @@ export async function seedFirestoreIfEmpty(
     const sitesCol = collection(db, 'related_sites');
     const settingsCol = collection(db, 'system_settings');
     const partnersCol = collection(db, 'partners');
+    const plansCol = collection(db, 'subscription_plans');
 
     // Check all collections in parallel
-    const [lawSnap, userSnap, catSnap, supSnap, siteSnap, settingsSnap, partnersSnap] = await Promise.all([
+    const [lawSnap, userSnap, catSnap, supSnap, siteSnap, settingsSnap, partnersSnap, plansSnap] = await Promise.all([
       getDocs(lawsCol),
       getDocs(usersCol),
       getDocs(catCol),
@@ -1317,6 +1495,7 @@ export async function seedFirestoreIfEmpty(
       getDocs(sitesCol),
       getDocs(settingsCol),
       getDocs(partnersCol),
+      getDocs(plansCol),
     ]);
 
     const seedTasks: Promise<any>[] = [];
@@ -1363,6 +1542,11 @@ export async function seedFirestoreIfEmpty(
     if (partnersSnap.empty && initialPartners && initialPartners.length > 0) {
       console.log('Seeding default partners to Firestore cloud database...');
       seedTasks.push(Promise.all(initialPartners.map((p) => savePartnerToFirestore(p))));
+    }
+
+    if (plansSnap.empty) {
+      console.log('Seeding default subscription plans to Firestore cloud database...');
+      seedTasks.push(Promise.all(DEFAULT_SUBSCRIPTION_PLANS.map((plan) => saveSubscriptionPlanToFirestore(plan))));
     }
 
     if (seedTasks.length > 0) {

@@ -49,6 +49,7 @@ import {
   Link2,
   PhoneCall,
   Handshake,
+  CreditCard,
   User as UserIcon
 } from 'lucide-react';
 import { User, Law, LawCategory, LegalCategory, SystemBranding, PlatformAboutData, ContactInfo } from '../types';
@@ -58,6 +59,7 @@ import { compressImageClientSide } from '../utils/imageCompressor';
 import { SupervisorsAdminTab } from './admin/SupervisorsAdminTab';
 import { RelatedSitesAdminTab } from './admin/RelatedSitesAdminTab';
 import { PartnersAdminTab } from './admin/PartnersAdminTab';
+import { SubscriptionPlansAdminTab } from './admin/SubscriptionPlansAdminTab';
 import { AboutPlatformAdminTab } from './admin/AboutPlatformAdminTab';
 import { ContactAdminTab } from './admin/ContactAdminTab';
 import { LawRequestsAdminTab } from './admin/LawRequestsAdminTab';
@@ -113,7 +115,7 @@ interface AdminPortalProps {
 export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUpdated, onBrandingUpdated, onAboutUpdated, onContactUpdated }) => {
   const isSupervisor = currentAdmin?.role === 'supervisor';
 
-  const [activeTab, setActiveTab] = useState<'requests' | 'laws' | 'law-requests' | 'supervisors' | 'related-sites' | 'partners' | 'about' | 'contact' | 'settings'>('requests');
+  const [activeTab, setActiveTab] = useState<'requests' | 'laws' | 'law-requests' | 'supervisors' | 'related-sites' | 'partners' | 'plans' | 'about' | 'contact' | 'settings'>('requests');
 
   // Law Requests state
   const [pendingLawRequestsCount, setPendingLawRequestsCount] = useState<number>(0);
@@ -2000,32 +2002,32 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6">
       {/* Official Government Admin Header Banner */}
-      <div className="bg-gradient-to-l from-[#193225] via-[#12281e] to-[#0d1c15] text-white rounded-xl p-4 sm:p-6 shadow-sm border border-[#2b5942] flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="bg-[#12281e] text-white rounded-2xl p-5 sm:p-6 shadow-xs border border-emerald-900/60 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-[#f5d77f] mb-1">
-            <ShieldCheck className="w-4 h-4 text-[#d4af37]" />
+          <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400 mb-1.5">
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
             <span>لوحة تحكم المسؤول المعتمد • وزارة المالية</span>
           </div>
           <h2 className="text-xl sm:text-2xl font-black tracking-tight">
             نظام الإشراف المركزي وإدارة التشريعات
           </h2>
-          <p className="text-xs sm:text-sm text-[#a3c9b3] mt-1 max-w-2xl">
+          <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl">
             مراجعة واعتماد طلبات حسابات المستفيدين الجدد، وإدارة نصوص المواد والقوانين المالية والجمركية المحقونة في قاعدة معرفة البوت.
           </p>
         </div>
 
         {/* Global Stats Badges */}
         <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
-          <div className="bg-[#1b3d2d] border border-[#2d6148] px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-lg text-center min-w-[80px] sm:min-w-[90px]">
-            <span className="block text-[10px] sm:text-[11px] text-[#93dfb3]">طلبات معلقة</span>
-            <span className="text-base sm:text-lg font-bold text-amber-300">{pendingCount}</span>
+          <div className="bg-white/5 border border-white/10 px-3.5 py-2 rounded-xl text-center min-w-[85px] sm:min-w-[95px]">
+            <span className="block text-[10px] sm:text-[11px] text-slate-300 font-medium">طلبات معلقة</span>
+            <span className="text-base sm:text-lg font-bold text-amber-400">{pendingCount}</span>
           </div>
-          <div className="bg-[#1b3d2d] border border-[#2d6148] px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-lg text-center min-w-[80px] sm:min-w-[90px]">
-            <span className="block text-[10px] sm:text-[11px] text-[#93dfb3]">قوانين بالمعرفة</span>
-            <span className="text-base sm:text-lg font-bold text-emerald-300">{laws.length}</span>
+          <div className="bg-white/5 border border-white/10 px-3.5 py-2 rounded-xl text-center min-w-[85px] sm:min-w-[95px]">
+            <span className="block text-[10px] sm:text-[11px] text-slate-300 font-medium">قوانين بالمعرفة</span>
+            <span className="text-base sm:text-lg font-bold text-emerald-400">{laws.length}</span>
           </div>
-          <div className="bg-[#163527] border border-[#275940] px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-lg flex flex-col justify-center text-right">
-            <span className="text-[10px] sm:text-[11px] text-[#86efac] flex items-center gap-1">
+          <div className="bg-white/5 border border-white/10 px-3.5 py-2 rounded-xl flex flex-col justify-center text-right">
+            <span className="text-[10px] sm:text-[11px] text-emerald-400 flex items-center gap-1 font-medium">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
               قاعدة بيانات سحابية متصلة
             </span>
@@ -2037,15 +2039,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       </div>
 
       {/* Cloud Database Integration Info Bar */}
-      <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 sm:p-4 text-xs flex items-center justify-between flex-wrap gap-2.5 sm:gap-3">
+      <div className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4 text-xs flex items-center justify-between flex-wrap gap-2.5 sm:gap-3 shadow-xs">
         <div className="flex items-center gap-2.5 sm:gap-3">
-          <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold shrink-0">
+          <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold shrink-0 border border-emerald-100">
             <Database className="w-4 h-4" />
           </div>
           <div>
-            <div className="font-bold text-emerald-900 flex items-center gap-1.5 sm:gap-2 flex-wrap">
+            <div className="font-bold text-slate-900 flex items-center gap-1.5 sm:gap-2 flex-wrap">
               <span>قاعدة البيانات السحابية: Google Cloud Firestore</span>
-              <span className="bg-emerald-200/80 text-emerald-800 text-[10px] px-2 py-0.5 rounded-full font-bold">
+              <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] px-2 py-0.5 rounded-full font-bold">
                 نشطة وسريعة للغاية
               </span>
             </div>
@@ -2058,7 +2060,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
             fetchSystemStatus();
           }}
           disabled={isSyncing}
-          className="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer min-h-[36px]"
+          className="px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer min-h-[36px]"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
           {isSyncing ? 'جارِ التحقق...' : 'تحديث البيانات السحابية'}
@@ -2066,14 +2068,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       </div>
 
       {/* Main Tabs Navigation */}
-      <div className="flex overflow-x-auto whitespace-nowrap border-b border-gray-200 bg-white rounded-t-xl px-2 sm:px-4 pt-3 shadow-xs scrollbar-none touch-scroll overscroll-x-contain">
+      <div className="flex overflow-x-auto whitespace-nowrap border-b border-slate-200 bg-white rounded-2xl px-2 sm:px-4 pt-3 shadow-xs scrollbar-none touch-scroll overscroll-x-contain">
         <button
           id="admin-tab-requests"
           onClick={() => setActiveTab('requests')}
           className={`pb-3 px-3.5 sm:px-5 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 transition-all shrink-0 cursor-pointer ${
             activeTab === 'requests'
-              ? 'border-[#12281e] text-[#12281e]'
-              : 'border-transparent text-gray-500 hover:text-gray-900'
+              ? 'border-emerald-700 text-emerald-800'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
           }`}
         >
           <Users className="w-4 h-4" />
@@ -2090,13 +2092,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
           onClick={() => setActiveTab('laws')}
           className={`pb-3 px-3.5 sm:px-5 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 transition-all shrink-0 cursor-pointer ${
             activeTab === 'laws'
-              ? 'border-[#12281e] text-[#12281e]'
-              : 'border-transparent text-gray-500 hover:text-gray-900'
+              ? 'border-emerald-700 text-emerald-800'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
           }`}
         >
           <BookOpen className="w-4 h-4" />
           قاعدة المعرفة والقوانين
-          <span className="bg-[#e2e8f0] text-gray-700 text-[10px] sm:text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full font-bold">
+          <span className="bg-slate-100 text-slate-700 text-[10px] sm:text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full font-bold">
             {laws.length}
           </span>
         </button>
@@ -2106,18 +2108,18 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
           onClick={() => setActiveTab('law-requests')}
           className={`pb-3 px-3.5 sm:px-5 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 transition-all shrink-0 cursor-pointer ${
             activeTab === 'law-requests'
-              ? 'border-[#12281e] text-[#12281e]'
-              : 'border-transparent text-gray-500 hover:text-gray-900'
+              ? 'border-emerald-700 text-emerald-800'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
           }`}
         >
-          <FileText className="w-4 h-4 text-emerald-700" />
+          <FileText className="w-4 h-4" />
           <span>طلبات القوانين</span>
           {pendingLawRequestsCount > 0 ? (
             <span className="bg-amber-500 text-white text-[10px] sm:text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full font-extrabold animate-pulse">
               {pendingLawRequestsCount} جديد
             </span>
           ) : (
-            <span className="bg-gray-100 text-gray-600 text-[10px] sm:text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full font-bold">
+            <span className="bg-slate-100 text-slate-600 text-[10px] sm:text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full font-bold">
               0
             </span>
           )}
@@ -2129,8 +2131,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
           onClick={() => setActiveTab('supervisors')}
           className={`pb-3 px-3.5 sm:px-5 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 transition-all shrink-0 cursor-pointer ${
             activeTab === 'supervisors'
-              ? 'border-[#12281e] text-[#12281e]'
-              : 'border-transparent text-gray-500 hover:text-gray-900'
+              ? 'border-emerald-700 text-emerald-800'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
           }`}
         >
           <Users className="w-4 h-4" />
@@ -2144,8 +2146,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
           onClick={() => setActiveTab('related-sites')}
           className={`pb-3 px-3.5 sm:px-5 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 transition-all shrink-0 cursor-pointer ${
             activeTab === 'related-sites'
-              ? 'border-[#12281e] text-[#12281e]'
-              : 'border-transparent text-gray-500 hover:text-gray-900'
+              ? 'border-emerald-700 text-emerald-800'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
           }`}
         >
           <Globe className="w-4 h-4" />
@@ -2159,12 +2161,27 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
           onClick={() => setActiveTab('partners')}
           className={`pb-3 px-3.5 sm:px-5 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 transition-all shrink-0 cursor-pointer ${
             activeTab === 'partners'
-              ? 'border-[#12281e] text-[#12281e]'
-              : 'border-transparent text-gray-500 hover:text-gray-900'
+              ? 'border-emerald-700 text-emerald-800'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
           }`}
         >
-          <Handshake className="w-4 h-4 text-[#d4af37]" />
+          <Handshake className="w-4 h-4" />
           شركاؤنا
+        </button>
+        )}
+
+        {!isSupervisor && (
+        <button
+          id="admin-tab-subscription-plans"
+          onClick={() => setActiveTab('plans')}
+          className={`pb-3 px-3.5 sm:px-5 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 transition-all shrink-0 cursor-pointer ${
+            activeTab === 'plans'
+              ? 'border-emerald-700 text-emerald-800'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
+          }`}
+        >
+          <CreditCard className="w-4 h-4" />
+          خطط وباقات الاشتراك
         </button>
         )}
 
@@ -2174,11 +2191,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
           onClick={() => setActiveTab('about')}
           className={`pb-3 px-3.5 sm:px-5 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 transition-all shrink-0 cursor-pointer ${
             activeTab === 'about'
-              ? 'border-[#12281e] text-[#12281e]'
-              : 'border-transparent text-gray-500 hover:text-gray-900'
+              ? 'border-emerald-700 text-emerald-800'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
           }`}
         >
-          <Target className="w-4 h-4 text-[#d4af37]" />
+          <Target className="w-4 h-4" />
           عن المنصة (الرؤية والرسالة)
         </button>
         )}
@@ -2189,11 +2206,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
           onClick={() => setActiveTab('contact')}
           className={`pb-3 px-3.5 sm:px-5 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 transition-all shrink-0 cursor-pointer ${
             activeTab === 'contact'
-              ? 'border-[#12281e] text-[#12281e]'
-              : 'border-transparent text-gray-500 hover:text-gray-900'
+              ? 'border-emerald-700 text-emerald-800'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
           }`}
         >
-          <PhoneCall className="w-4 h-4 text-emerald-600" />
+          <PhoneCall className="w-4 h-4" />
           بيانات التواصل (اتصل بنا)
         </button>
         )}
@@ -2204,8 +2221,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
           onClick={() => setActiveTab('settings')}
           className={`pb-3 px-3.5 sm:px-5 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 transition-all shrink-0 cursor-pointer ${
             activeTab === 'settings'
-              ? 'border-[#12281e] text-[#12281e]'
-              : 'border-transparent text-gray-500 hover:text-gray-900'
+              ? 'border-emerald-700 text-emerald-800'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
           }`}
         >
           <Settings className="w-4 h-4" />
@@ -4644,6 +4661,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       {/* ======================================================== */}
       {activeTab === 'partners' && (
         <PartnersAdminTab />
+      )}
+
+      {/* ======================================================== */}
+      {/* TAB: SUBSCRIPTION PLANS MANAGEMENT (خطط وباقات الاشتراك) */}
+      {/* ======================================================== */}
+      {activeTab === 'plans' && (
+        <SubscriptionPlansAdminTab />
       )}
 
       {/* ======================================================== */}

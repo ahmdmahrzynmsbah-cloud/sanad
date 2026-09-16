@@ -23,11 +23,13 @@ import {
   Settings,
   Target,
   Eye,
-  PhoneCall
+  PhoneCall,
+  CreditCard,
+  ChevronDown
 } from 'lucide-react';
 import { User, SystemBranding } from '../types';
 
-export type ActiveView = 'home' | 'supervisors' | 'related-sites' | 'partners' | 'about' | 'contact' | 'chat' | 'auth' | 'admin-login' | 'admin-portal';
+export type ActiveView = 'home' | 'supervisors' | 'related-sites' | 'partners' | 'about' | 'contact' | 'chat' | 'auth' | 'admin-login' | 'admin-portal' | 'plans';
 
 interface HeaderProps {
   currentUser: User | null;
@@ -54,6 +56,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const [imageError, setImageError] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
 
   // Fallback defaults
   const systemName = branding?.systemName || 'مساعد الجمارك والضرائب';
@@ -69,6 +72,21 @@ export const Header: React.FC<HeaderProps> = ({
   const handleNav = (view: ActiveView) => {
     setActiveView(view);
     setIsMobileMenuOpen(false);
+    setIsMoreMenuOpen(false);
+  };
+
+  const handleNavToPlans = () => {
+    setIsMobileMenuOpen(false);
+    setIsMoreMenuOpen(false);
+    if (activeView !== 'home') {
+      setActiveView('home');
+    }
+    setTimeout(() => {
+      const el = document.getElementById('subscription-plans-section');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+      }
+    }, 120);
   };
 
   const handleOpenLogin = () => {
@@ -152,18 +170,18 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* Center Navigation Controls (الرئيسية + المشرفين + مواقع ذات صلة + الرؤية) */}
-          <div className="hidden lg:flex flex-shrink-0 items-center justify-center gap-2 z-0">
+          {/* Center Navigation Controls */}
+          <nav aria-label="التنقل الرئيسي" className="hidden xl:flex items-center justify-center gap-1.5 2xl:gap-2">
             <button
               id="header-nav-home-btn"
               onClick={() => handleNav('home')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                 activeView === 'home'
                   ? 'bg-emerald-600 text-white shadow-xs'
                   : 'bg-white/5 text-slate-200 hover:bg-white/10 hover:text-white border border-white/10'
               }`}
             >
-              <Home className="w-3.5 h-3.5" />
+              <Home className="w-3.5 h-3.5 shrink-0" />
               <span>الرئيسية</span>
             </button>
 
@@ -171,146 +189,216 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 id="header-nav-chat-btn"
                 onClick={() => handleNav('chat')}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                   activeView === 'chat'
                     ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'bg-emerald-950/50 text-emerald-300 hover:bg-emerald-900/60 hover:text-white border border-emerald-500/30'
+                    : 'bg-white/5 text-slate-200 hover:bg-white/10 hover:text-white border border-white/10'
                 }`}
               >
-                <MessageSquare className="w-3.5 h-3.5 text-[#d4af37]" />
+                <MessageSquare className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                 <span>المستشار الذكي</span>
               </button>
             )}
 
             <button
+              id="header-nav-plans-btn"
+              onClick={handleNavToPlans}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                activeView === 'plans'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-white/5 text-slate-200 hover:bg-white/10 hover:text-white border border-white/10'
+              }`}
+              title="خطط وباقات الاشتراك"
+            >
+              <CreditCard className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>خطط الاشتراك</span>
+            </button>
+
+            <button
               id="header-nav-supervisors-btn"
               onClick={() => handleNav('supervisors')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                 activeView === 'supervisors'
                   ? 'bg-emerald-600 text-white shadow-xs'
                   : 'bg-white/5 text-slate-200 hover:bg-white/10 hover:text-white border border-white/10'
               }`}
             >
-              <Users className="w-3.5 h-3.5" />
+              <Users className="w-3.5 h-3.5 shrink-0" />
               <span>المشرفين</span>
             </button>
 
             <button
               id="header-nav-related-sites-btn"
               onClick={() => handleNav('related-sites')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                 activeView === 'related-sites'
                   ? 'bg-emerald-600 text-white shadow-xs'
                   : 'bg-white/5 text-slate-200 hover:bg-white/10 hover:text-white border border-white/10'
               }`}
             >
-              <Globe className="w-3.5 h-3.5" />
+              <Globe className="w-3.5 h-3.5 shrink-0" />
               <span>مواقع ذات صلة</span>
             </button>
 
-            <button
-              id="header-nav-partners-btn"
-              onClick={() => handleNav('partners')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                activeView === 'partners'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'bg-white/5 text-slate-200 hover:bg-white/10 hover:text-white border border-white/10'
-              }`}
-            >
-              <Handshake className="w-3.5 h-3.5 text-[#d4af37]" />
-              <span>شركاؤنا</span>
-            </button>
+            {/* Quick Links: Partners, Vision, Contact (with Responsive More Dropdown) */}
+            <div className="hidden 2xl:flex items-center gap-1.5">
+              <button
+                id="header-nav-partners-btn"
+                onClick={() => handleNav('partners')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                  activeView === 'partners'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-white/5 text-slate-200 hover:bg-white/10 hover:text-white border border-white/10'
+                }`}
+              >
+                <Handshake className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                <span>شركاؤنا</span>
+              </button>
 
-            <button
-              id="header-nav-about-btn"
-              onClick={() => handleNav('about')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                activeView === 'about'
-                  ? 'bg-emerald-700/80 text-white border border-emerald-500/40'
-                  : 'bg-white/5 text-slate-200 hover:bg-white/10 hover:text-white border border-[#d4af37]/30 hover:border-[#d4af37]/60'
-              }`}
-              title="الرؤية والرسالة"
-            >
-              <Eye className="w-3.5 h-3.5 text-[#d4af37]" />
-              <span>الرؤية</span>
-            </button>
+              <button
+                id="header-nav-about-btn"
+                onClick={() => handleNav('about')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                  activeView === 'about'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-white/5 text-slate-200 hover:bg-white/10 hover:text-white border border-white/10'
+                }`}
+                title="الرؤية والرسالة"
+              >
+                <Eye className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                <span>الرؤية</span>
+              </button>
 
-            <button
-              id="header-nav-contact-btn"
-              onClick={() => handleNav('contact')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                activeView === 'contact'
-                  ? 'bg-emerald-700/80 text-white border border-emerald-500/40'
-                  : 'bg-white/5 text-slate-200 hover:bg-white/10 hover:text-white border border-emerald-500/30 hover:border-emerald-500/60'
-              }`}
-              title="اتصل بنا وتواصل مباشر"
-            >
-              <PhoneCall className="w-3.5 h-3.5 text-emerald-400" />
-              <span>اتصل بنا</span>
-            </button>
-          </div>
+              <button
+                id="header-nav-contact-btn"
+                onClick={() => handleNav('contact')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                  activeView === 'contact'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-white/5 text-slate-200 hover:bg-white/10 hover:text-white border border-white/10'
+                }`}
+                title="اتصل بنا وتواصل مباشر"
+              >
+                <PhoneCall className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>اتصل بنا</span>
+              </button>
+            </div>
+
+            {/* "More" Dropdown Menu on Screens between xl and 2xl */}
+            <div className="relative 2xl:hidden">
+              <button
+                id="header-nav-more-btn"
+                onClick={() => setIsMoreMenuOpen((prev) => !prev)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                  isMoreMenuOpen || ['partners', 'about', 'contact'].includes(activeView)
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-white/5 text-slate-200 hover:bg-white/10 hover:text-white border border-white/10'
+                }`}
+              >
+                <span>المزيد</span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isMoreMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isMoreMenuOpen && (
+                <div
+                  className="absolute left-0 mt-2 w-44 rounded-xl bg-[#0c221c] border border-emerald-800/60 shadow-xl py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150 text-right"
+                  onClick={() => setIsMoreMenuOpen(false)}
+                >
+                  <button
+                    onClick={() => handleNav('partners')}
+                    className={`w-full px-3.5 py-2 text-xs font-bold flex items-center gap-2 hover:bg-white/10 transition-colors ${
+                      activeView === 'partners' ? 'text-emerald-400 bg-white/5' : 'text-slate-200'
+                    }`}
+                  >
+                    <Handshake className="w-3.5 h-3.5 text-slate-300" />
+                    <span>شركاؤنا</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleNav('about')}
+                    className={`w-full px-3.5 py-2 text-xs font-bold flex items-center gap-2 hover:bg-white/10 transition-colors ${
+                      activeView === 'about' ? 'text-emerald-400 bg-white/5' : 'text-slate-200'
+                    }`}
+                  >
+                    <Eye className="w-3.5 h-3.5 text-slate-300" />
+                    <span>الرؤية والرسالة</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleNav('contact')}
+                    className={`w-full px-3.5 py-2 text-xs font-bold flex items-center gap-2 hover:bg-white/10 transition-colors ${
+                      activeView === 'contact' ? 'text-emerald-400 bg-white/5' : 'text-slate-200'
+                    }`}
+                  >
+                    <PhoneCall className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>اتصل بنا</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </nav>
 
           {/* Right Controls (دخول المسؤول + بيانات المستخدم) */}
-          <div className="flex-1 flex items-center justify-end gap-2 z-10">
+          <div className="flex items-center justify-end gap-2 z-10 shrink-0">
             <div className="hidden md:flex items-center gap-2">
               {currentAdmin ? (
               <button
                 id="header-nav-admin-portal-btn"
                 onClick={() => handleNav('admin-portal')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                   activeView === 'admin-portal'
-                    ? 'bg-[#b08d24] text-white shadow-sm'
-                    : 'bg-amber-950/40 text-amber-200 hover:bg-amber-950/70 border border-amber-500/30'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-white/10 text-emerald-200 hover:bg-white/15 border border-emerald-500/30'
                 }`}
               >
-                <Shield className="w-3.5 h-3.5 text-amber-300" />
+                <Shield className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                 <span>لوحة التحكم</span>
               </button>
             ) : (
               <button
                 id="header-nav-admin-login-btn"
                 onClick={() => handleNav('admin-login')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                   activeView === 'admin-login'
-                    ? 'bg-amber-950/70 text-amber-200 border border-amber-500/40'
+                    ? 'bg-white/15 text-white border border-white/20'
                     : 'text-slate-300 hover:text-white hover:bg-white/5 border border-transparent'
                 }`}
                 title="بوابة دخول المسؤول"
               >
-                <Lock className="w-3.5 h-3.5 text-[#d4af37]" />
+                <Lock className="w-3.5 h-3.5 text-slate-300 shrink-0" />
                 <span>المسؤول</span>
               </button>
             )}
 
             {/* Current user badge */}
             {currentUser && (
-              <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl text-xs">
+              <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-2.5 py-1.5 rounded-xl text-xs shrink-0 max-w-[200px]">
                 <span
-                  className={`w-2 h-2 rounded-full ${
+                  className={`w-2 h-2 rounded-full shrink-0 ${
                     currentUser.isSubscribed
-                      ? 'bg-amber-400'
+                      ? 'bg-emerald-400'
                       : currentUser.status === 'frozen' || currentUser.subscriptionStatus === 'frozen'
                       ? 'bg-purple-400'
                       : 'bg-emerald-400'
                   }`}
                 ></span>
-                <span className="text-slate-200 font-medium truncate max-w-[120px]">
+                <span className="text-slate-200 font-medium truncate max-w-[90px]">
                   {currentUser.fullName || currentUser.username}
                 </span>
 
                 {currentUser.isSubscribed ? (
-                  <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/30 flex items-center gap-1 font-bold">
-                    <Crown className="w-2.5 h-2.5" />
-                    مشترك دائم
+                  <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1 font-bold shrink-0">
+                    <Crown className="w-2.5 h-2.5 shrink-0" />
+                    مشترك
                   </span>
                 ) : currentUser.status === 'frozen' || currentUser.subscriptionStatus === 'frozen' ? (
-                  <span className="text-[10px] bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full border border-purple-500/30 flex items-center gap-1 font-bold">
-                    <Snowflake className="w-2.5 h-2.5" />
+                  <span className="text-[10px] bg-purple-500/20 text-purple-300 px-1.5 py-0.5 rounded-full border border-purple-500/30 flex items-center gap-1 font-bold shrink-0">
+                    <Snowflake className="w-2.5 h-2.5 shrink-0" />
                     مجمد
                   </span>
                 ) : (
-                  <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
-                    <Clock className="w-2.5 h-2.5" />
+                  <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1 shrink-0">
+                    <Clock className="w-2.5 h-2.5 shrink-0" />
                     تجريبي
                   </span>
                 )}
@@ -318,7 +406,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <button
                   id="header-user-logout-btn"
                   onClick={onLogout}
-                  className="text-red-300 hover:text-red-200 p-0.5 mr-1 transition-colors cursor-pointer"
+                  className="text-red-300 hover:text-red-200 p-0.5 mr-0.5 transition-colors cursor-pointer shrink-0"
                   title="تسجيل الخروج"
                 >
                   <LogOut className="w-3.5 h-3.5" />
@@ -328,13 +416,13 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Current admin badge */}
             {currentAdmin && (
-              <div className="flex items-center gap-2 bg-amber-950/40 border border-amber-500/30 px-3 py-1.5 rounded-xl text-xs">
-                <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-                <span className="text-amber-200 font-medium">مسؤول النظام</span>
+              <div className="flex items-center gap-2 bg-emerald-950/40 border border-emerald-500/30 px-2.5 py-1.5 rounded-xl text-xs shrink-0">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
+                <span className="text-emerald-200 font-medium whitespace-nowrap">مسؤول النظام</span>
                 <button
                   id="header-admin-logout-btn"
                   onClick={onLogout}
-                  className="text-red-300 hover:text-red-200 p-0.5 mr-1 transition-colors cursor-pointer"
+                  className="text-red-300 hover:text-red-200 p-0.5 mr-0.5 transition-colors cursor-pointer shrink-0"
                   title="تسجيل الخروج من لوحة الإدارة"
                 >
                   <LogOut className="w-3.5 h-3.5" />
@@ -343,36 +431,36 @@ export const Header: React.FC<HeaderProps> = ({
             )}
 
             {!currentUser && !currentAdmin && (
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   id="header-nav-user-login-btn"
                   onClick={handleOpenLogin}
-                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/15 text-white border border-white/15 flex items-center gap-1.5 transition-all cursor-pointer"
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/15 text-white border border-white/15 flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
                 >
-                  <UserCheck className="w-3.5 h-3.5" />
+                  <UserCheck className="w-3.5 h-3.5 shrink-0" />
                   <span>تسجيل الدخول</span>
                 </button>
 
                 <button
                   id="header-nav-user-register-btn"
                   onClick={handleOpenRegister}
-                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-[#f5d77f]" />
+                  <Sparkles className="w-3.5 h-3.5 text-[#f5d77f] shrink-0" />
                   <span>إنشاء حساب</span>
                 </button>
               </div>
             )}
             </div>
 
-            {/* Mobile Right Controls: Hamburger Menu */}
-            <div className="flex items-center gap-1.5 md:hidden">
+            {/* Tablet & Mobile Menu Toggle */}
+            <div className="flex items-center gap-1.5 xl:hidden">
               <button
                 id="mobile-menu-toggle-btn"
                 type="button"
                 onClick={() => setIsMobileMenuOpen((prev) => !prev)}
                 aria-label="القائمة الرئيسية"
-                className="p-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/10 transition-colors flex items-center justify-center cursor-pointer min-w-[44px] min-h-[44px] shrink-0"
+                className="p-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/10 transition-colors flex items-center justify-center cursor-pointer min-w-[42px] min-h-[42px] shrink-0"
               >
                 {isMobileMenuOpen ? <X className="w-5 h-5 text-emerald-300" /> : <Menu className="w-5 h-5 text-white" />}
               </button>
@@ -381,9 +469,9 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Mobile Drawer Navigation Menu */}
+      {/* Mobile & Tablet Drawer Navigation Menu */}
       {isMobileMenuOpen && (
-        <div className="md:hidden border-t border-[#1d473a] bg-[#0c221c] animate-in slide-in-from-top-2 duration-200 px-4 py-4 space-y-3 shadow-2xl max-h-[calc(100vh-64px)] overflow-y-auto overscroll-contain touch-scroll">
+        <div className="xl:hidden border-t border-[#1d473a] bg-[#0c221c] animate-in slide-in-from-top-2 duration-200 px-4 py-4 space-y-3 shadow-2xl max-h-[calc(100vh-64px)] overflow-y-auto overscroll-contain touch-scroll">
           {/* User Status Card (if logged in) */}
           {currentUser && (
             <div className="bg-[#14362b] border border-[#235b48] rounded-2xl p-3.5 flex items-center justify-between gap-3">
@@ -530,19 +618,35 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
 
             <button
+              id="header-nav-plans-mobile-btn"
+              onClick={handleNavToPlans}
+              className={`w-full p-3 rounded-xl text-xs font-bold flex items-center justify-between transition-all text-right cursor-pointer ${
+                activeView === 'plans'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10'
+              }`}
+            >
+              <span className="flex items-center gap-2.5">
+                <CreditCard className="w-4 h-4 text-emerald-400" />
+                <span>خطط وباقات الاشتراك</span>
+              </span>
+              <ChevronLeft className="w-4 h-4 text-slate-400" />
+            </button>
+
+            <button
               id="header-nav-about-mobile-btn"
               onClick={() => handleNav('about')}
               className={`w-full p-3 rounded-xl text-xs font-bold flex items-center justify-between transition-all text-right cursor-pointer ${
                 activeView === 'about'
-                  ? 'bg-emerald-700/80 text-white border border-emerald-500/40'
-                  : 'bg-white/5 hover:bg-white/10 text-slate-200 border border-[#d4af37]/30'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10'
               }`}
             >
               <span className="flex items-center gap-2.5">
-                <Eye className="w-4 h-4 text-[#d4af37]" />
+                <Eye className="w-4 h-4 text-slate-300" />
                 <span>الرؤية</span>
               </span>
-              <ChevronLeft className="w-4 h-4 text-[#d4af37]" />
+              <ChevronLeft className="w-4 h-4 text-slate-400" />
             </button>
 
             <button
@@ -550,15 +654,15 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={() => handleNav('contact')}
               className={`w-full p-3 rounded-xl text-xs font-bold flex items-center justify-between transition-all text-right cursor-pointer ${
                 activeView === 'contact'
-                  ? 'bg-emerald-700/80 text-white border border-emerald-500/40'
-                  : 'bg-white/5 hover:bg-white/10 text-slate-200 border border-emerald-500/30'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10'
               }`}
             >
               <span className="flex items-center gap-2.5">
                 <PhoneCall className="w-4 h-4 text-emerald-400" />
                 <span>اتصل بنا</span>
               </span>
-              <ChevronLeft className="w-4 h-4 text-emerald-400" />
+              <ChevronLeft className="w-4 h-4 text-slate-400" />
             </button>
 
             {currentAdmin ? (
@@ -566,27 +670,27 @@ export const Header: React.FC<HeaderProps> = ({
                 onClick={() => handleNav('admin-portal')}
                 className={`w-full p-3 rounded-xl text-xs font-bold flex items-center justify-between transition-all text-right cursor-pointer ${
                   activeView === 'admin-portal'
-                    ? 'bg-amber-600 text-white'
-                    : 'bg-amber-950/40 text-amber-200 border border-amber-500/30'
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-emerald-950/40 text-emerald-200 border border-emerald-500/30'
                 }`}
               >
                 <span className="flex items-center gap-2.5">
-                  <Settings className="w-4 h-4 text-amber-300" />
+                  <Shield className="w-4 h-4 text-emerald-400" />
                   <span>لوحة تحكم المسؤول المعتمد</span>
                 </span>
-                <ChevronLeft className="w-4 h-4 text-amber-300" />
+                <ChevronLeft className="w-4 h-4 text-emerald-400" />
               </button>
             ) : (
               <button
                 onClick={() => handleNav('admin-login')}
                 className={`w-full p-3 rounded-xl text-xs font-bold flex items-center justify-between transition-all text-right cursor-pointer ${
                   activeView === 'admin-login'
-                    ? 'bg-amber-950/80 text-amber-200 border border-amber-500/50'
-                    : 'bg-white/5 hover:bg-white/10 text-slate-300'
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10'
                 }`}
               >
                 <span className="flex items-center gap-2.5">
-                  <Lock className="w-4 h-4 text-[#d4af37]" />
+                  <Lock className="w-4 h-4 text-slate-300" />
                   <span>دخول المسؤول المعتمد</span>
                 </span>
                 <ChevronLeft className="w-4 h-4 text-slate-400" />

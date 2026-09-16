@@ -100,23 +100,19 @@ export const ContactUsView: React.FC<ContactUsViewProps> = ({ onBackToHome, cont
   return (
     <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-10 text-slate-800 space-y-5 sm:space-y-8" dir="rtl">
       {/* Top Header Card */}
-      <div className="bg-gradient-to-br from-[#12281e] via-[#1b3d2f] to-[#0c1c15] text-white rounded-2xl sm:rounded-3xl p-4 sm:p-8 lg:p-10 shadow-xl border border-emerald-500/20 relative overflow-hidden">
-        {/* Subtle decorative circles */}
-        <div className="absolute top-0 left-0 -translate-x-12 -translate-y-12 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
-        <div className="absolute bottom-0 right-0 translate-x-12 translate-y-12 w-72 h-72 bg-[#d4af37]/10 rounded-full blur-3xl pointer-events-none"></div>
-
+      <div className="bg-[#12281e] text-white rounded-2xl sm:rounded-3xl p-5 sm:p-8 lg:p-10 shadow-xs border border-emerald-900/60 relative overflow-hidden">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6">
           <div className="space-y-2 sm:space-y-3 max-w-3xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-[11px] sm:text-xs font-bold shadow-xs">
+            <div className="inline-flex items-center gap-2 px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full bg-white/10 border border-white/15 text-emerald-400 text-[11px] sm:text-xs font-bold shadow-xs">
               <PhoneCall className="w-3.5 h-3.5 text-emerald-400" />
               <span>قنوات التواصل المباشر والمساعدة الفورية</span>
             </div>
 
-            <h1 className="text-xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-white">
+            <h1 className="text-xl sm:text-3xl lg:text-4xl font-black tracking-tight text-white">
               اتصل بنا وخدمة المكلفين والمشتركين
             </h1>
 
-            <p className="text-xs sm:text-base text-slate-300 leading-relaxed">
+            <p className="text-xs sm:text-base text-slate-300 leading-relaxed font-normal">
               يسعدنا تواصلكم المباشر مع إدارة المنظومة وفريق الدعم الفني والاستشارات الجمركية والضريبية. نحن هنا لتقديم المساعدة الفورية، تفعيل الاشتراكات، والإجابة على استفساراتكم.
             </p>
           </div>
@@ -125,7 +121,7 @@ export const ContactUsView: React.FC<ContactUsViewProps> = ({ onBackToHome, cont
             <button
               id="contact-back-to-home-btn"
               onClick={onBackToHome}
-              className="self-start md:self-center px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-2 transition-all border border-white/15 hover:border-emerald-400/40 cursor-pointer shadow-xs shrink-0"
+              className="self-start md:self-center px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-2 transition-all border border-white/15 hover:border-emerald-500/40 cursor-pointer shadow-xs shrink-0"
             >
               <ArrowRight className="w-4 h-4 text-emerald-400" />
               <span>العودة للرئيسية</span>

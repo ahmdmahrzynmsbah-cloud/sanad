@@ -82,19 +82,16 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
       {/* Split-Screen Enterprise Government Admin Card */}
       <div className="bg-white rounded-2xl shadow-xl shadow-slate-900/5 border border-slate-200/90 overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-[500px]">
         
-        {/* Right Side: Luxury Dark Amber / Bronze Authority Banner */}
-        <div className="lg:col-span-5 bg-gradient-to-br from-[#1c1409] via-[#2a1c0d] to-[#140e06] text-white p-7 sm:p-9 flex flex-col justify-between relative overflow-hidden border-b lg:border-b-0 lg:border-l border-[#422c15]">
-          <div className="absolute -top-20 -right-20 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
-          <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-[#d4af37]/10 rounded-full blur-3xl pointer-events-none"></div>
-
+        {/* Right Side: Professional Emerald Authority Banner */}
+        <div className="lg:col-span-5 bg-[#12281e] text-white p-7 sm:p-9 flex flex-col justify-between relative overflow-hidden border-b lg:border-b-0 lg:border-l border-emerald-900/60">
           <div className="relative z-10">
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 rounded-xl bg-amber-500/15 backdrop-blur-md border border-amber-500/25 flex items-center justify-center shadow-lg text-[#fcd34d]">
+              <div className="w-12 h-12 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center shadow-xs text-emerald-400">
                 <Shield className="w-6 h-6" />
               </div>
               <div>
                 <span className="text-base font-bold tracking-tight text-white">الإدارة المركزية</span>
-                <p className="text-xs text-amber-200/80 font-light mt-0.5">
+                <p className="text-xs text-slate-300 font-light mt-0.5">
                   لوحة التدقيق والتشريعات المعتمدة
                 </p>
               </div>
@@ -103,22 +100,22 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
             <div className="space-y-3 mt-6">
               <h2 className="text-2xl font-bold tracking-tight text-white leading-snug">
                 بوابة الإشراف الإداري <br />
-                <span className="text-[#fcd34d]">والاعتماد الرسمي</span>
+                <span className="text-emerald-400">والاعتماد الرسمي</span>
               </h2>
-              <p className="text-xs sm:text-sm text-amber-100/80 leading-relaxed font-normal">
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-normal">
                 منطقة عمل مستقلة مخصصة لمسؤولي وزارة المالية لمراجعة وتفعيل الحسابات وتحديث قاعدة المعرفة السحابية.
               </p>
             </div>
 
-            <div className="mt-8 space-y-3 pt-6 border-t border-white/10 text-xs text-amber-100/90">
+            <div className="mt-8 space-y-3 pt-6 border-t border-white/10 text-xs text-slate-200">
               <div className="flex items-center gap-3">
-                <div className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-500/25 flex items-center justify-center text-amber-400 shrink-0">
+                <div className="w-7 h-7 rounded-lg bg-white/10 border border-white/15 flex items-center justify-center text-emerald-400 shrink-0">
                   <ShieldCheck className="w-3.5 h-3.5" />
                 </div>
                 <span>مراجعة وقبول أو رفض طلبات المكلفين الجدد</span>
               </div>
               <div className="flex items-center gap-3">
-                <div className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-500/25 flex items-center justify-center text-amber-400 shrink-0">
+                <div className="w-7 h-7 rounded-lg bg-white/10 border border-white/15 flex items-center justify-center text-emerald-400 shrink-0">
                   <Scale className="w-3.5 h-3.5" />
                 </div>
                 <span>إضافة وتعديل مواد ونصوص القوانين الجمركية</span>
@@ -126,9 +123,9 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
             </div>
           </div>
 
-          <div className="mt-8 pt-6 border-t border-white/10 relative z-10 flex items-center justify-between text-[11px] text-amber-200/60">
+          <div className="mt-8 pt-6 border-t border-white/10 relative z-10 flex items-center justify-between text-[11px] text-slate-400">
             <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
               وصول مشفر للمشرفين
             </span>
             <span>نظام رقابي مغلق</span>
@@ -148,27 +145,27 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
             </div>
 
             {/* Admin Credential Helper Note */}
-            <div className="bg-amber-50/80 border border-amber-200/90 rounded-xl p-3.5 text-xs text-amber-900 mb-5 flex items-center justify-between gap-3">
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs text-slate-700 mb-5 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
                   <KeyRound className="w-3.5 h-3.5" />
                 </div>
                 <div>
-                  <p className="font-bold text-amber-950 text-xs">بيانات الدخول السريع للمسؤول:</p>
+                  <p className="font-bold text-slate-900 text-xs">بيانات الدخول السريع للمسؤول:</p>
                   <div className="mt-0.5 flex items-center gap-1.5 font-mono text-[11px]">
                     <button
                       type="button"
                       onClick={() => setUsername('admin')}
-                      className="bg-white hover:bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300 text-amber-900 font-bold transition-colors cursor-pointer"
+                      className="bg-white hover:bg-slate-100 px-2 py-0.5 rounded border border-slate-300 text-slate-800 font-bold transition-colors cursor-pointer"
                       title="انقر لنسخ اسم المستخدم"
                     >
                       admin
                     </button>
-                    <span className="text-amber-500">/</span>
+                    <span className="text-slate-400">/</span>
                     <button
                       type="button"
                       onClick={() => setPassword('admin123')}
-                      className="bg-white hover:bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300 text-amber-900 font-bold transition-colors cursor-pointer"
+                      className="bg-white hover:bg-slate-100 px-2 py-0.5 rounded border border-slate-300 text-slate-800 font-bold transition-colors cursor-pointer"
                       title="انقر لنسخ كلمة المرور"
                     >
                       admin123
@@ -184,7 +181,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
                   setPassword('admin123');
                   handleSubmit(undefined, 'admin', 'admin123');
                 }}
-                className="px-2.5 py-1.5 bg-amber-200 hover:bg-amber-300 text-amber-900 font-bold text-xs rounded-lg transition-colors border border-amber-300 shadow-xs flex items-center gap-1 cursor-pointer shrink-0"
+                className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg transition-colors shadow-xs flex items-center gap-1 cursor-pointer shrink-0"
               >
                 <span>دخول سريع</span>
                 <ArrowRight className="w-3 h-3 rotate-180" />
@@ -209,7 +206,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder="admin"
-                  className="w-full px-3.5 py-3 bg-slate-50/70 hover:bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#855e16]/20 focus:border-[#855e16] transition-all"
+                  className="w-full px-3.5 py-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-all"
                   required
                 />
               </div>
@@ -224,7 +221,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full px-3.5 py-3 bg-slate-50/70 hover:bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#855e16]/20 focus:border-[#855e16] transition-all"
+                  className="w-full px-3.5 py-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-all"
                   required
                 />
               </div>
@@ -233,16 +230,16 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
                 id="admin-submit-btn"
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 px-5 bg-[#2a1c0d] hover:bg-[#3d2913] active:bg-[#1a1107] text-[#fef3c7] text-sm font-bold rounded-xl shadow-md transition-all duration-150 flex items-center justify-center gap-2 disabled:opacity-50 mt-4 border border-[#523819]"
+                className="w-full py-3 px-5 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white text-sm font-bold rounded-xl shadow-xs transition-all duration-150 flex items-center justify-center gap-2 disabled:opacity-50 mt-4 cursor-pointer"
               >
                 {loading ? (
                   <>
-                    <span className="w-4 h-4 border-2 border-amber-300 border-t-transparent rounded-full animate-spin"></span>
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
                     <span>جارِ التحقق من الصلاحيات...</span>
                   </>
                 ) : (
                   <>
-                    <Shield className="w-4 h-4 text-[#fcd34d]" />
+                    <Shield className="w-4 h-4 text-emerald-200" />
                     <span>تسجيل الدخول إلى لوحة التحكم</span>
                   </>
                 )}
@@ -255,7 +252,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
               id="admin-back-to-users-btn"
               type="button"
               onClick={onBackToUserAuth}
-              className="font-bold text-[#0f2a24] hover:text-emerald-800 flex items-center gap-1.5 transition-colors"
+              className="font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <ArrowRight className="w-3.5 h-3.5" />
               العودة إلى بوابة المستفيدين العامة

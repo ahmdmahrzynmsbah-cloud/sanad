@@ -499,53 +499,53 @@ export const SanadWelcomeModal: React.FC<SanadWelcomeModalProps> = ({
             {/* 4 Rich Pillars / Features Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-right">
               {/* Pillar 1 */}
-              <div className="bg-white/5 hover:bg-white/10 border border-emerald-500/25 rounded-2xl p-4 sm:p-5 transition-all space-y-1.5 shadow-sm">
-                <div className="flex items-center gap-2.5 text-[#fae084] font-bold text-sm sm:text-base">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
-                    <BookOpen className="w-4 h-4 text-[#fae084]" />
+              <div className="bg-white/10 hover:bg-white/15 border border-emerald-500/30 rounded-2xl p-4 sm:p-5 transition-all space-y-2 shadow-sm">
+                <div className="flex items-center gap-2.5 text-[#fae084] font-black text-sm sm:text-base">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
+                    <BookOpen className="w-5 h-5 text-[#fae084]" />
                   </div>
                   <span>مرجعية تشريعية فلسطينية معتمدة</span>
                 </div>
-                <p className="text-slate-300 text-xs sm:text-sm leading-relaxed pr-10">
+                <p className="text-slate-100 text-xs sm:text-sm leading-relaxed pr-11 font-medium">
                   مغذي بقاعدة بيانات تشريعية شاملة تضم قانون الجمارك والمكوس، قانون ضريبة الدخل، قانون ضريبة القيمة المضافة، تشجيع الاستثمار، واللوائح التنفيذية النافذة.
                 </p>
               </div>
 
               {/* Pillar 2 */}
-              <div className="bg-white/5 hover:bg-white/10 border border-emerald-500/25 rounded-2xl p-4 sm:p-5 transition-all space-y-1.5 shadow-sm">
-                <div className="flex items-center gap-2.5 text-[#fae084] font-bold text-sm sm:text-base">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
-                    <Zap className="w-4 h-4 text-[#fae084]" />
+              <div className="bg-white/10 hover:bg-white/15 border border-emerald-500/30 rounded-2xl p-4 sm:p-5 transition-all space-y-2 shadow-sm">
+                <div className="flex items-center gap-2.5 text-[#fae084] font-black text-sm sm:text-base">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
+                    <Zap className="w-5 h-5 text-[#fae084]" />
                   </div>
                   <span>حسابات ضريبية وجمركية فورية</span>
                 </div>
-                <p className="text-slate-300 text-xs sm:text-sm leading-relaxed pr-10">
+                <p className="text-slate-100 text-xs sm:text-sm leading-relaxed pr-11 font-medium">
                   يقوم بحساب نسب الضرائب، شرائح الدخل، رسوم استيراد المركبات والسلع، ويعرض النتائج بالأرقام الدقيقة وبالشيكل ₪ في أجزاء من الثانية.
                 </p>
               </div>
 
               {/* Pillar 3 */}
-              <div className="bg-white/5 hover:bg-white/10 border border-emerald-500/25 rounded-2xl p-4 sm:p-5 transition-all space-y-1.5 shadow-sm">
-                <div className="flex items-center gap-2.5 text-[#fae084] font-bold text-sm sm:text-base">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
-                    <ShieldCheck className="w-4 h-4 text-[#fae084]" />
+              <div className="bg-white/10 hover:bg-white/15 border border-emerald-500/30 rounded-2xl p-4 sm:p-5 transition-all space-y-2 shadow-sm">
+                <div className="flex items-center gap-2.5 text-[#fae084] font-black text-sm sm:text-base">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
+                    <ShieldCheck className="w-5 h-5 text-[#fae084]" />
                   </div>
                   <span>توثيق رسمي بأرقام المواد</span>
                 </div>
-                <p className="text-slate-300 text-xs sm:text-sm leading-relaxed pr-10">
+                <p className="text-slate-100 text-xs sm:text-sm leading-relaxed pr-11 font-medium">
                   لا يقدم تخمينات؛ بل يستشهد صراحة باسم القانون والقرار بقانون ورقم المادة المحددة لتكون مرجعك القانوني الموثوق أمام الدوائر الرسمية.
                 </p>
               </div>
 
               {/* Pillar 4 */}
-              <div className="bg-white/5 hover:bg-white/10 border border-emerald-500/25 rounded-2xl p-4 sm:p-5 transition-all space-y-1.5 shadow-sm">
-                <div className="flex items-center gap-2.5 text-[#fae084] font-bold text-sm sm:text-base">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
-                    <Cpu className="w-4 h-4 text-[#fae084]" />
+              <div className="bg-white/10 hover:bg-white/15 border border-emerald-500/30 rounded-2xl p-4 sm:p-5 transition-all space-y-2 shadow-sm">
+                <div className="flex items-center gap-2.5 text-[#fae084] font-black text-sm sm:text-base">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
+                    <Cpu className="w-5 h-5 text-[#fae084]" />
                   </div>
                   <span>جاهزية 24/7 ودعم جميع الفئات</span>
                 </div>
-                <p className="text-slate-300 text-xs sm:text-sm leading-relaxed pr-10">
+                <p className="text-slate-100 text-xs sm:text-sm leading-relaxed pr-11 font-medium">
                   صُمم لدعم التجار، المستوردين، المحاسبين القانونيين، المحامين، وأصحاب الأعمال والمواطنين في أي وقت ومن أي جهاز.
                 </p>
               </div>

@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc, updateDoc, setLogLevel } from 'firebase/firestore';
-import type { Law, User, LawRequest } from '../types';
+import type { Law, User, LawRequest, SubscriptionPlan } from '../types';
 
 try {
   setLogLevel('error');
@@ -1209,6 +1209,65 @@ export async function directDeleteLawRequestFromFirestore(requestId: string): Pr
     return true;
   } catch (err) {
     console.error('[Client Firestore] Error deleting law request directly:', err);
+    return false;
+  }
+}
+
+/**
+ * Direct fetch subscription plans from Firestore
+ */
+export async function directFetchSubscriptionPlansFromFirestore(): Promise<SubscriptionPlan[] | null> {
+  const db = getClientDb();
+  if (!db) return null;
+
+  try {
+    const col = collection(db, 'subscription_plans');
+    const snapshot = await getDocs(col);
+    const items: SubscriptionPlan[] = [];
+    snapshot.forEach((d) => {
+      items.push({ id: d.id, ...(d.data() as SubscriptionPlan) });
+    });
+    items.sort((a, b) => (a.order || 0) - (b.order || 0));
+    return items;
+  } catch (err) {
+    console.error('[Client Firestore] Error fetching subscription plans directly:', err);
+    return null;
+  }
+}
+
+/**
+ * Direct save subscription plan to Firestore
+ */
+export async function directSaveSubscriptionPlanToFirestore(plan: SubscriptionPlan): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+
+  try {
+    const planRef = doc(db, 'subscription_plans', plan.id);
+    await setDoc(planRef, {
+      ...plan,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+    return true;
+  } catch (err) {
+    console.error('[Client Firestore] Error saving subscription plan directly:', err);
+    return false;
+  }
+}
+
+/**
+ * Direct delete subscription plan from Firestore
+ */
+export async function directDeleteSubscriptionPlanFromFirestore(id: string): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+
+  try {
+    const planRef = doc(db, 'subscription_plans', id);
+    await deleteDoc(planRef);
+    return true;
+  } catch (err) {
+    console.error('[Client Firestore] Error deleting subscription plan directly:', err);
     return false;
   }
 }

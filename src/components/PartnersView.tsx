@@ -106,15 +106,15 @@ export const PartnersView: React.FC<PartnersViewProps> = ({
             <span>العودة للرئيسية</span>
           </button>
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#12281e] to-emerald-950 text-white flex items-center justify-center font-bold shadow-sm border border-emerald-500/20 shrink-0">
-              <Handshake className="w-5 h-5 text-[#d4af37]" />
+            <div className="w-10 h-10 rounded-xl bg-[#12281e] text-white flex items-center justify-center font-bold shadow-xs border border-emerald-900/60 shrink-0">
+              <Handshake className="w-5 h-5 text-emerald-400" />
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-xl sm:text-3xl font-extrabold text-slate-950 tracking-tight">
+                <h1 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight">
                   شركاؤنا المؤسسيون
                 </h1>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold bg-[#d4af37]/15 text-[#917117] border border-[#d4af37]/30">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                   شبكة التعاون الوطني
                 </span>
               </div>
@@ -128,9 +128,9 @@ export const PartnersView: React.FC<PartnersViewProps> = ({
         {isAdmin && onGoToAdminPortal && (
           <button
             onClick={onGoToAdminPortal}
-            className="px-4 py-2 bg-[#12281e] text-white text-xs font-bold rounded-xl hover:bg-[#1a3a2d] transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm shrink-0 border border-emerald-500/30"
+            className="px-4 py-2 bg-emerald-700 text-white text-xs font-bold rounded-xl hover:bg-emerald-800 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs shrink-0 border border-emerald-600"
           >
-            <ShieldCheck className="w-4 h-4 text-[#d4af37]" />
+            <ShieldCheck className="w-4 h-4 text-emerald-200" />
             <span>إدارة الشركاء في لوحة التحكم</span>
           </button>
         )}
