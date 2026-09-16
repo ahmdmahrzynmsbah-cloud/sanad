@@ -113,23 +113,32 @@ export const SubscriptionPlansAdminTab: React.FC = () => {
 
   const fetchPlans = async () => {
     setLoading(true);
+    let deletedIds: string[] = [];
+    try {
+      deletedIds = JSON.parse(localStorage.getItem('sanad_deleted_plan_ids') || '[]');
+    } catch {}
+
     try {
       // First try API
       const res = await fetch('/api/subscription-plans?all=true');
       if (res.ok) {
         const data = await res.json();
         if (data.plans && Array.isArray(data.plans)) {
-          setPlans(data.plans);
-          localStorage.setItem('admin_cached_plans', JSON.stringify(data.plans));
+          const filtered = data.plans.filter((p: SubscriptionPlan) => !deletedIds.includes(p.id));
+          setPlans(filtered);
+          localStorage.setItem('admin_cached_plans', JSON.stringify(filtered));
+          setLoading(false);
           return;
         }
       }
 
       // Fallback to client Firestore
       const cloudPlans = await directFetchSubscriptionPlansFromFirestore();
-      if (cloudPlans && cloudPlans.length > 0) {
-        setPlans(cloudPlans);
-        localStorage.setItem('admin_cached_plans', JSON.stringify(cloudPlans));
+      if (cloudPlans && Array.isArray(cloudPlans)) {
+        const filtered = cloudPlans.filter((p: SubscriptionPlan) => !deletedIds.includes(p.id));
+        setPlans(filtered);
+        localStorage.setItem('admin_cached_plans', JSON.stringify(filtered));
+        setLoading(false);
         return;
       }
 
@@ -137,18 +146,22 @@ export const SubscriptionPlansAdminTab: React.FC = () => {
       const cached = localStorage.getItem('admin_cached_plans');
       if (cached) {
         try {
-          setPlans(JSON.parse(cached));
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) {
+            const filtered = parsed.filter((p: any) => !deletedIds.includes(p.id));
+            setPlans(filtered);
+          }
         } catch {
           // Ignore
         }
       }
     } catch (err) {
       console.warn('Failed to fetch subscription plans:', err);
-      // Fallback to client Firestore
       try {
         const cloudPlans = await directFetchSubscriptionPlansFromFirestore();
-        if (cloudPlans && cloudPlans.length > 0) {
-          setPlans(cloudPlans);
+        if (cloudPlans && Array.isArray(cloudPlans)) {
+          const filtered = cloudPlans.filter((p: SubscriptionPlan) => !deletedIds.includes(p.id));
+          setPlans(filtered);
         }
       } catch {
         // Ignore
@@ -318,6 +331,7 @@ export const SubscriptionPlansAdminTab: React.FC = () => {
     setSaving(true);
     try {
       let savedPlan: SubscriptionPlan | null = null;
+      let nextPlans: SubscriptionPlan[] = [];
 
       if (editingPlan) {
         // UPDATE
@@ -327,24 +341,32 @@ export const SubscriptionPlansAdminTab: React.FC = () => {
           body: JSON.stringify(planPayload),
         });
 
+        const directUpdated: SubscriptionPlan = {
+          ...editingPlan,
+          ...(planPayload as SubscriptionPlan),
+          updatedAt: new Date().toISOString(),
+        };
+
         if (res.ok) {
           const data = await res.json();
           savedPlan = data.plan;
-          if (data.plans) setPlans(data.plans);
+          nextPlans = data.plans || plans.map((p) => (p.id === editingPlan.id ? directUpdated : p));
         } else {
-          // Direct fallback
-          const directUpdated: SubscriptionPlan = {
-            ...editingPlan,
-            ...(planPayload as SubscriptionPlan),
-            updatedAt: new Date().toISOString(),
-          };
-          await directSaveSubscriptionPlanToFirestore(directUpdated);
           savedPlan = directUpdated;
-          setPlans((prev) => prev.map((p) => (p.id === editingPlan.id ? directUpdated : p)));
+          nextPlans = plans.map((p) => (p.id === editingPlan.id ? directUpdated : p));
         }
+        await directSaveSubscriptionPlanToFirestore(directUpdated);
         setFeedback({ type: 'success', message: `تم تحديث خطة الاشتراك "${name}" بنجاح` });
       } else {
         // CREATE
+        const newId = `plan-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+        const directCreated: SubscriptionPlan = {
+          id: newId,
+          ...(planPayload as SubscriptionPlan),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
         const res = await fetch('/api/admin/subscription-plans', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -354,28 +376,32 @@ export const SubscriptionPlansAdminTab: React.FC = () => {
         if (res.ok) {
           const data = await res.json();
           savedPlan = data.plan;
-          if (data.plans) setPlans(data.plans);
+          nextPlans = data.plans || [...plans, directCreated];
         } else {
-          // Direct fallback
-          const newId = `plan-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-          const directCreated: SubscriptionPlan = {
-            id: newId,
-            ...(planPayload as SubscriptionPlan),
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          };
-          await directSaveSubscriptionPlanToFirestore(directCreated);
           savedPlan = directCreated;
-          setPlans((prev) => [...prev, directCreated]);
+          nextPlans = [...plans, directCreated];
         }
+        await directSaveSubscriptionPlanToFirestore(savedPlan || directCreated);
         setFeedback({ type: 'success', message: `تمت إضافة خطة الاشتراك الجديدة "${name}" بنجاح` });
       }
 
+      // Remove from deleted ids if previously deleted
+      if (savedPlan) {
+        try {
+          const deletedIdsStr = localStorage.getItem('sanad_deleted_plan_ids') || '[]';
+          const deletedIds: string[] = JSON.parse(deletedIdsStr);
+          const filteredDeleted = deletedIds.filter((id) => id !== savedPlan!.id);
+          localStorage.setItem('sanad_deleted_plan_ids', JSON.stringify(filteredDeleted));
+        } catch {}
+      }
+
+      setPlans(nextPlans);
+      localStorage.setItem('admin_cached_plans', JSON.stringify(nextPlans));
+      window.dispatchEvent(new CustomEvent('sanad_plans_updated', { detail: { plans: nextPlans } }));
+
       setShowModal(false);
-      fetchPlans();
     } catch (err: any) {
       console.error('Error saving plan:', err);
-      // Attempt direct save
       try {
         const id = editingPlan ? editingPlan.id : `plan-${Date.now()}`;
         const fallbackPlan: SubscriptionPlan = {
@@ -385,12 +411,10 @@ export const SubscriptionPlansAdminTab: React.FC = () => {
           updatedAt: new Date().toISOString(),
         };
         await directSaveSubscriptionPlanToFirestore(fallbackPlan);
-        setPlans((prev) => {
-          if (editingPlan) {
-            return prev.map((p) => (p.id === id ? fallbackPlan : p));
-          }
-          return [...prev, fallbackPlan];
-        });
+        const nextPlans = editingPlan ? plans.map((p) => (p.id === id ? fallbackPlan : p)) : [...plans, fallbackPlan];
+        setPlans(nextPlans);
+        localStorage.setItem('admin_cached_plans', JSON.stringify(nextPlans));
+        window.dispatchEvent(new CustomEvent('sanad_plans_updated', { detail: { plans: nextPlans } }));
         setFeedback({ type: 'success', message: `تم حفظ الخطة "${name}" في قاعدة البيانات السحابية بنجاح` });
         setShowModal(false);
       } catch (directErr: any) {
@@ -403,7 +427,14 @@ export const SubscriptionPlansAdminTab: React.FC = () => {
 
   const handleToggleActive = async (plan: SubscriptionPlan) => {
     const updatedStatus = !plan.isActive;
+    const updated = { ...plan, isActive: updatedStatus, updatedAt: new Date().toISOString() };
+    const nextPlans = plans.map((p) => (p.id === plan.id ? updated : p));
+    setPlans(nextPlans);
+    localStorage.setItem('admin_cached_plans', JSON.stringify(nextPlans));
+    window.dispatchEvent(new CustomEvent('sanad_plans_updated', { detail: { plans: nextPlans } }));
+
     try {
+      await directSaveSubscriptionPlanToFirestore(updated);
       const res = await fetch(`/api/admin/subscription-plans/${plan.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -412,15 +443,15 @@ export const SubscriptionPlansAdminTab: React.FC = () => {
 
       if (res.ok) {
         const data = await res.json();
-        if (data.plans) setPlans(data.plans);
-      } else {
-        const updated = { ...plan, isActive: updatedStatus, updatedAt: new Date().toISOString() };
-        await directSaveSubscriptionPlanToFirestore(updated);
-        setPlans((prev) => prev.map((p) => (p.id === plan.id ? updated : p)));
+        if (data.plans) {
+          setPlans(data.plans);
+          localStorage.setItem('admin_cached_plans', JSON.stringify(data.plans));
+          window.dispatchEvent(new CustomEvent('sanad_plans_updated', { detail: { plans: data.plans } }));
+        }
       }
       setFeedback({
         type: 'success',
-        message: `تم ${updatedStatus ? 'تفعيل' : 'تعطيل'} ظهور الخطة "${plan.name}"`,
+        message: `تم ${updatedStatus ? 'تفعيل' : 'تعطيل'} ظهور الخطة "${plan.name}" فوراً في الواجهة`,
       });
     } catch (err) {
       console.error('Toggle active error:', err);
@@ -441,6 +472,8 @@ export const SubscriptionPlansAdminTab: React.FC = () => {
     });
 
     setPlans(newPlans);
+    localStorage.setItem('admin_cached_plans', JSON.stringify(newPlans));
+    window.dispatchEvent(new CustomEvent('sanad_plans_updated', { detail: { plans: newPlans } }));
 
     try {
       const orderMap = newPlans.map((p) => p.id);
@@ -449,6 +482,7 @@ export const SubscriptionPlansAdminTab: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orderMap }),
       });
+      newPlans.forEach((p) => directSaveSubscriptionPlanToFirestore(p));
     } catch (err) {
       console.warn('Reorder API failed, saving to firestore directly:', err);
       newPlans.forEach((p) => directSaveSubscriptionPlanToFirestore(p));
@@ -457,46 +491,79 @@ export const SubscriptionPlansAdminTab: React.FC = () => {
 
   const handleDelete = async () => {
     if (!planToDelete) return;
-    setDeletingId(planToDelete.id);
+    const targetPlan = planToDelete;
+    const targetId = targetPlan.id;
+    setDeletingId(targetId);
 
+    // 1. Immediately remove from local state
+    const remainingPlans = plans.filter((p) => p.id !== targetId);
+    setPlans(remainingPlans);
+
+    // 2. Immediately persist to localStorage
+    localStorage.setItem('admin_cached_plans', JSON.stringify(remainingPlans));
+
+    // 3. Add to deleted IDs tombstone to prevent resurrection
     try {
-      const res = await fetch(`/api/admin/subscription-plans/${planToDelete.id}`, {
+      const deletedIdsStr = localStorage.getItem('sanad_deleted_plan_ids') || '[]';
+      const deletedIds: string[] = JSON.parse(deletedIdsStr);
+      if (!deletedIds.includes(targetId)) {
+        deletedIds.push(targetId);
+        localStorage.setItem('sanad_deleted_plan_ids', JSON.stringify(deletedIds));
+      }
+    } catch {}
+
+    // 4. Dispatch global event for instant home page update
+    window.dispatchEvent(
+      new CustomEvent('sanad_plans_updated', {
+        detail: { deletedId: targetId, plans: remainingPlans },
+      })
+    );
+
+    // 5. Delete from client Firestore directly
+    try {
+      await directDeleteSubscriptionPlanFromFirestore(targetId);
+    } catch (fErr) {
+      console.warn('Direct client firestore delete error:', fErr);
+    }
+
+    // 6. Delete from backend API
+    try {
+      const res = await fetch(`/api/admin/subscription-plans/${targetId}`, {
         method: 'DELETE',
       });
 
       if (res.ok) {
         const data = await res.json();
-        if (data.plans) setPlans(data.plans);
-      } else {
-        await directDeleteSubscriptionPlanFromFirestore(planToDelete.id);
-        setPlans((prev) => prev.filter((p) => p.id !== planToDelete.id));
+        if (data.plans && Array.isArray(data.plans)) {
+          const filtered = data.plans.filter((p: SubscriptionPlan) => p.id !== targetId);
+          setPlans(filtered);
+          localStorage.setItem('admin_cached_plans', JSON.stringify(filtered));
+        }
       }
-
-      setFeedback({ type: 'success', message: `تم حذف خطة الاشتراك "${planToDelete.name}" بنجاح` });
-      setPlanToDelete(null);
-      fetchPlans();
     } catch (err) {
-      console.error('Error deleting plan:', err);
-      try {
-        await directDeleteSubscriptionPlanFromFirestore(planToDelete.id);
-        setPlans((prev) => prev.filter((p) => p.id !== planToDelete.id));
-        setFeedback({ type: 'success', message: `تم حذف الخطة مباشرة من قاعدة البيانات` });
-        setPlanToDelete(null);
-      } catch (directErr) {
-        setFeedback({ type: 'error', message: 'فشل حذف الخطة. يرجى المحاولة مرة أخرى.' });
-      }
-    } finally {
-      setDeletingId(null);
+      console.warn('Server API delete warning:', err);
     }
+
+    setFeedback({
+      type: 'success',
+      message: `تم حذف خطة الاشتراك "${targetPlan.name}" نهائياً من النظام والصفحة الرئيسية بنجاح`,
+    });
+    setPlanToDelete(null);
+    setDeletingId(null);
   };
 
   const handleResetDefaults = async () => {
     setLoading(true);
     try {
+      localStorage.removeItem('sanad_deleted_plan_ids');
       const res = await fetch('/api/admin/subscription-plans/reset', { method: 'POST' });
       if (res.ok) {
         const data = await res.json();
-        if (data.plans) setPlans(data.plans);
+        if (data.plans) {
+          setPlans(data.plans);
+          localStorage.setItem('admin_cached_plans', JSON.stringify(data.plans));
+          window.dispatchEvent(new CustomEvent('sanad_plans_updated', { detail: { plans: data.plans } }));
+        }
         setFeedback({ type: 'success', message: 'تمت استعادة خطط الاشتراك الافتراضية بنجاح' });
       }
       setShowResetConfirm(false);

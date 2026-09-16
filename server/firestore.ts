@@ -9,6 +9,8 @@ import {
   setDoc as firebaseSetDoc,
   updateDoc as firebaseUpdateDoc,
   deleteDoc as firebaseDeleteDoc,
+  query,
+  where,
   Firestore,
   DocumentReference,
   setLogLevel,
@@ -1159,7 +1161,20 @@ export async function deleteSubscriptionPlanFromFirestore(planId: string): Promi
 
   try {
     const docRef = doc(db, 'subscription_plans', planId);
-    await deleteDoc(docRef);
+    await firebaseDeleteDoc(docRef);
+
+    try {
+      const col = collection(db, 'subscription_plans');
+      const q = query(col, where('id', '==', planId));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const promises = snap.docs.map((d) => firebaseDeleteDoc(d.ref));
+        await Promise.all(promises);
+      }
+    } catch {
+      // Non-blocking
+    }
+
     return true;
   } catch (err) {
     handleFirestoreError(`deleteSubscriptionPlanFromFirestore ${planId}`, err);

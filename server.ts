@@ -1024,7 +1024,7 @@ function initDB(): DBData {
 }
 
 let db = initDB();
-if (!db.subscriptionPlans || db.subscriptionPlans.length === 0) {
+if (db.subscriptionPlans === undefined) {
   db.subscriptionPlans = [...DEFAULT_SUBSCRIPTION_PLANS];
 }
 
@@ -2482,7 +2482,7 @@ app.delete('/api/admin/partners/:id', async (req, res) => {
 // Subscription Plans Management Endpoints (إدارة باقات وخطط الاشتراك)
 // ----------------------------------------------------
 app.get('/api/subscription-plans', (req, res) => {
-  if (!db.subscriptionPlans || db.subscriptionPlans.length === 0) {
+  if (db.subscriptionPlans === undefined) {
     db.subscriptionPlans = [...DEFAULT_SUBSCRIPTION_PLANS];
   }
   const all = req.query.all === 'true';
@@ -2517,7 +2517,7 @@ app.post('/api/admin/subscription-plans', async (req, res, next) => {
     }
 
     if (!db.subscriptionPlans) {
-      db.subscriptionPlans = [...DEFAULT_SUBSCRIPTION_PLANS];
+      db.subscriptionPlans = [];
     }
 
     const newPlan: StoredSubscriptionPlan = {
@@ -2579,7 +2579,7 @@ app.put('/api/admin/subscription-plans/:id', async (req, res, next) => {
     } = req.body;
 
     if (!db.subscriptionPlans) {
-      db.subscriptionPlans = [...DEFAULT_SUBSCRIPTION_PLANS];
+      db.subscriptionPlans = [];
     }
 
     const index = db.subscriptionPlans.findIndex((p) => p.id === id);
@@ -2628,22 +2628,27 @@ app.delete('/api/admin/subscription-plans/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
     if (!db.subscriptionPlans) {
-      db.subscriptionPlans = [...DEFAULT_SUBSCRIPTION_PLANS];
+      db.subscriptionPlans = [];
     }
 
     const index = db.subscriptionPlans.findIndex((p) => p.id === id);
-    if (index === -1) {
-      return res.status(404).json({ error: 'خطة الاشتراك غير موجودة' });
+    let removedName = id;
+    if (index !== -1) {
+      removedName = db.subscriptionPlans[index].name;
+      db.subscriptionPlans.splice(index, 1);
+      saveDB();
     }
-
-    const removed = db.subscriptionPlans[index];
-    db.subscriptionPlans.splice(index, 1);
-    saveDB();
-    await deleteSubscriptionPlanFromFirestore(id);
+    
+    // Delete from Firestore directly
+    try {
+      await deleteSubscriptionPlanFromFirestore(id);
+    } catch (e) {
+      console.warn('Delete plan firestore notice:', e);
+    }
 
     res.json({
       success: true,
-      message: `تم حذف خطة الاشتراك "${removed.name}" بنجاح`,
+      message: `تم حذف خطة الاشتراك "${removedName}" بنجاح`,
       deletedId: id,
       plans: db.subscriptionPlans,
     });

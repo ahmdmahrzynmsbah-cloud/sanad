@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc, updateDoc, setLogLevel } from 'firebase/firestore';
+import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc, updateDoc, setLogLevel, query, where } from 'firebase/firestore';
 import type { Law, User, LawRequest, SubscriptionPlan } from '../types';
 
 try {
@@ -1273,8 +1273,23 @@ export async function directDeleteSubscriptionPlanFromFirestore(id: string): Pro
   if (!db) return false;
 
   try {
+    // 1. Direct deletion by document ID
     const planRef = doc(db, 'subscription_plans', id);
     await deleteDoc(planRef);
+
+    // 2. Comprehensive check: delete any document where id field equals target id
+    try {
+      const col = collection(db, 'subscription_plans');
+      const q = query(col, where('id', '==', id));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const promises = snap.docs.map((d) => deleteDoc(d.ref));
+        await Promise.all(promises);
+      }
+    } catch {
+      // Non-blocking query cleanup
+    }
+
     return true;
   } catch (err) {
     console.error('[Client Firestore] Error deleting subscription plan directly:', err);
