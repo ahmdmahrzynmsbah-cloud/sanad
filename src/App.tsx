@@ -580,23 +580,12 @@ export default function App() {
       {/* Official Palestinian Governmental Footer (Only shown on standard non-chat pages) */}
       {!isFullChatView && (
         <footer className="bg-[#0f241a] text-[#8aa997] border-t border-[#1a3829] py-4 text-xs">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-right">
-            <div className="flex items-center gap-2">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-center text-center">
+            <div className="flex items-center justify-center gap-2">
               <Scale className="w-4 h-4 text-[#d4af37]" />
               <span className="font-semibold text-white">
                 منظومة الاستعلام الجمركي والضريبي الذكية • دولة فلسطين
               </span>
-            </div>
-            <div className="text-[11px] text-[#6b8b79]">
-              تم تطوير وتصميم هذه المنصة الذكية باحترافية عالية بواسطة{' '}
-              <a
-                href="https://wa.me/201034859313"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[#d4af37] font-bold hover:text-[#e2bd40] transition-colors"
-              >
-                شركة Fox Tech
-              </a>
             </div>
           </div>
         </footer>

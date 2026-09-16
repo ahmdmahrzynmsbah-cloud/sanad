@@ -391,13 +391,13 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
             botResponseText = serverError || '⚠️ ليس لديك صلاحية استخدام المساعد الذكي حالياً.';
           }
         } else {
-          // Fallback: If server is down or Vercel function timed out, search laws directly via Firestore
-          console.warn('[Chat] Backend returned status:', res.status, 'Attempting direct client legal knowledge search...');
-          const directLaws = await directFetchLawsFromFirestore();
-          if (directLaws && directLaws.length > 0) {
-            botResponseText = generateClientKnowledgeFallback(query, directLaws);
-          } else {
-            botResponseText = serverError || '⚠️ تعذر الوصول إلى قاعدة المعرفة السحابية حالياً. يرجى التحقق من اتصال الإنترنت والمحاولة مرة أخرى.';
+          // Fallback: If server returned an error or Vercel function timed out
+          console.warn('[Chat] Backend returned status:', res.status, 'Attempting direct client knowledge fallback...');
+          try {
+            const directLaws = await directFetchLawsFromFirestore();
+            botResponseText = generateClientKnowledgeFallback(query, directLaws || []);
+          } catch {
+            botResponseText = generateClientKnowledgeFallback(query, []);
           }
         }
       }
@@ -422,14 +422,14 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
       };
       persistConversation(completedConv);
     } catch (err: any) {
-      console.warn('[Chat] Network error, attempting direct client legal knowledge search...', err);
+      console.warn('[Chat] Network error, attempting direct client knowledge fallback...', err);
       let fallbackText = '';
       try {
         const directLaws = await directFetchLawsFromFirestore();
-        if (directLaws && directLaws.length > 0) {
-          fallbackText = generateClientKnowledgeFallback(query, directLaws);
-        }
-      } catch {}
+        fallbackText = generateClientKnowledgeFallback(query, directLaws || []);
+      } catch {
+        fallbackText = generateClientKnowledgeFallback(query, []);
+      }
 
       if (!fallbackText) {
         fallbackText = '⚠️ تعذر الاتصال بالخادم حالياً. يرجى التحقق من اتصالك بالإنترنت والمحاولة مجدداً.';
