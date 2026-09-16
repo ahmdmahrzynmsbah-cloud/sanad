@@ -118,9 +118,9 @@ export async function directSaveLawsBatchToFirestore(laws: Law[]): Promise<{ suc
 /**
  * Direct client-side fetch from Firestore as fallback.
  */
-export async function directFetchLawsFromFirestore(): Promise<Law[] | null> {
+export async function directFetchLawsFromFirestore(): Promise<Law[]> {
   const db = getClientDb();
-  if (!db) return null;
+  if (!db) return [];
 
   try {
     const col = collection(db, 'laws');
@@ -145,7 +145,7 @@ export async function directFetchLawsFromFirestore(): Promise<Law[] | null> {
     return items;
   } catch (err) {
     handleClientFirestoreError('directFetchLawsFromFirestore', err);
-    return null;
+    return [];
   }
 }
 
@@ -1088,9 +1088,9 @@ export async function directDeleteUserFromFirestore(
 /**
  * Direct fetch law requests from Firestore
  */
-export async function directFetchLawRequestsFromFirestore(): Promise<LawRequest[] | null> {
+export async function directFetchLawRequestsFromFirestore(): Promise<LawRequest[]> {
   const db = getClientDb();
-  if (!db) return null;
+  if (!db) return [];
 
   try {
     const col = collection(db, 'law_requests');
@@ -1124,7 +1124,7 @@ export async function directFetchLawRequestsFromFirestore(): Promise<LawRequest[
     return items;
   } catch (err) {
     console.error('[Client Firestore] Error fetching law requests directly:', err);
-    return null;
+    return [];
   }
 }
 
