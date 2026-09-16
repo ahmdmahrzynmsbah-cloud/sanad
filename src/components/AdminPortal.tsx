@@ -117,6 +117,32 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
 
   const [activeTab, setActiveTab] = useState<'requests' | 'laws' | 'law-requests' | 'supervisors' | 'related-sites' | 'partners' | 'plans' | 'about' | 'contact' | 'settings'>('requests');
 
+  // Admin Daily Upload Limit & Quota (40 files max, 40MB per file, 800MB total quota per day)
+  const ADMIN_DAILY_LIMIT = 40;
+  const ADMIN_MAX_FILE_SIZE_MB = 40;
+  const ADMIN_DAILY_TOTAL_MB_LIMIT = 800;
+  const adminTodayDateStr = new Date().toISOString().split('T')[0];
+
+  const getAdminLocalTodayData = () => {
+    try {
+      const saved = localStorage.getItem('sanad_admin_daily_uploads');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.date === adminTodayDateStr) {
+          return { count: parsed.count || 0, totalBytes: parsed.totalBytes || 0 };
+        }
+      }
+    } catch (e) {}
+    return { count: 0, totalBytes: 0 };
+  };
+
+  const adminLocalData = getAdminLocalTodayData();
+  const adminTodayUploadsCount = adminLocalData.count;
+  const adminTotalUploadedBytesToday = adminLocalData.totalBytes;
+  const adminTotalUploadedMbToday = parseFloat((adminTotalUploadedBytesToday / (1024 * 1024)).toFixed(1));
+  const adminRemainingUploads = Math.max(0, ADMIN_DAILY_LIMIT - adminTodayUploadsCount);
+  const adminIsLimitReached = adminTodayUploadsCount >= ADMIN_DAILY_LIMIT || adminTotalUploadedMbToday >= ADMIN_DAILY_TOTAL_MB_LIMIT;
+
   // Law Requests state
   const [pendingLawRequestsCount, setPendingLawRequestsCount] = useState<number>(0);
 
@@ -1468,11 +1494,17 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
 
   // Add multiple files to batch queue
   const addFilesToQueue = (fileList: FileList | File[]) => {
+    if (adminIsLimitReached) {
+      setBatchErrorMessage(`عذراً، لقد وصلت إلى الحد الأقصى المسموح لرفع الملفات اليوم (${ADMIN_DAILY_LIMIT} ملف أو ${ADMIN_DAILY_TOTAL_MB_LIMIT} ميجابايت).`);
+      return;
+    }
+
     const files = Array.from(fileList);
     if (files.length === 0) return;
 
     const newItems: QueuedLawItem[] = [];
     let invalidCount = 0;
+    let sizeErrorCount = 0;
 
     for (const file of files) {
       const lowerName = file.name.toLowerCase();
@@ -1488,9 +1520,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         continue;
       }
 
-      const cleanTitle = sanitizeLawTitle(file.name);
+      const isTooBig = file.size > ADMIN_MAX_FILE_SIZE_MB * 1024 * 1024;
+      if (isTooBig) {
+        sizeErrorCount++;
+      }
 
-      const isTooBig = file.size > 150 * 1024 * 1024;
+      const cleanTitle = sanitizeLawTitle(file.name);
 
       newItems.push({
         id: `pdf-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -1499,7 +1534,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         fileSizeFormatted: formatBytes(file.size),
         pageCount: 1,
         status: isTooBig ? 'error' : 'pending',
-        error: isTooBig ? 'حجم الملف يتجاوز الحد الأقصى (150 ميجابايت)' : undefined,
+        error: isTooBig ? `حجم الملف يتجاوز الحد الأقصى للملف الواحد (${ADMIN_MAX_FILE_SIZE_MB} ميجابايت)` : undefined,
         progressPercent: 0,
         statusText: isTooBig ? 'حجم الملف كبير جداً' : 'في انتظار بدء الاستخراج...',
         title: cleanTitle,
@@ -1512,6 +1547,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
 
     if (invalidCount > 0) {
       setBatchErrorMessage(`تم تخطي ${invalidCount} ملفات لأنها بصيغة غير مدعومة (فقط PDF، Word، PPT).`);
+    }
+    if (sizeErrorCount > 0) {
+      setBatchErrorMessage(`تم رصد ${sizeErrorCount} ملفات تتجاوز حجم ${ADMIN_MAX_FILE_SIZE_MB} ميجابايت المسموح للملف الواحد.`);
     }
 
     if (newItems.length > 0) {
@@ -1777,6 +1815,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         // Immediately remove saved items from queue so user sees real-time progress
         const chunkIds = new Set(chunk.map((item) => item.id));
         setQueuedLaws((prev) => prev.filter((l) => !chunkIds.has(l.id)));
+      }
+
+      if (totalSaved > 0) {
+        try {
+          const currentData = getAdminLocalTodayData();
+          const currentCount = currentData.count + totalSaved;
+          const addedBytes = readyLaws.slice(0, totalSaved).reduce((acc, l) => acc + (l.file ? l.file.size : 100 * 1024), 0);
+          const currentBytes = currentData.totalBytes + addedBytes;
+          localStorage.setItem(
+            'sanad_admin_daily_uploads',
+            JSON.stringify({ date: adminTodayDateStr, count: currentCount, totalBytes: currentBytes })
+          );
+        } catch (e) {}
       }
 
       setBatchSuccessMessage(
@@ -2862,6 +2913,43 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                     >
                       <X className="w-4 h-4" />
                     </button>
+                  </div>
+                )}
+
+                {/* Admin Daily Upload Quota & Limit Banner */}
+                <div className="bg-gradient-to-r from-emerald-50 via-teal-50/50 to-emerald-50 border border-emerald-200 rounded-xl p-3.5 flex items-center justify-between shadow-xs mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                      {ADMIN_DAILY_LIMIT - adminTodayUploadsCount}
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-gray-900 flex items-center gap-2">
+                        <span>حصاد الرفع اليومي لقاعدة المعرفة (حماية الخادم وقاعدة البيانات)</span>
+                      </div>
+                      <div className="text-[11px] text-gray-600 mt-0.5">
+                        تم رفع {adminTodayUploadsCount} من أصل {ADMIN_DAILY_LIMIT} ملف مسموح اليوم ({adminTotalUploadedMbToday} ميجابايت من أصل {ADMIN_DAILY_TOTAL_MB_LIMIT} ميجابايت | الحد الأقصى للملف: {ADMIN_MAX_FILE_SIZE_MB} ميجابايت)
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <span
+                      className={`text-[11px] font-bold px-3 py-1 rounded-full ${
+                        adminIsLimitReached
+                          ? 'bg-red-100 text-red-800 border border-red-300 animate-pulse'
+                          : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                      }`}
+                    >
+                      {adminIsLimitReached ? 'تم بلوغ الحد الأقصى' : `متبقي ${adminRemainingUploads} ملف`}
+                    </span>
+                  </div>
+                </div>
+
+                {adminIsLimitReached && (
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-900 flex items-start gap-2 mb-4">
+                    <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                    <p className="leading-relaxed">
+                      عذراً، لقد وصلت إلى الحد الأقصى المسموح لرفع الملفات اليوم أو الحصة التخزينية المتاحة ({ADMIN_DAILY_LIMIT} ملف أو {ADMIN_DAILY_TOTAL_MB_LIMIT} ميجابايت) للحفاظ على كفاءة الخادم وقاعدة البيانات. يرجى المحاولة غداً.
+                    </p>
                   </div>
                 )}
 
