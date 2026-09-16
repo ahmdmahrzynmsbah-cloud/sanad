@@ -98,6 +98,9 @@ export interface ChatMessage {
   text: string;
   timestamp: string;
   sources?: string[];
+  isLegal?: boolean;
+  queryType?: 'legal' | 'general';
+  suggestedDetails?: string[];
 }
 
 export interface Conversation {

@@ -17,6 +17,9 @@ import {
   Plus,
   Layers,
   FileUp,
+  Sparkles,
+  HelpCircle,
+  MessageSquare,
 } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { User, ChatMessage, Conversation, SystemBranding, Law } from '../types';
@@ -24,7 +27,7 @@ import { ChatSidebar } from './ChatSidebar';
 import { SanadServicesSidebar } from './SanadServicesSidebar';
 import { useSync } from '../utils/sync';
 import { directFetchLawsFromFirestore } from '../services/clientFirestore';
-import { generateClientKnowledgeFallback } from '../utils/localLegalSearch';
+import { generateClientKnowledgeFallback, isLegalTaxCustomsQuery } from '../utils/localLegalSearch';
 
 interface ChatPortalProps {
   currentUser: User;
@@ -366,10 +369,23 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
       });
 
       let botResponseText = '';
+      let isQueryLegal = isLegalTaxCustomsQuery(query);
+      let resQueryType: 'legal' | 'general' = isQueryLegal ? 'legal' : 'general';
+      let resSuggestedDetails: string[] | undefined = isQueryLegal
+        ? [
+            'صفة المكلف: فرد طبيعي (موظف/مهني)',
+            'صفة المكلف: شركة تجارية/مساهمة',
+            'سنة المعاملة: 2024م',
+            'شحنة أو طرد بريدي شخصي',
+          ]
+        : undefined;
 
       if (res.ok) {
         const data = await res.json();
         botResponseText = data.reply || 'عذراً، لم أتمكن من استرجاع إجابة مطابقة في الوقت الحالي.';
+        if (typeof data.isLegal === 'boolean') isQueryLegal = data.isLegal;
+        if (data.queryType) resQueryType = data.queryType;
+        if (Array.isArray(data.suggestedDetails)) resSuggestedDetails = data.suggestedDetails;
       } else {
         // Parse error response if provided by backend
         let serverError = '';
@@ -390,6 +406,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
           } else {
             botResponseText = serverError || '⚠️ ليس لديك صلاحية استخدام المساعد الذكي حالياً.';
           }
+          resSuggestedDetails = undefined;
         } else {
           // Fallback: If server returned an error or Vercel function timed out
           console.warn('[Chat] Backend returned status:', res.status, 'Attempting direct client knowledge fallback...');
@@ -407,6 +424,9 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
         sender: 'bot',
         text: botResponseText,
         timestamp: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+        isLegal: isQueryLegal,
+        queryType: resQueryType,
+        suggestedDetails: resSuggestedDetails,
       };
 
       const finalMessages = [...updatedMessagesWithUser, botMessage];
@@ -435,11 +455,22 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
         fallbackText = '⚠️ تعذر الاتصال بالخادم حالياً. يرجى التحقق من اتصالك بالإنترنت والمحاولة مجدداً.';
       }
 
+      const isQueryLegal = isLegalTaxCustomsQuery(query);
       const errorMessage: ChatMessage = {
         id: 'err-' + Date.now(),
         sender: 'bot',
         text: fallbackText,
         timestamp: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+        isLegal: isQueryLegal,
+        queryType: isQueryLegal ? 'legal' : 'general',
+        suggestedDetails: isQueryLegal
+          ? [
+              'صفة المكلف: فرد طبيعي (موظف/مهني)',
+              'صفة المكلف: شركة تجارية/مساهمة',
+              'سنة المعاملة: 2024م',
+              'شحنة أو طرد بريدي شخصي',
+            ]
+          : undefined,
       };
       const finalMessages = [...updatedMessagesWithUser, errorMessage];
       setMessages(finalMessages);
@@ -593,11 +624,25 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
               >
                 {/* Header inside bot message */}
                 {msg.sender === 'bot' && (
-                  <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-zinc-100 text-[11px] text-emerald-700 font-bold">
-                    <span className="flex items-center gap-1.5">
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                      {systemName} • المساعد الذكي
-                    </span>
+                  <div className="flex flex-wrap items-center justify-between gap-1.5 pb-2 mb-2.5 border-b border-zinc-100 text-[11px] text-emerald-700 font-bold">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="flex items-center gap-1 text-emerald-800">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        {systemName}
+                      </span>
+                      {/* Classification Badge: Virtual Persona / General Chat vs Legal Citation */}
+                      {msg.queryType === 'legal' || msg.isLegal ? (
+                        <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-900 border border-amber-300/80 px-2 py-0.5 rounded-full text-[10px] font-semibold">
+                          <Scale className="w-3 h-3 text-amber-600" />
+                          استشارة قانونية • سند موثق
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-900 border border-emerald-300/80 px-2 py-0.5 rounded-full text-[10px] font-semibold">
+                          <Sparkles className="w-3 h-3 text-emerald-600" />
+                          دردشة عامة • شخصية افتراضية
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] text-zinc-400 font-normal">{msg.timestamp}</span>
                       <button
@@ -665,6 +710,29 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
                     >
                       {msg.text}
                     </Markdown>
+
+                    {/* Interactive Suggested Details Action Chips for Legal Inquiries */}
+                    {msg.sender === 'bot' && msg.suggestedDetails && msg.suggestedDetails.length > 0 && (
+                      <div className="mt-3 pt-2.5 border-t border-zinc-100 flex flex-col gap-1.5">
+                        <span className="text-[11px] font-bold text-amber-900 flex items-center gap-1">
+                          <HelpCircle className="w-3.5 h-3.5 text-amber-600" />
+                          تحديد التفاصيل بنقرة سريعة للاستشارة:
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {msg.suggestedDetails.map((detail, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => handleSendMessage(detail)}
+                              className="text-[11px] bg-amber-50/80 hover:bg-amber-100 text-amber-950 border border-amber-300/80 px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer flex items-center gap-1 active:scale-95 shadow-2xs"
+                            >
+                              <Plus className="w-3 h-3 text-amber-700" />
+                              <span>{detail}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -676,6 +744,61 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
               </div>
             </div>
           ))}
+
+          {/* Quick Guided Exploration Cards: General Persona Chat vs Legal Queries */}
+          {messages.length <= 1 && (
+            <div className="my-2 grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              {/* Card 1: General Knowledge & Persona Chat */}
+              <div className="bg-emerald-50/40 border border-emerald-200/80 rounded-xl p-3 shadow-2xs">
+                <div className="flex items-center gap-1.5 mb-2 text-xs font-bold text-emerald-900">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>دردشة عامة ومعرفة (شخصية افتراضية):</span>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  {[
+                    'هل أنت إنسان؟',
+                    'ماذا تعرف عن محمد صلاح؟',
+                    'ما هي أركان الدين الإسلامي؟',
+                  ].map((q, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => handleSendMessage(q)}
+                      className="text-right text-[11px] bg-white hover:bg-emerald-50 text-emerald-950 border border-emerald-100 px-2.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer flex items-center justify-between group"
+                    >
+                      <span>{q}</span>
+                      <Send className="w-2.5 h-2.5 rotate-180 text-emerald-600 group-hover:translate-x-[-2px] transition-transform shrink-0" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Card 2: Legal & Tax Consultations */}
+              <div className="bg-amber-50/40 border border-amber-200/80 rounded-xl p-3 shadow-2xs">
+                <div className="flex items-center gap-1.5 mb-2 text-xs font-bold text-amber-950">
+                  <Scale className="w-3.5 h-3.5 text-amber-600" />
+                  <span>استشارات قانونية وضريبية (فلسطين):</span>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  {[
+                    'ما هي نسبة ضريبة القيمة المضافة؟',
+                    'ما هي إعفاءات ضريبة الدخل للموظفين؟',
+                    'شروط جمارك الطرود البريدية الشخصية؟',
+                  ].map((q, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => handleSendMessage(q)}
+                      className="text-right text-[11px] bg-white hover:bg-amber-50 text-amber-950 border border-amber-200/80 px-2.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer flex items-center justify-between group"
+                    >
+                      <span>{q}</span>
+                      <Send className="w-2.5 h-2.5 rotate-180 text-amber-600 group-hover:translate-x-[-2px] transition-transform shrink-0" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Loading Indicator */}
           {loading && (
