@@ -40,7 +40,7 @@ interface LawRequestsAdminTabProps {
 }
 
 export const LawRequestsAdminTab: React.FC<LawRequestsAdminTabProps> = ({
-  categories,
+  categories = [],
   currentAdmin,
   onLawsUpdated,
   onLawApproved,
@@ -87,7 +87,7 @@ export const LawRequestsAdminTab: React.FC<LawRequestsAdminTabProps> = ({
         if (data.lawRequests && Array.isArray(data.lawRequests)) {
           setRequests(data.lawRequests);
           loaded = true;
-          const pending = data.lawRequests.filter((r: LawRequest) => r.status === 'pending').length;
+          const pending = (data.lawRequests || []).filter((r: LawRequest) => r.status === 'pending').length;
           onRequestCountChanged?.(pending);
         }
       }
@@ -99,11 +99,13 @@ export const LawRequestsAdminTab: React.FC<LawRequestsAdminTabProps> = ({
     if (!loaded) {
       try {
         const directList = await directFetchLawRequestsFromFirestore();
-        setRequests(directList);
-        const pending = directList.filter((r) => r.status === 'pending').length;
+        const safeList = directList || [];
+        setRequests(safeList);
+        const pending = safeList.filter((r) => r.status === 'pending').length;
         onRequestCountChanged?.(pending);
       } catch (fErr) {
         console.error('Firestore law requests fetch error:', fErr);
+        setRequests([]);
       }
     }
 
@@ -309,7 +311,7 @@ export const LawRequestsAdminTab: React.FC<LawRequestsAdminTabProps> = ({
   };
 
   // Filtered list
-  const filteredRequests = requests.filter((r) => {
+  const filteredRequests = (requests || []).filter((r) => {
     if (filterStatus !== 'all' && r.status !== filterStatus) return false;
     if (filterCategory !== 'all' && r.category !== filterCategory) return false;
     if (searchQuery.trim()) {
@@ -325,9 +327,9 @@ export const LawRequestsAdminTab: React.FC<LawRequestsAdminTabProps> = ({
     return true;
   });
 
-  const pendingCount = requests.filter((r) => r.status === 'pending').length;
-  const approvedCount = requests.filter((r) => r.status === 'approved').length;
-  const rejectedCount = requests.filter((r) => r.status === 'rejected').length;
+  const pendingCount = (requests || []).filter((r) => r.status === 'pending').length;
+  const approvedCount = (requests || []).filter((r) => r.status === 'approved').length;
+  const rejectedCount = (requests || []).filter((r) => r.status === 'rejected').length;
 
   return (
     <div className="space-y-6">
