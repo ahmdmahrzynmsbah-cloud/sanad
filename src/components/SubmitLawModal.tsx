@@ -22,12 +22,14 @@ import {
   HelpCircle,
   RefreshCw
 } from 'lucide-react';
-import { User as UserType, LegalCategory, LawRequest } from '../types';
+import { User as UserType, LegalCategory, LawRequest, Law } from '../types';
 import { extractTextFromAnyDocument } from '../utils/documentParser';
 import { formatBytes, sanitizeLawTitle, PDFProgress } from '../utils/pdfParser';
+import { findDuplicateLaw } from '../utils/duplicateLawChecker';
 import {
   directSaveLawRequestToFirestore,
   directFetchLawRequestsFromFirestore,
+  directFetchLawsFromFirestore,
 } from '../services/clientFirestore';
 
 interface SubmitLawModalProps {
@@ -35,6 +37,7 @@ interface SubmitLawModalProps {
   onClose: () => void;
   currentUser?: UserType | null;
   categories?: (LegalCategory | string)[];
+  laws?: Law[];
   onSubmissionSuccess?: () => void;
 }
 
@@ -48,9 +51,35 @@ export const SubmitLawModal: React.FC<SubmitLawModalProps> = ({
     { id: '3', name: 'ضريبة قيمة مضافة' },
     { id: '4', name: 'رسوم ومكوس' },
   ],
+  laws = [],
   onSubmissionSuccess,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'submit' | 'my-requests'>('submit');
+
+  // Knowledge base laws cache for instant duplicate prevention
+  const [knowledgeLaws, setKnowledgeLaws] = useState<Law[]>(() => {
+    if (laws && laws.length > 0) return laws;
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('sanad_cached_laws');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    if (laws && laws.length > 0) {
+      setKnowledgeLaws(laws);
+    } else if (isOpen) {
+      directFetchLawsFromFirestore().then((res) => {
+        if (res && res.length > 0) setKnowledgeLaws(res);
+      }).catch(() => {});
+    }
+  }, [laws, isOpen]);
 
   // Form State
   const [lawTitle, setLawTitle] = useState('');
@@ -212,6 +241,23 @@ export const SubmitLawModal: React.FC<SubmitLawModalProps> = ({
       return;
     }
 
+    const cleanTitle = sanitizeLawTitle(file.name);
+
+    // Immediate duplicate check in knowledge base before parsing
+    const dupCheck = findDuplicateLaw(
+      { fileName: file.name, title: cleanTitle },
+      knowledgeLaws
+    );
+
+    if (dupCheck.isDuplicate) {
+      setFeedback({
+        type: 'error',
+        message: `هذا الملف موجود بالفعل في قاعدة المعرفة بعنوان "${dupCheck.matchedLaw?.title}"، ولا يمكن إعادة رفعه.`,
+      });
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
     setSelectedFile(file);
     setIsParsingFile(true);
     setFeedback(null);
@@ -222,8 +268,27 @@ export const SubmitLawModal: React.FC<SubmitLawModalProps> = ({
         setParsingProgress(prog);
       });
 
-      const cleanTitle = sanitizeLawTitle(result.suggestedTitle || file.name);
-      setLawTitle(cleanTitle);
+      const extractedTitle = sanitizeLawTitle(result.suggestedTitle || file.name);
+
+      // Duplicate check on extracted text / title
+      const postDupCheck = findDuplicateLaw(
+        { title: extractedTitle, fileName: file.name, content: result.text },
+        knowledgeLaws
+      );
+
+      if (postDupCheck.isDuplicate) {
+        setFeedback({
+          type: 'error',
+          message: `هذا التشريع موجود بالفعل في قاعدة المعرفة بعنوان "${postDupCheck.matchedLaw?.title}"، ولا يمكن تكراره.`,
+        });
+        setSelectedFile(null);
+        setLawTitle('');
+        setLawContent('');
+        setFileMeta(null);
+        return;
+      }
+
+      setLawTitle(extractedTitle);
 
       if (result.suggestedCategory) {
         const match = categories.find((c) => {
@@ -248,8 +313,23 @@ export const SubmitLawModal: React.FC<SubmitLawModalProps> = ({
       });
     } catch (err: any) {
       console.warn('Document parse notice:', err);
-      const cleanTitle = sanitizeLawTitle(file.name);
-      setLawTitle(cleanTitle);
+      const fallbackTitle = sanitizeLawTitle(file.name);
+
+      const fallbackDup = findDuplicateLaw(
+        { title: fallbackTitle, fileName: file.name },
+        knowledgeLaws
+      );
+
+      if (fallbackDup.isDuplicate) {
+        setFeedback({
+          type: 'error',
+          message: `هذا الملف موجود بالفعل في قاعدة المعرفة بعنوان "${fallbackDup.matchedLaw?.title}"، ولا يمكن إعادة رفعه.`,
+        });
+        setSelectedFile(null);
+        return;
+      }
+
+      setLawTitle(fallbackTitle);
       setFileMeta({
         fileName: file.name,
         fileSizeFormatted: formatBytes(file.size),
@@ -280,6 +360,20 @@ export const SubmitLawModal: React.FC<SubmitLawModalProps> = ({
       setFeedback({
         type: 'error',
         message: 'يرجى إدخال نصوص ومواد القانون أو رفع ملف يحتوي عليها.',
+      });
+      return;
+    }
+
+    // Check duplicate in knowledge base before sending request
+    const dupCheck = findDuplicateLaw(
+      { title: lawTitle.trim(), content: lawContent.trim(), fileName: fileMeta?.fileName || selectedFile?.name },
+      knowledgeLaws
+    );
+
+    if (dupCheck.isDuplicate) {
+      setFeedback({
+        type: 'error',
+        message: `هذا التشريع موجود بالفعل في قاعدة المعرفة بعنوان "${dupCheck.matchedLaw?.title}"، ولا حاجة لإعادة تقديمه.`,
       });
       return;
     }

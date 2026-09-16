@@ -195,6 +195,13 @@ export interface SystemBranding {
   founderPhotoUrl?: string;
   founderQuote?: string;
   siteOverview?: string;
+
+  // Chatbot Logo & Emblem in Hero Section
+  chatbotLogoUrl?: string;
+  chatbotLogoType?: 'preset' | 'url' | 'upload';
+  chatbotName?: string;
+  chatbotBadge?: string;
+  showChatbotLogoInHero?: boolean;
   
   // Auth Portal Dynamic Texts
   authPortalHeaderTop?: string;

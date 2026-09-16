@@ -13,13 +13,16 @@ import {
   HelpCircle,
   CheckCircle2,
   Cpu,
-  User as UserIcon
+  User as UserIcon,
+  Bot
 } from 'lucide-react';
+import { SystemBranding } from '../types';
 
 interface SanadWelcomeModalProps {
   isOpen: boolean;
   onClose: () => void;
   onQuestionAsked?: (question: string) => void;
+  branding?: SystemBranding;
 }
 
 // Large, highly detailed vector SVG mascot for Sanad (المستشار الذكي سَنَد)
@@ -167,9 +170,14 @@ export const SanadWelcomeModal: React.FC<SanadWelcomeModalProps> = ({
   isOpen,
   onClose,
   onQuestionAsked,
+  branding,
 }) => {
   const [step, setStep] = useState<1 | 2>(1);
   const [question, setQuestion] = useState<string>('');
+
+  const chatbotLogoUrl = branding?.chatbotLogoUrl;
+  const chatbotName = branding?.chatbotName || 'سَنَد';
+  const chatbotBadge = branding?.chatbotBadge || 'المستشار الذكي 24/7';
 
   if (!isOpen) return null;
 
@@ -281,21 +289,37 @@ export const SanadWelcomeModal: React.FC<SanadWelcomeModalProps> = ({
                 {/* Status Badge */}
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-xs font-bold mb-3 shadow-sm">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shadow-sm shadow-emerald-300"></span>
-                  <span>سَنَد متصل وجاهز للرد فوراً</span>
+                  <span>{chatbotName} متصل وجاهز للرد فوراً</span>
                 </div>
 
-                {/* THE ENLARGED CHATBOT FIGURE (صورة الشات بوت مكبرة) */}
-                <div className="w-48 h-56 sm:w-56 sm:h-64 my-1">
-                  <SanadMascotEnlarged className="w-full h-full" />
+                {/* THE ENLARGED CHATBOT FIGURE OR CUSTOM LOGO (صورة الشات بوت مكبرة) */}
+                <div className="w-48 h-56 sm:w-56 sm:h-64 my-1 flex items-center justify-center">
+                  {chatbotLogoUrl ? (
+                    <div className="relative w-44 h-44 sm:w-52 sm:h-52 rounded-3xl overflow-hidden bg-gradient-to-br from-emerald-950 to-[#061510] border-2 border-emerald-400/60 p-3 shadow-2xl flex items-center justify-center group hover:scale-105 transition-transform">
+                      <img
+                        src={chatbotLogoUrl}
+                        alt={chatbotName}
+                        className="w-full h-full object-contain"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <SanadMascotEnlarged className="w-full h-full" />
+                  )}
                 </div>
 
                 {/* Bot Label and Badge */}
                 <div className="mt-2 space-y-1">
                   <h3 className="text-lg sm:text-xl font-black text-white flex items-center justify-center gap-1.5">
-                    <span>المستشار الذكي «سَنَد»</span>
+                    <span>{chatbotName}</span>
                     <Sparkles className="w-4 h-4 text-[#d4af37]" />
                   </h3>
-                  <p className="text-xs text-slate-300 leading-relaxed max-w-xs">
+                  <div className="inline-block px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[11px] font-bold">
+                    {chatbotBadge}
+                  </div>
+                  <p className="text-xs text-slate-300 leading-relaxed max-w-xs pt-1">
                     مساعدك الذكي الموثوق للإجابة المباشرة بالاستناد إلى نصوص التشريعات الفلسطينية الرسمية.
                   </p>
                 </div>

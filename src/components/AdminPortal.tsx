@@ -50,12 +50,14 @@ import {
   PhoneCall,
   Handshake,
   CreditCard,
-  User as UserIcon
+  User as UserIcon,
+  Bot
 } from 'lucide-react';
 import { User, Law, LawCategory, LegalCategory, SystemBranding, PlatformAboutData, ContactInfo } from '../types';
 import { formatBytes, sanitizeLawTitle, PDFProgress } from '../utils/pdfParser';
 import { extractTextFromAnyDocument } from '../utils/documentParser';
 import { compressImageClientSide } from '../utils/imageCompressor';
+import { findDuplicateLaw } from '../utils/duplicateLawChecker';
 import { SupervisorsAdminTab } from './admin/SupervisorsAdminTab';
 import { RelatedSitesAdminTab } from './admin/RelatedSitesAdminTab';
 import { PartnersAdminTab } from './admin/PartnersAdminTab';
@@ -256,6 +258,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   const [siteOverviewInput, setSiteOverviewInput] = useState(
     'المنظومة الرقمية الفلسطينية المتكاملة للاستعلام والاستشارات في القوانين الجمركية، ضريبة الدخل، ضريبة القيمة المضافة، والمكوس. توفر المنظومة محرك ذكاء اصطناعي مدعوماً بنصوص القوانين والقرارات بقانون المعتمدة رسمياً في دولة فلسطين للإجابة الفورية، واستخراج النصوص الأصلية مع أرقام المواد، واحتساب الرسوم والضرائب بالشيكل بدقة متناهية.'
   );
+
+  // Chatbot Identity & Logo State (لوجو وهوية الشات بوت سَنَد)
+  const [chatbotLogoUrlInput, setChatbotLogoUrlInput] = useState<string>('');
+  const [chatbotLogoSource, setChatbotLogoSource] = useState<'upload' | 'url'>('url');
+  const [isDraggingChatbotLogo, setIsDraggingChatbotLogo] = useState(false);
+  const chatbotLogoFileInputRef = useRef<HTMLInputElement>(null);
+  const [chatbotNameInput, setChatbotNameInput] = useState('المستشار القانوني والمالي سَنَد');
+  const [chatbotBadgeInput, setChatbotBadgeInput] = useState('الذكاء الاصطناعي التشريعي 24/7');
+  const [showChatbotLogoInHeroInput, setShowChatbotLogoInHeroInput] = useState(true);
 
   // Auth Portal Dynamic Texts
   const [authPortalHeaderTopInput, setAuthPortalHeaderTopInput] = useState('دولة فلسطين');
@@ -666,6 +677,20 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     if (b.founderQuote || b.founder?.quote) setFounderQuoteInput(b.founderQuote || b.founder?.quote || '');
     if (b.siteOverview || b.founder?.siteOverview) setSiteOverviewInput(b.siteOverview || b.founder?.siteOverview || '');
 
+    // Chatbot Identity & Logo state
+    if (b.chatbotLogoUrl !== undefined) {
+      const cUrl = b.chatbotLogoUrl || '';
+      setChatbotLogoUrlInput(cUrl);
+      if (cUrl.startsWith('data:')) {
+        setChatbotLogoSource('upload');
+      } else if (cUrl.startsWith('http')) {
+        setChatbotLogoSource('url');
+      }
+    }
+    if (b.chatbotName !== undefined) setChatbotNameInput(b.chatbotName || 'المستشار القانوني والمالي سَنَد');
+    if (b.chatbotBadge !== undefined) setChatbotBadgeInput(b.chatbotBadge || 'الذكاء الاصطناعي التشريعي 24/7');
+    if (b.showChatbotLogoInHero !== undefined) setShowChatbotLogoInHeroInput(b.showChatbotLogoInHero !== false);
+
     // Auth Portal Text state
     setAuthPortalHeaderTopInput(b.authPortalHeaderTop ?? 'دولة فلسطين');
     setAuthPortalHeaderBottomInput(b.authPortalHeaderBottom ?? 'وزارة المالية • الإدارة العامة للجمارك وضريبة الدخل');
@@ -862,6 +887,47 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     }
   };
 
+  const processChatbotLogoFile = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setBrandingFeedback({
+        type: 'error',
+        message: 'يرجى اختيار ملف صورة صالح للوجو الشات بوت (PNG, JPG, SVG, WebP)',
+      });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setBrandingFeedback({
+        type: 'error',
+        message: 'حجم ملف لوجو الشات بوت يتجاوز 5 ميغابايت. يرجى اختيار ملف أصغر حجماً.',
+      });
+      return;
+    }
+
+    compressImageClientSide(file, 400, 400)
+      .then((result) => {
+        setChatbotLogoUrlInput(result);
+        setChatbotLogoSource('upload');
+        setBrandingFeedback({
+          type: 'success',
+          message: 'تم اختيار لوجو الشات بوت من الجهاز بنجاح. اضغط "حفظ إعدادات السيستم" لتطبيقه.',
+        });
+      })
+      .catch(() => {
+        setBrandingFeedback({
+          type: 'error',
+          message: 'حدث خطأ أثناء معالجة صورة لوجو الشات بوت. حاول مجدداً.',
+        });
+      });
+  };
+
+  const handleChatbotLogoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processChatbotLogoFile(file);
+    }
+  };
+
   // Save branding changes to Firestore and server
   const handleSaveBranding = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -891,6 +957,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       logoPreset: logoPresetInput,
       logoUrl: targetUrl,
       logoAccentColor: logoAccentColorInput,
+      chatbotLogoUrl: chatbotLogoUrlInput.trim(),
+      chatbotLogoType: chatbotLogoSource,
+      chatbotName: chatbotNameInput.trim(),
+      chatbotBadge: chatbotBadgeInput.trim(),
+      showChatbotLogoInHero: showChatbotLogoInHeroInput,
       founderName: founderNameInput.trim(),
       founderTitle: founderTitleInput.trim(),
       founderBio: founderBioInput.trim(),
@@ -1001,6 +1072,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
           logoType: 'preset',
           logoPreset: 'scale',
           logoUrl: '',
+          chatbotLogoUrl: '',
+          chatbotLogoType: 'preset',
+          chatbotName: 'المستشار القانوني والمالي سَنَد',
+          chatbotBadge: 'الذكاء الاصطناعي التشريعي 24/7',
+          showChatbotLogoInHero: true,
           founderName: 'المستشار القانوني أ. محمد ناصر خليل',
           founderTitle: 'مستشار السياسات الجمركية والتشريعات الضريبية',
           founderBio: 'خبير ومستشار قانوني وتشريعي متخصص في النظم الجمركية والضريبية الفلسطينية',
@@ -1603,6 +1679,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     if (files.length === 0) return;
 
     const newItems: QueuedLawItem[] = [];
+    const duplicateList: { fileName: string; matchedTitle: string }[] = [];
     let invalidCount = 0;
     let sizeErrorCount = 0;
 
@@ -1620,12 +1697,41 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         continue;
       }
 
+      const cleanTitle = sanitizeLawTitle(file.name);
+
+      // Check if file or title already exists in the Knowledge Base (laws)
+      const dupCheck = findDuplicateLaw(
+        { fileName: file.name, title: cleanTitle },
+        laws
+      );
+
+      if (dupCheck.isDuplicate) {
+        duplicateList.push({
+          fileName: file.name,
+          matchedTitle: dupCheck.matchedLaw?.title || cleanTitle,
+        });
+        continue; // Block duplicate file from being uploaded/queued
+      }
+
+      // Check if file is already present in current batch queue
+      const alreadyInQueue = queuedLaws.some(
+        (q) => q.fileName.toLowerCase() === file.name.toLowerCase()
+      ) || newItems.some(
+        (n) => n.fileName.toLowerCase() === file.name.toLowerCase()
+      );
+
+      if (alreadyInQueue) {
+        duplicateList.push({
+          fileName: file.name,
+          matchedTitle: 'قائمة الانتظار الحالية',
+        });
+        continue;
+      }
+
       const isTooBig = file.size > ADMIN_MAX_FILE_SIZE_MB * 1024 * 1024;
       if (isTooBig) {
         sizeErrorCount++;
       }
-
-      const cleanTitle = sanitizeLawTitle(file.name);
 
       newItems.push({
         id: `pdf-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -1645,15 +1751,28 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       });
     }
 
-    if (invalidCount > 0) {
+    if (duplicateList.length > 0) {
+      if (duplicateList.length === 1) {
+        setBatchErrorMessage(
+          `هذا الملف موجود بالفعل في قاعدة المعرفة: "${duplicateList[0].fileName}" (بعنوان: ${duplicateList[0].matchedTitle})، ولا يمكن إعادة رفعه.`
+        );
+      } else {
+        const fileNames = duplicateList.map((d) => `"${d.fileName}"`).join('، ');
+        setBatchErrorMessage(
+          `تعذر رفع ${duplicateList.length} ملفات لأنها موجودة بالفعل في قاعدة المعرفة: ${fileNames}`
+        );
+      }
+    } else if (invalidCount > 0) {
       setBatchErrorMessage(`تم تخطي ${invalidCount} ملفات لأنها بصيغة غير مدعومة (فقط PDF، Word، PPT).`);
-    }
-    if (sizeErrorCount > 0) {
+    } else if (sizeErrorCount > 0) {
       setBatchErrorMessage(`تم رصد ${sizeErrorCount} ملفات تتجاوز حجم ${ADMIN_MAX_FILE_SIZE_MB} ميجابايت المسموح للملف الواحد.`);
     }
 
     if (newItems.length > 0) {
       setQueuedLaws((prev) => [...prev, ...newItems]);
+      if (duplicateList.length === 0) {
+        setBatchErrorMessage(null);
+      }
       setBatchSuccessMessage(null);
     }
 
@@ -1700,6 +1819,34 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         const isScanned = result.method === 'resilient_fallback' || (!result.text || result.text.length < 50);
         const resolvedTitle = sanitizeLawTitle(result.suggestedTitle || nextItem.title || nextItem.fileName);
 
+        // Check if the extracted title or content matches an existing law in knowledge base
+        const postExtractDup = findDuplicateLaw(
+          { title: resolvedTitle, fileName: nextItem.fileName, content: result.text },
+          laws
+        );
+
+        if (postExtractDup.isDuplicate) {
+          setQueuedLaws((prev) =>
+            prev.map((item) =>
+              item.id === targetId
+                ? {
+                    ...item,
+                    status: 'error',
+                    title: resolvedTitle,
+                    category: detectedCategory,
+                    content: result.text || '',
+                    error: `هذا الملف أو التشريع موجود بالفعل في قاعدة المعرفة بعنوان "${postExtractDup.matchedLaw?.title}"، ولا يمكن تكراره.`,
+                    statusText: 'تشريع مكرر ومسجل مسبقاً',
+                    progressPercent: 100,
+                    isExpanded: true,
+                  }
+                : item
+            )
+          );
+          setBatchErrorMessage(`تم رصد ملف مكرر: "${nextItem.fileName}" موجود بالفعل في قاعدة المعرفة بعنوان "${postExtractDup.matchedLaw?.title}".`);
+          return;
+        }
+
         setQueuedLaws((prev) =>
           prev.map((item) =>
             item.id === targetId
@@ -1724,6 +1871,31 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       } catch (err: any) {
         console.warn('Error processing queued PDF, falling back to editable draft:', err);
         const fallbackTitle = sanitizeLawTitle(nextItem.title || nextItem.fileName);
+        
+        // Check duplicate on fallback title
+        const fallbackDup = findDuplicateLaw({ title: fallbackTitle, fileName: nextItem.fileName }, laws);
+        if (fallbackDup.isDuplicate) {
+          setQueuedLaws((prev) =>
+            prev.map((item) =>
+              item.id === targetId
+                ? {
+                    ...item,
+                    status: 'error',
+                    title: fallbackTitle,
+                    category: item.category || categories[0]?.name || 'جمارك',
+                    content: '',
+                    error: `هذا الملف موجود بالفعل في قاعدة المعرفة بعنوان "${fallbackDup.matchedLaw?.title}"`,
+                    statusText: 'ملف مكرر ومسجل مسبقاً',
+                    progressPercent: 100,
+                    isExpanded: true,
+                  }
+                : item
+            )
+          );
+          setBatchErrorMessage(`تم رصد ملف مكرر: "${nextItem.fileName}" موجود بالفعل في قاعدة المعرفة.`);
+          return;
+        }
+
         setQueuedLaws((prev) =>
           prev.map((item) =>
             item.id === targetId
@@ -1751,7 +1923,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     };
 
     processQueue();
-  }, [queuedLaws, categories]);
+  }, [queuedLaws, categories, laws]);
 
   const handleUpdateQueuedTitle = (id: string, title: string) => {
     setQueuedLaws((prev) =>
@@ -1856,6 +2028,25 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       return;
     }
 
+    // Filter out duplicates against current knowledge base
+    const nonDuplicateReadyLaws = readyLaws.filter((item) => {
+      const dup = findDuplicateLaw(
+        { title: item.title, fileName: item.fileName, content: item.content },
+        laws
+      );
+      return !dup.isDuplicate;
+    });
+
+    if (nonDuplicateReadyLaws.length === 0) {
+      setBatchErrorMessage('كافة الملفات الجاهزة موجودة بالفعل في قاعدة المعرفة ولا يمكن تكرارها.');
+      return;
+    }
+
+    if (nonDuplicateReadyLaws.length < readyLaws.length) {
+      const skippedCount = readyLaws.length - nonDuplicateReadyLaws.length;
+      console.warn(`[Batch Submit] Skipping ${skippedCount} duplicate laws.`);
+    }
+
     setIsSubmittingBatch(true);
     setBatchErrorMessage(null);
     setBatchSuccessMessage(null);
@@ -1865,8 +2056,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       const chunkSize = 2;
       let totalSaved = 0;
 
-      for (let i = 0; i < readyLaws.length; i += chunkSize) {
-        const chunk = readyLaws.slice(i, i + chunkSize);
+      for (let i = 0; i < nonDuplicateReadyLaws.length; i += chunkSize) {
+        const chunk = nonDuplicateReadyLaws.slice(i, i + chunkSize);
         const chunkPayload = chunk.map((item, idx) => ({
           id: 'law-' + (Date.now() + i + idx) + '-' + Math.random().toString(36).substring(2, 6),
           title: item.title.trim(),
@@ -1921,7 +2112,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         try {
           const currentData = getAdminLocalTodayData();
           const currentCount = currentData.count + totalSaved;
-          const addedBytes = readyLaws.slice(0, totalSaved).reduce((acc, l) => acc + (l.file ? l.file.size : 100 * 1024), 0);
+          const addedBytes = nonDuplicateReadyLaws.slice(0, totalSaved).reduce((acc, l) => acc + (l.file ? l.file.size : 100 * 1024), 0);
           const currentBytes = currentData.totalBytes + addedBytes;
           localStorage.setItem(
             'sanad_admin_daily_uploads',
@@ -1955,6 +2146,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
 
     if (!newTitle.trim() || !newContent.trim()) {
       setLawFormError('يرجى ملء عنوان القانون ونص المواد بالكامل.');
+      return;
+    }
+
+    // Check duplicate in knowledge base
+    const dupCheck = findDuplicateLaw(
+      { title: newTitle.trim(), content: newContent.trim() },
+      laws
+    );
+
+    if (dupCheck.isDuplicate) {
+      setLawFormError(
+        `هذا التشريع موجود بالفعل في قاعدة المعرفة بعنوان "${dupCheck.matchedLaw?.title}"، ولا يمكن تكراره.`
+      );
       return;
     }
 
@@ -4580,6 +4784,281 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                     placeholder="اكتب نبذة توضيحية عن المنظومة، الخدمات التي تقدمها، التشريعات التي تستند إليها، وميزاتها للمكلفين..."
                     className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]/20 focus:border-[#12281e] transition-all leading-relaxed"
                   />
+                </div>
+              </div>
+
+              {/* Card 4: Chatbot Identity & Logo (لوجو وهوية الشات بوت) */}
+              <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-xs space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-100">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs">
+                      4
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                        <span>لوجو وهوية الشات بوت (المستشار الذكي)</span>
+                        <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md font-bold">جديد</span>
+                      </h4>
+                      <p className="text-[11px] text-gray-500">
+                        تحكم في لوجو الشات بوت، اسمه، شارته، ومكان ظهوره في الصفحة الرئيسية والنافذة التفاعلية
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Toggle Show in Hero */}
+                  <label className="flex items-center gap-2 cursor-pointer select-none bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-200 self-start sm:self-auto">
+                    <input
+                      type="checkbox"
+                      checked={showChatbotLogoInHeroInput}
+                      onChange={(e) => setShowChatbotLogoInHeroInput(e.target.checked)}
+                      className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 rounded-sm"
+                    />
+                    <span className="text-xs font-bold text-gray-700">إظهار في بطاقة الصفحة الرئيسية</span>
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                      اسم الشات بوت / المستشار:
+                    </label>
+                    <input
+                      type="text"
+                      value={chatbotNameInput}
+                      onChange={(e) => setChatbotNameInput(e.target.value)}
+                      placeholder="مثال: المستشار القانوني والمالي سَنَد"
+                      className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]/20 focus:border-[#12281e] transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                      شارة / تخصص الشات بوت:
+                    </label>
+                    <input
+                      type="text"
+                      value={chatbotBadgeInput}
+                      onChange={(e) => setChatbotBadgeInput(e.target.value)}
+                      placeholder="مثال: الذكاء الاصطناعي التشريعي 24/7"
+                      className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]/20 focus:border-[#12281e] transition-all"
+                    />
+                  </div>
+                </div>
+
+                {/* Chatbot Logo Upload / URL Switcher */}
+                <div className="space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-800">
+                        صورة / لوجو الشات بوت:
+                      </label>
+                      <p className="text-[11px] text-gray-500">
+                        يمكنك رفع لوجو أو أيقونة مخصصة من جهازك أو وضع رابط صورة خارجي
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl border border-gray-200 self-start sm:self-auto">
+                      <button
+                        type="button"
+                        onClick={() => setChatbotLogoSource('upload')}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                          chatbotLogoSource === 'upload'
+                            ? 'bg-[#12281e] text-white shadow-xs'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        <UploadCloud className="w-3.5 h-3.5" />
+                        <span>رفع من الجهاز</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setChatbotLogoSource('url')}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                          chatbotLogoSource === 'url'
+                            ? 'bg-[#12281e] text-white shadow-xs'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        <Link2 className="w-3.5 h-3.5" />
+                        <span>رابط صورة (URL)</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* OPTION 1: Upload from Device */}
+                  {chatbotLogoSource === 'upload' && (
+                    <div className="space-y-3">
+                      <input
+                        type="file"
+                        ref={chatbotLogoFileInputRef}
+                        onChange={handleChatbotLogoFileUpload}
+                        accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                        className="hidden"
+                      />
+
+                      <div
+                        onClick={() => chatbotLogoFileInputRef.current?.click()}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          setIsDraggingChatbotLogo(true);
+                        }}
+                        onDragLeave={() => setIsDraggingChatbotLogo(false)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setIsDraggingChatbotLogo(false);
+                          const file = e.dataTransfer.files?.[0];
+                          if (file) processChatbotLogoFile(file);
+                        }}
+                        className={`border-2 border-dashed rounded-2xl p-5 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-2.5 ${
+                          isDraggingChatbotLogo
+                            ? 'border-emerald-600 bg-emerald-50/80 scale-[0.99]'
+                            : 'border-gray-300 hover:border-[#12281e] bg-gray-50/70 hover:bg-emerald-50/30'
+                        }`}
+                      >
+                        {chatbotLogoUrlInput ? (
+                          <div className="flex items-center gap-4 w-full justify-center flex-wrap sm:flex-nowrap">
+                            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-950 to-[#0c241c] border-2 border-emerald-400/80 shadow-md shrink-0 flex items-center justify-center p-1.5 relative">
+                              <img
+                                src={chatbotLogoUrlInput}
+                                alt="Chatbot Logo Preview"
+                                className="w-full h-full object-contain"
+                                onError={(e) => {
+                                  (e.target as HTMLElement).style.display = 'none';
+                                }}
+                              />
+                              <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse border border-emerald-950"></span>
+                            </div>
+                            <div className="text-right flex-1 min-w-[180px]">
+                              <div className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md mb-1">
+                                <Check className="w-3 h-3 text-emerald-700" />
+                                <span>تم تحديد لوجو الشات بوت بنجاح</span>
+                              </div>
+                              <p className="text-xs font-bold text-gray-800">
+                                {chatbotLogoUrlInput.startsWith('data:') ? 'لوجو مرفوع من الجهاز' : 'لوجو مخصص للشات بوت'}
+                              </p>
+                              <p className="text-[11px] text-gray-500 mt-0.5">
+                                انقر هنا أو اسحب صورة جديدة لتغييرها في أي وقت (PNG, SVG, JPG, WebP)
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="w-12 h-12 rounded-2xl bg-emerald-100/80 border border-emerald-200 text-emerald-800 flex items-center justify-center shadow-xs">
+                              <Bot className="w-6 h-6 text-emerald-700" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-gray-800">
+                                اضغط هنا لرفع لوجو الشات بوت من جهازك أو اسحب الملف وأفلته هنا
+                              </p>
+                              <p className="text-[11px] text-gray-500 mt-0.5">
+                                يفضل استخدام صورة مربعة مفرغة بخلفية شفافة PNG أو SVG
+                              </p>
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      {chatbotLogoUrlInput && (
+                        <div className="flex items-center justify-between text-xs px-1">
+                          <button
+                            type="button"
+                            onClick={() => chatbotLogoFileInputRef.current?.click()}
+                            className="text-emerald-800 hover:text-emerald-950 font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            <UploadCloud className="w-3.5 h-3.5" />
+                            <span>اختيار لوجو آخر من الجهاز</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setChatbotLogoUrlInput('')}
+                            className="text-red-600 hover:text-red-700 font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>إزالة اللوجو المخصص</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* OPTION 2: Enter direct URL */}
+                  {chatbotLogoSource === 'url' && (
+                    <div className="space-y-2.5">
+                      <div className="flex items-center gap-3">
+                        <div className="relative flex-1">
+                          <input
+                            type="url"
+                            value={chatbotLogoUrlInput}
+                            onChange={(e) => setChatbotLogoUrlInput(e.target.value)}
+                            placeholder="https://... (رابط صورة لوجو الشات بوت المباشر)"
+                            className="w-full pl-3.5 pr-9 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]/20 focus:border-[#12281e] transition-all font-mono"
+                            dir="ltr"
+                          />
+                          <Link2 className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2" />
+                        </div>
+
+                        {chatbotLogoUrlInput && (
+                          <div className="w-11 h-11 rounded-xl overflow-hidden bg-gradient-to-br from-emerald-950 to-[#0c241c] border-2 border-emerald-400/80 shrink-0 shadow-xs flex items-center justify-center p-1 relative">
+                            <img
+                              src={chatbotLogoUrlInput}
+                              alt="Chatbot Logo Preview"
+                              className="w-full h-full object-contain"
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = 'none';
+                              }}
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px] text-gray-500">
+                        <span>ضع رابطاً مباشراً لصورة أو لوجو الشات بوت (PNG, SVG, JPG).</span>
+                        {chatbotLogoUrlInput && (
+                          <button
+                            type="button"
+                            onClick={() => setChatbotLogoUrlInput('')}
+                            className="text-red-600 hover:text-red-700 font-bold cursor-pointer"
+                          >
+                            مسح الرابط
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Real-time Hero Card Preview Banner */}
+                <div className="p-4 rounded-xl bg-gradient-to-l from-emerald-950 via-[#0a231b] to-[#04130e] text-white border border-emerald-500/30 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-[#061510] border border-emerald-400/50 p-1 flex items-center justify-center relative shrink-0">
+                      {chatbotLogoUrlInput ? (
+                        <img
+                          src={chatbotLogoUrlInput}
+                          alt="Bot"
+                          className="w-full h-full object-contain"
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <Bot className="w-6 h-6 text-emerald-300" />
+                      )}
+                      <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-bold text-emerald-300 bg-emerald-900/60 border border-emerald-600/40 px-2 py-0.5 rounded-full inline-block mb-0.5">
+                        {chatbotBadgeInput || 'الذكاء الاصطناعي التشريعي 24/7'}
+                      </div>
+                      <h5 className="text-xs font-bold text-white">
+                        {chatbotNameInput || 'المستشار القانوني والمالي سَنَد'}
+                      </h5>
+                      <span className="text-[10px] text-emerald-200/70">معاينة بطاقة الشات بوت الحية</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg ${showChatbotLogoInHeroInput ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-gray-800 text-gray-400'}`}>
+                      {showChatbotLogoInHeroInput ? 'مفعل في الرئيسية' : 'مخفي في الرئيسية'}
+                    </span>
+                  </div>
                 </div>
               </div>
 

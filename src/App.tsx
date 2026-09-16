@@ -594,6 +594,7 @@ export default function App() {
       {/* Interactive Sanad Welcome Dialog (النافذة المنبثقة: اسأل سند + من هو سند) */}
       <SanadWelcomeModal
         isOpen={showWelcomeModal}
+        branding={branding}
         onClose={() => {
           setShowWelcomeModal(false);
           localStorage.setItem('sanad_welcome_seen', 'true');

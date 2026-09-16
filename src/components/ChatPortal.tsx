@@ -50,8 +50,22 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
   const logoPreset = branding?.logoPreset || 'scale';
   const logoUrl = branding?.logoUrl;
   const logoAccentColor = branding?.logoAccentColor || '#d4af37';
+  const chatbotLogoUrl = branding?.chatbotLogoUrl;
+  const chatbotName = branding?.chatbotName || 'سَنَد';
 
   const renderBotIcon = () => {
+    if (chatbotLogoUrl) {
+      return (
+        <img
+          src={chatbotLogoUrl}
+          alt={chatbotName}
+          className="w-full h-full object-contain p-0.5 rounded"
+          onError={(e) => {
+            (e.target as HTMLElement).style.display = 'none';
+          }}
+        />
+      );
+    }
     if ((logoType === 'url' || logoType === 'upload') && logoUrl) {
       return <img src={logoUrl} alt={systemName} className="w-full h-full object-contain p-0.5 rounded" />;
     }

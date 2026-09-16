@@ -18,7 +18,8 @@ import {
   Clock,
   Target,
   Eye,
-  PhoneCall
+  PhoneCall,
+  Bot
 } from 'lucide-react';
 import { SystemBranding, User, SubscriptionPlan } from '../types';
 import { SubscriptionPlansSection } from './SubscriptionPlansSection';
@@ -57,7 +58,7 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
   const founderTitle = branding?.founderTitle || 'مستشار السياسات الجمركية والتشريعات الضريبية';
   const founderBio =
     branding?.founderBio ||
-    'خبير ومستشار قانوني وتشريعي متخصص في النظم الجمركية والضريبية الفلسطينية وقوانين تشجيع الاستثمار. أسهم في صياغة ومراجعة العديد من مشاريع القرارات بقوانين واللوائح التنفيذية ومذكرات الاستئناف لدى المحاكم الجمركية والضريبية. بادر بتأسيس وتطوير هذه المنصة الرقمية الذكية لتكون مرجعاً موثقاً وحصناً قانونياً يُمكّن التجار والمكلفين والمستوردين والمواطنين من الإلمام بحقوقهم والتزاماتهم وحوافزهم التشريعية بوضوح وشفافية ودقة متناهية.';
+    'خبير ومستشار قانوني وتشريعي متخصص في النظم الجمركية والضريبية الفلسطينية وقوانين تشجيع الاستثمار. أسهم في صياغة ومراجعة العديد من مشاريع القرارات بقوانين واللوائح التنفيذية ومذكرات الاستئناف لدى المحاكم الجمركية والضريبية. بادر بتأسيس وتطوير هذه المنصة الرقمية الذكية لتكون مرجعاً موثوقاً وحصناً قانونياً يُمكّن التجار والمكلفين والمستوردين والمواطنين من الإلمام بحقوقهم والتزاماتهم وحوافزهم التشريعية بوضوح وشفافية ودقة متناهية.';
   const founderPhotoUrl =
     branding?.founderPhotoUrl ||
     'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&auto=format&fit=crop&q=80';
@@ -73,6 +74,12 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
     branding?.systemSubtitle ||
     'دولة فلسطين • وزارة المالية • الإدارة العامة للجمارك وضريبة الدخل';
 
+  // Chatbot Branding & Custom Logo
+  const chatbotLogoUrl = branding?.chatbotLogoUrl;
+  const chatbotName = branding?.chatbotName || 'المستشار القانوني والمالي سَنَد';
+  const chatbotBadge = branding?.chatbotBadge || 'الذكاء الاصطناعي التشريعي 24/7';
+  const showChatbotLogo = branding?.showChatbotLogoInHero !== false;
+
   return (
     <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-8 space-y-6 sm:space-y-8 animate-in fade-in duration-300">
       {/* 1. HERO & FOUNDER PRESENTATION: صورة المؤسس ع الشمال واسمه ومعلومات عنه وعن الموقع وأزرار الدخول والتسجيل ع اليمين */}
@@ -85,24 +92,65 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
           
           {/* الجانب الأيمن: اسم المؤسس، لقبه، معلومات عنه، معلومات عن الموقع، وأزرار تسجيل الدخول وإنشاء الحساب */}
           <div className="flex-1 w-full text-right space-y-4">
-            {/* National Badge */}
-            <div className="inline-flex flex-wrap items-center gap-1.5 sm:gap-2 px-3.5 py-1.5 rounded-full bg-white/10 border border-white/15 text-white text-xs sm:text-sm font-bold">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span>دولة فلسطين • المنظومة الرقمية الأولى</span>
-              <span className="bg-emerald-600/60 text-emerald-100 px-2.5 py-0.5 rounded-full text-xs font-bold">
-                {lawsCount} تشريع وقانون معتمد
-              </span>
+            {/* National Badge & Chatbot Identity Header Row */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
+              {/* National Badge */}
+              <div className="inline-flex flex-wrap items-center gap-1.5 sm:gap-2 px-3.5 py-1.5 rounded-full bg-white/10 border border-white/15 text-white text-xs sm:text-sm font-bold w-fit">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>دولة فلسطين • المنظومة الرقمية الأولى</span>
+                <span className="bg-emerald-600/60 text-emerald-100 px-2.5 py-0.5 rounded-full text-xs font-bold">
+                  {lawsCount} تشريع وقانون معتمد
+                </span>
+              </div>
             </div>
 
-            {/* Founder Name on the Right */}
-            <div>
-              <div className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-emerald-400 mb-1">
-                <Sparkles className="w-4 h-4 text-emerald-400" />
-                <span>مؤسس ومطوّر المنظومة</span>
+            {/* Founder Info & Chatbot Identity Box (In the Green Highlighted Area) */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 w-full">
+              {/* Founder Name on the Right */}
+              <div className="flex-1 min-w-0">
+                <div className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-emerald-400 mb-1">
+                  <Sparkles className="w-4 h-4 text-emerald-400" />
+                  <span>مؤسس ومطوّر المنظومة</span>
+                </div>
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight leading-tight">
+                  {founderName}
+                </h1>
+                <p className="text-xs sm:text-sm font-semibold text-emerald-300 mt-1">
+                  {founderTitle}
+                </p>
               </div>
-              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight leading-tight">
-                {founderName}
-              </h1>
+
+              {/* Chatbot Logo - Pure Square Image Container without any text */}
+              {showChatbotLogo && (
+                <div
+                  id="hero-chatbot-branding-badge"
+                  onClick={onOpenSanadIntro || onNavigateToChat}
+                  className="group relative w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 aspect-square rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-950 via-[#071d15] to-[#030d0a] border-2 border-emerald-500/50 hover:border-emerald-400 shadow-xl shadow-emerald-950/70 hover:shadow-emerald-700/50 transition-all duration-300 cursor-pointer shrink-0 p-2 sm:p-2.5 flex items-center justify-center backdrop-blur-md hover:scale-105"
+                  title="المستشار الذكي سَنَد - انقر للمحادثة والاستشارة الفورية"
+                >
+                  {/* Image/Icon occupying the entire space neatly */}
+                  {chatbotLogoUrl ? (
+                    <img
+                      src={chatbotLogoUrl}
+                      alt="شعار المستشار الذكي"
+                      className="w-full h-full object-contain drop-shadow-md rounded-xl"
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = 'none';
+                      }}
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-emerald-600/80 to-teal-800/80 rounded-xl flex items-center justify-center text-white border border-emerald-400/40">
+                      <Bot className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 text-emerald-100 drop-shadow" />
+                    </div>
+                  )}
+
+                  {/* Pulsing Active Indicator in the corner */}
+                  <span className="absolute top-2 right-2 flex h-2.5 w-2.5 pointer-events-none">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400"></span>
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Founder Bio / معلومات عن المؤسس */}

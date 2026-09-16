@@ -353,6 +353,13 @@ interface DBSettings {
   logoUrl?: string;
   logoAccentColor?: string;
 
+  // Chatbot Branding & Custom Logo
+  chatbotLogoUrl?: string;
+  chatbotLogoType?: 'preset' | 'url' | 'upload';
+  chatbotName?: string;
+  chatbotBadge?: string;
+  showChatbotLogoInHero?: boolean;
+
   // Founder Info & Site Overview
   founderName?: string;
   founderTitle?: string;
@@ -389,6 +396,11 @@ const DEFAULT_BRANDING = {
   logoPreset: 'scale',
   logoUrl: '',
   logoAccentColor: '#d4af37',
+  chatbotLogoUrl: '',
+  chatbotLogoType: 'preset' as const,
+  chatbotName: 'المستشار القانوني والمالي سَنَد',
+  chatbotBadge: 'الذكاء الاصطناعي التشريعي 24/7',
+  showChatbotLogoInHero: true,
   ...DEFAULT_FOUNDER,
 };
 
@@ -1236,6 +1248,11 @@ async function syncWithFirestore() {
         logoPreset: cloudSettings.logoPreset || db.settings?.logoPreset || DEFAULT_BRANDING.logoPreset,
         logoUrl: cloudSettings.logoUrl !== undefined ? cloudSettings.logoUrl : (db.settings?.logoUrl || ''),
         logoAccentColor: cloudSettings.logoAccentColor || db.settings?.logoAccentColor || DEFAULT_BRANDING.logoAccentColor,
+        chatbotLogoUrl: cloudSettings.chatbotLogoUrl !== undefined ? cloudSettings.chatbotLogoUrl : (db.settings?.chatbotLogoUrl || DEFAULT_BRANDING.chatbotLogoUrl),
+        chatbotLogoType: cloudSettings.chatbotLogoType || db.settings?.chatbotLogoType || DEFAULT_BRANDING.chatbotLogoType,
+        chatbotName: cloudSettings.chatbotName || db.settings?.chatbotName || DEFAULT_BRANDING.chatbotName,
+        chatbotBadge: cloudSettings.chatbotBadge || db.settings?.chatbotBadge || DEFAULT_BRANDING.chatbotBadge,
+        showChatbotLogoInHero: cloudSettings.showChatbotLogoInHero !== undefined ? cloudSettings.showChatbotLogoInHero : (db.settings?.showChatbotLogoInHero !== false),
 
         founderName: cloudSettings.founderName || db.settings?.founderName || DEFAULT_FOUNDER.founderName,
         founderTitle: cloudSettings.founderTitle || db.settings?.founderTitle || DEFAULT_FOUNDER.founderTitle,
@@ -1767,6 +1784,12 @@ app.get('/api/system/branding', (req, res) => {
     logoUrl: db.settings?.logoUrl || '',
     logoAccentColor: db.settings?.logoAccentColor || DEFAULT_BRANDING.logoAccentColor,
 
+    chatbotLogoUrl: db.settings?.chatbotLogoUrl !== undefined ? db.settings.chatbotLogoUrl : DEFAULT_BRANDING.chatbotLogoUrl,
+    chatbotLogoType: db.settings?.chatbotLogoType || DEFAULT_BRANDING.chatbotLogoType,
+    chatbotName: db.settings?.chatbotName || DEFAULT_BRANDING.chatbotName,
+    chatbotBadge: db.settings?.chatbotBadge || DEFAULT_BRANDING.chatbotBadge,
+    showChatbotLogoInHero: db.settings?.showChatbotLogoInHero !== false,
+
     founderName: db.settings?.founderName || DEFAULT_FOUNDER.founderName,
     founderTitle: db.settings?.founderTitle || DEFAULT_FOUNDER.founderTitle,
     founderBio: db.settings?.founderBio || DEFAULT_FOUNDER.founderBio,
@@ -1829,6 +1852,12 @@ app.get('/api/admin/init', async (req, res) => {
       logoUrl: db.settings?.logoUrl || '',
       logoAccentColor: db.settings?.logoAccentColor || DEFAULT_BRANDING.logoAccentColor,
 
+      chatbotLogoUrl: db.settings?.chatbotLogoUrl !== undefined ? db.settings.chatbotLogoUrl : DEFAULT_BRANDING.chatbotLogoUrl,
+      chatbotLogoType: db.settings?.chatbotLogoType || DEFAULT_BRANDING.chatbotLogoType,
+      chatbotName: db.settings?.chatbotName || DEFAULT_BRANDING.chatbotName,
+      chatbotBadge: db.settings?.chatbotBadge || DEFAULT_BRANDING.chatbotBadge,
+      showChatbotLogoInHero: db.settings?.showChatbotLogoInHero !== false,
+
       founderName: db.settings?.founderName || DEFAULT_FOUNDER.founderName,
       founderTitle: db.settings?.founderTitle || DEFAULT_FOUNDER.founderTitle,
       founderBio: db.settings?.founderBio || DEFAULT_FOUNDER.founderBio,
@@ -1871,6 +1900,12 @@ app.get('/api/admin/settings', (req, res) => {
       logoUrl: db.settings?.logoUrl || '',
       logoAccentColor: db.settings?.logoAccentColor || DEFAULT_BRANDING.logoAccentColor,
 
+      chatbotLogoUrl: db.settings?.chatbotLogoUrl !== undefined ? db.settings.chatbotLogoUrl : DEFAULT_BRANDING.chatbotLogoUrl,
+      chatbotLogoType: db.settings?.chatbotLogoType || DEFAULT_BRANDING.chatbotLogoType,
+      chatbotName: db.settings?.chatbotName || DEFAULT_BRANDING.chatbotName,
+      chatbotBadge: db.settings?.chatbotBadge || DEFAULT_BRANDING.chatbotBadge,
+      showChatbotLogoInHero: db.settings?.showChatbotLogoInHero !== false,
+
       founderName: db.settings?.founderName || DEFAULT_FOUNDER.founderName,
       founderTitle: db.settings?.founderTitle || DEFAULT_FOUNDER.founderTitle,
       founderBio: db.settings?.founderBio || DEFAULT_FOUNDER.founderBio,
@@ -1898,6 +1933,11 @@ app.post('/api/admin/settings/branding', async (req, res, next) => {
       logoPreset,
       logoUrl,
       logoAccentColor,
+      chatbotLogoUrl,
+      chatbotLogoType,
+      chatbotName,
+      chatbotBadge,
+      showChatbotLogoInHero,
       founderName,
       founderTitle,
       founderBio,
@@ -1945,6 +1985,25 @@ app.post('/api/admin/settings/branding', async (req, res, next) => {
     if (db.settings.logoUrl && db.settings.logoUrl.length > 5000000) {
       return res.status(400).json({ error: 'حجم الصورة ضخم جداً، يرجى رفع صورة أصغر أو استخدام رابط.' });
     }
+    if (chatbotLogoUrl !== undefined) {
+      if (String(chatbotLogoUrl).length > 5000000) {
+        return res.status(400).json({ error: 'حجم صورة لوجو الشات بوت ضخم جداً.' });
+      }
+      db.settings.chatbotLogoUrl = String(chatbotLogoUrl);
+    }
+    if (chatbotLogoType) {
+      db.settings.chatbotLogoType = chatbotLogoType === 'url' || chatbotLogoType === 'upload' ? chatbotLogoType : 'preset';
+    }
+    if (chatbotName !== undefined) {
+      db.settings.chatbotName = String(chatbotName).trim();
+    }
+    if (chatbotBadge !== undefined) {
+      db.settings.chatbotBadge = String(chatbotBadge).trim();
+    }
+    if (showChatbotLogoInHero !== undefined) {
+      db.settings.showChatbotLogoInHero = Boolean(showChatbotLogoInHero);
+    }
+
     if (founderPhotoUrl !== undefined) {
       if (String(founderPhotoUrl).length > 5000000) {
         return res.status(400).json({ error: 'حجم صورة المؤسس ضخم جداً.' });
@@ -1984,6 +2043,12 @@ app.post('/api/admin/settings/branding', async (req, res, next) => {
       logoUrl: db.settings.logoUrl,
       logoAccentColor: db.settings.logoAccentColor,
 
+      chatbotLogoUrl: db.settings.chatbotLogoUrl,
+      chatbotLogoType: db.settings.chatbotLogoType,
+      chatbotName: db.settings.chatbotName,
+      chatbotBadge: db.settings.chatbotBadge,
+      showChatbotLogoInHero: db.settings.showChatbotLogoInHero !== false,
+
       founderName: db.settings.founderName,
       founderTitle: db.settings.founderTitle,
       founderBio: db.settings.founderBio,
@@ -2013,7 +2078,7 @@ app.post('/api/admin/settings/branding', async (req, res, next) => {
 
     res.json({
       success: true,
-      message: 'تم حفظ وتطبيق إعدادات السيستم وبيانات المؤسس بنجاح وحفظها سحابياً.',
+      message: 'تم حفظ وتطبيق إعدادات السيستم وبيانات المؤسس وهوية الشات بوت بنجاح وحفظها سحابياً.',
       branding: {
         systemName: db.settings.systemName,
         systemSubtitle: db.settings.systemSubtitle,
@@ -2022,6 +2087,12 @@ app.post('/api/admin/settings/branding', async (req, res, next) => {
         logoPreset: db.settings.logoPreset,
         logoUrl: db.settings.logoUrl,
         logoAccentColor: db.settings.logoAccentColor,
+
+        chatbotLogoUrl: db.settings.chatbotLogoUrl,
+        chatbotLogoType: db.settings.chatbotLogoType,
+        chatbotName: db.settings.chatbotName,
+        chatbotBadge: db.settings.chatbotBadge,
+        showChatbotLogoInHero: db.settings.showChatbotLogoInHero !== false,
 
         founderName: db.settings.founderName,
         founderTitle: db.settings.founderTitle,
@@ -3871,6 +3942,38 @@ ${sampleText}
   }
 });
 
+// Server-side normalization & duplicate checker for laws
+function isDuplicateLawServer(candidate: { title?: string; sourceFileName?: string; content?: string }): StoredLaw | undefined {
+  if (!candidate || (!candidate.title && !candidate.sourceFileName && !candidate.content)) return undefined;
+
+  const norm = (s?: string) =>
+    (s || '')
+      .toLowerCase()
+      .replace(/\.(pdf|docx|doc|pptx|ppt|txt)$/i, '')
+      .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
+      .replace(/[أإآٱ]/g, 'ا')
+      .replace(/[ة]/g, 'ه')
+      .replace(/[ى]/g, 'ي')
+      .replace(/[ؤ]/g, 'و')
+      .replace(/[ئ]/g, 'ي')
+      .replace(/[^a-z0-9\u0600-\u06FF]+/gi, ' ')
+      .trim()
+      .replace(/\s+/g, ' ');
+
+  const candTitle = norm(candidate.title);
+  const candFileName = norm(candidate.sourceFileName);
+
+  return db.laws.find((law) => {
+    const lawTitle = norm(law.title);
+    const lawFileName = norm(law.sourceFileName);
+
+    if (candFileName && lawFileName && candFileName.length >= 3 && candFileName === lawFileName) return true;
+    if (candFileName && lawTitle && candFileName.length >= 3 && candFileName === lawTitle) return true;
+    if (candTitle && lawTitle && candTitle.length >= 3 && candTitle === lawTitle) return true;
+    return false;
+  });
+}
+
 // Get all laws
 app.get('/api/laws', (req, res) => {
   res.json({ laws: db.laws });
@@ -3894,6 +3997,18 @@ app.post('/api/laws/batch', async (req, res) => {
         continue;
       }
 
+      // Check for duplicates
+      const dup = isDuplicateLawServer({
+        title: String(item.title).trim(),
+        sourceFileName: item.sourceFileName ? String(item.sourceFileName).trim() : undefined,
+        content: String(item.content).trim(),
+      });
+
+      if (dup) {
+        errors.push(`الملف "${item.sourceFileName || item.title}" موجود بالفعل في قاعدة المعرفة بعنوان "${dup.title}"`);
+        continue;
+      }
+
       const newLaw: StoredLaw = {
         id: 'law-' + (Date.now() + i) + '-' + Math.random().toString(36).substring(2, 6),
         title: String(item.title).trim(),
@@ -3908,6 +4023,13 @@ app.post('/api/laws/batch', async (req, res) => {
 
       createdLaws.push(newLaw);
       db.laws.unshift(newLaw);
+    }
+
+    if (createdLaws.length === 0) {
+      return res.status(400).json({
+        error: errors.length > 0 ? errors.join(' • ') : 'هذا الملف أو التشريع موجود بالفعل في قاعدة المعرفة.',
+        errors,
+      });
     }
 
     cachedIndexedChunks = null;
@@ -3943,6 +4065,19 @@ app.post('/api/laws', async (req, res) => {
   const { title, category, content, sourceFileName, sourceFileSize, pageCount } = req.body;
   if (!title || !category || !content) {
     return res.status(400).json({ error: 'جميع الحقول مطلوبة (عنوان القانون، التصنيف، نص المواد)' });
+  }
+
+  // Check duplicate
+  const dup = isDuplicateLawServer({
+    title: String(title).trim(),
+    sourceFileName: sourceFileName ? String(sourceFileName).trim() : undefined,
+    content: String(content).trim(),
+  });
+
+  if (dup) {
+    return res.status(400).json({
+      error: `هذا الملف أو التشريع موجود بالفعل في قاعدة المعرفة بعنوان "${dup.title}" ولا يمكن إعادة إضافته.`,
+    });
   }
 
   const newLaw: StoredLaw = {
