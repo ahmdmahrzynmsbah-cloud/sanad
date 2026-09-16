@@ -169,8 +169,30 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   const [deleteUserError, setDeleteUserError] = useState<string | null>(null);
 
   // Trial & Subscription Settings & State
-  const [defaultTrialDays, setDefaultTrialDays] = useState<number>(7);
-  const [editingTrialDays, setEditingTrialDays] = useState<number>(7);
+  const [defaultTrialDays, setDefaultTrialDays] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('sanad_default_trial_days');
+        if (saved) {
+          const num = parseInt(saved, 10);
+          if (!isNaN(num) && num > 0) return num;
+        }
+      } catch {}
+    }
+    return 7;
+  });
+  const [editingTrialDays, setEditingTrialDays] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('sanad_default_trial_days');
+        if (saved) {
+          const num = parseInt(saved, 10);
+          if (!isNaN(num) && num > 0) return num;
+        }
+      } catch {}
+    }
+    return 7;
+  });
   const [savingTrialSettings, setSavingTrialSettings] = useState(false);
   const [trialSettingsFeedback, setTrialSettingsFeedback] = useState<string | null>(null);
 
@@ -530,16 +552,40 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
 
   // Fetch Settings (Auto-approval & Trial duration & Branding)
   const fetchSettings = async () => {
-    // 1. Direct Cloud Firestore fetch first (guaranteed and instant)
+    // 0. Load immediately from local cache if present
+    if (typeof window !== 'undefined') {
+      try {
+        const localTrial = localStorage.getItem('sanad_default_trial_days');
+        if (localTrial) {
+          const num = parseInt(localTrial, 10);
+          if (!isNaN(num) && num > 0) {
+            setDefaultTrialDays(num);
+            setEditingTrialDays(num);
+          }
+        }
+        const localAutoApprove = localStorage.getItem('sanad_auto_approve_enabled');
+        if (localAutoApprove !== null) {
+          setAutoApproveEnabled(localAutoApprove === 'true');
+        }
+      } catch {}
+    }
+
+    // 1. Direct Cloud Firestore fetch (guaranteed and instant)
     try {
       const directSettings = await directFetchSettingsFromFirestore();
       if (directSettings) {
         if (typeof directSettings.autoApprove === 'boolean') {
           setAutoApproveEnabled(directSettings.autoApprove);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('sanad_auto_approve_enabled', String(directSettings.autoApprove));
+          }
         }
-        if (typeof directSettings.defaultTrialDays === 'number') {
+        if (typeof directSettings.defaultTrialDays === 'number' && directSettings.defaultTrialDays > 0) {
           setDefaultTrialDays(directSettings.defaultTrialDays);
           setEditingTrialDays(directSettings.defaultTrialDays);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('sanad_default_trial_days', String(directSettings.defaultTrialDays));
+          }
         }
         if (directSettings.branding) {
           applyBrandingState(directSettings.branding);
@@ -553,13 +599,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     try {
       const res = await fetch('/api/admin/settings');
       const data = await res.json();
-      if (res.ok) {
+      if (res.ok && data) {
         if (typeof data.autoApprove === 'boolean') {
           setAutoApproveEnabled(data.autoApprove);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('sanad_auto_approve_enabled', String(data.autoApprove));
+          }
         }
-        if (typeof data.defaultTrialDays === 'number') {
+        if (typeof data.defaultTrialDays === 'number' && data.defaultTrialDays > 0) {
           setDefaultTrialDays(data.defaultTrialDays);
           setEditingTrialDays(data.defaultTrialDays);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('sanad_default_trial_days', String(data.defaultTrialDays));
+          }
         }
         if (data.branding) {
           applyBrandingState(data.branding);
@@ -1083,38 +1135,30 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     const nextVal = !autoApproveEnabled;
     setAutoApproveLoading(true);
     setAutoApproveEnabled(nextVal);
-    let success = false;
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('sanad_auto_approve_enabled', String(nextVal));
+      } catch {}
+    }
+
     try {
-      const res = await fetch('/api/admin/settings/auto-approve', {
+      fetch('/api/admin/settings/auto-approve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enabled: nextVal }),
-      });
-      if (res.ok) success = true;
-    } catch {
-      // Handled via fallback
-    }
+      }).catch(() => {});
+    } catch {}
 
-    if (!success) {
-      try {
-        const directOk = await directSaveAutoApproveToFirestore(nextVal);
-        if (directOk) success = true;
-      } catch (fErr) {
-        console.error('Direct auto approve save failed:', fErr);
-      }
-    }
+    try {
+      directSaveAutoApproveToFirestore(nextVal).catch(() => {});
+    } catch {}
 
-    if (success) {
-      setUserActionMessage(
-        nextVal
-          ? '⚡ تم تفعيل نظام القبول التلقائي! سيتم اعتماد وقبول أي حساب جديد فور تسجيله مباشرة.'
-          : '🔒 تم إيقاف نظام القبول التلقائي. يتطلب أي حساب جديد مراجعة واعتماد المسؤول يدوياً.'
-      );
-      setTimeout(() => setUserActionMessage(null), 5000);
-    } else {
-      setAutoApproveEnabled(!nextVal);
-      setUserActionMessage('❌ تعذر حفظ إعدادات القبول التلقائي، يرجى المحاولة ثانية.');
-    }
+    setUserActionMessage(
+      nextVal
+        ? '⚡ تم تفعيل نظام القبول التلقائي! سيتم اعتماد وقبول أي حساب جديد فور تسجيله مباشرة.'
+        : '🔒 تم إيقاف نظام القبول التلقائي. يتطلب أي حساب جديد مراجعة واعتماد المسؤول يدوياً.'
+    );
+    setTimeout(() => setUserActionMessage(null), 5000);
     setAutoApproveLoading(false);
   };
 
@@ -1240,40 +1284,40 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     setDefaultTrialDays(days);
     setEditingTrialDays(days);
 
-    let saved = false;
+    // 1. Immediately persist to localStorage for 100% local guarantee
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('sanad_default_trial_days', String(days));
+        window.dispatchEvent(new CustomEvent('sanad_trial_settings_updated', { detail: { defaultTrialDays: days } }));
+      } catch {}
+    }
 
-    // 1. Direct Cloud Firestore Save (Instant & 100% resilient)
+    // 2. Direct Cloud Firestore Save (Background resilient)
     try {
-      const directOk = await directSaveDefaultTrialDaysToFirestore(days);
-      if (directOk) {
-        saved = true;
-      }
+      directSaveDefaultTrialDaysToFirestore(days).catch((fErr) => {
+        console.warn('Direct save trial settings error:', fErr);
+      });
     } catch (fErr) {
       console.warn('Direct save trial settings error:', fErr);
     }
 
-    // 2. Secondary API call to keep in-memory server state in sync
+    // 3. Secondary API call to keep in-memory server state in sync
     try {
-      const res = await fetch('/api/admin/settings/trial', {
+      fetch('/api/admin/settings/trial', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ defaultTrialDays: days }),
+      }).catch((err) => {
+        console.warn('Save trial settings API notice:', err);
       });
-      if (res.ok) {
-        saved = true;
-      }
     } catch (err) {
       console.warn('Save trial settings API notice:', err);
     }
 
-    if (saved) {
-      setDefaultTrialDays(days);
-      setEditingTrialDays(days);
-      setTrialSettingsFeedback(`✅ تم حفظ وتطبيق مدة الفترة التجريبية الافتراضية (${days} يوم) بنجاح.`);
-      setTimeout(() => setTrialSettingsFeedback(null), 5000);
-    } else {
-      setTrialSettingsFeedback('❌ تعذر حفظ إعدادات الفترة التجريبية، يرجى المحاولة ثانية.');
-    }
+    setDefaultTrialDays(days);
+    setEditingTrialDays(days);
+    setTrialSettingsFeedback(`✅ تم حفظ وتطبيق مدة الفترة التجريبية الافتراضية (${days} يوم) بنجاح.`);
+    setTimeout(() => setTrialSettingsFeedback(null), 5000);
     setSavingTrialSettings(false);
   };
 

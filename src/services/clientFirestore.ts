@@ -227,7 +227,17 @@ export async function directRegisterUser(payload: {
     }
 
     const now = new Date();
-    const defaultTrialDays = 7;
+    let configuredTrialDays = 7;
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('sanad_default_trial_days');
+        if (saved) {
+          const num = parseInt(saved, 10);
+          if (!isNaN(num) && num > 0) configuredTrialDays = num;
+        }
+      } catch {}
+    }
+    const defaultTrialDays = configuredTrialDays;
     const trialStartedAt = now.toISOString();
     const trialEndsAt = new Date(now.getTime() + defaultTrialDays * 24 * 60 * 60 * 1000).toISOString();
     const newUserId = 'user-' + Date.now();
