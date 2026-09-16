@@ -459,6 +459,94 @@ export const LawRequestsAdminTab: React.FC<LawRequestsAdminTabProps> = ({
         </div>
       </div>
 
+      {/* Visual Analytics Dashboard Panel */}
+      <div className="bg-gradient-to-br from-white via-emerald-50/20 to-white p-5 rounded-2xl border border-emerald-200/60 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-gray-100">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm sm:text-base font-bold text-gray-900">لوحة المؤشرات والتحليلات البيانية لملفات القوانين</h3>
+              <p className="text-xs text-gray-500">متابعة نشاط الرفع اليومي، نسب الاعتماد، وحالة التدقيق التشريعي</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 bg-emerald-50 text-emerald-900 px-3 py-1.5 rounded-xl border border-emerald-300 text-xs font-bold">
+            <Calendar className="w-4 h-4 text-emerald-600" />
+            <span>ملفات اليوم: <strong className="text-emerald-950 font-black">{requests.filter(r => r.createdAt && r.createdAt.startsWith(new Date().toISOString().split('T')[0])).length}</strong> ملف</span>
+          </div>
+        </div>
+
+        {/* Visual Progress Bars */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Pending bar */}
+          <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-xs space-y-2">
+            <div className="flex items-center justify-between text-xs font-bold">
+              <span className="text-amber-800 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5" /> بانتظار المراجعة
+              </span>
+              <span className="text-amber-900 font-black">
+                {requests.length > 0 ? Math.round((pendingCount / requests.length) * 100) : 0}%
+              </span>
+            </div>
+            <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+              <div
+                className="bg-amber-500 h-2.5 rounded-full transition-all duration-500"
+                style={{ width: `${requests.length > 0 ? (pendingCount / requests.length) * 100 : 0}%` }}
+              ></div>
+            </div>
+            <div className="text-[11px] text-gray-500 flex justify-between">
+              <span>{pendingCount} ملفات معلقة</span>
+              <span>تحت التدقيق</span>
+            </div>
+          </div>
+
+          {/* Approved bar */}
+          <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-xs space-y-2">
+            <div className="flex items-center justify-between text-xs font-bold">
+              <span className="text-emerald-800 flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5" /> مقبولة ومعتمدة
+              </span>
+              <span className="text-emerald-900 font-black">
+                {requests.length > 0 ? Math.round((approvedCount / requests.length) * 100) : 0}%
+              </span>
+            </div>
+            <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+              <div
+                className="bg-emerald-600 h-2.5 rounded-full transition-all duration-500"
+                style={{ width: `${requests.length > 0 ? (approvedCount / requests.length) * 100 : 0}%` }}
+              ></div>
+            </div>
+            <div className="text-[11px] text-gray-500 flex justify-between">
+              <span>{approvedCount} ملفات مدرجة</span>
+              <span>في قاعدة المعرفة</span>
+            </div>
+          </div>
+
+          {/* Rejected bar */}
+          <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-xs space-y-2">
+            <div className="flex items-center justify-between text-xs font-bold">
+              <span className="text-red-800 flex items-center gap-1.5">
+                <XCircle className="w-3.5 h-3.5" /> مرفوضة
+              </span>
+              <span className="text-red-900 font-black">
+                {requests.length > 0 ? Math.round((rejectedCount / requests.length) * 100) : 0}%
+              </span>
+            </div>
+            <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+              <div
+                className="bg-red-500 h-2.5 rounded-full transition-all duration-500"
+                style={{ width: `${requests.length > 0 ? (rejectedCount / requests.length) * 100 : 0}%` }}
+              ></div>
+            </div>
+            <div className="text-[11px] text-gray-500 flex justify-between">
+              <span>{rejectedCount} ملفات مرفوضة</span>
+              <span>مخالفة للشروط</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Filter and Search Bar */}
       <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
         <div className="relative flex-1">
