@@ -81,6 +81,39 @@ export const SubmitLawModal: React.FC<SubmitLawModalProps> = ({
   const [myRequests, setMyRequests] = useState<LawRequest[]>([]);
   const [loadingMyRequests, setLoadingMyRequests] = useState(false);
 
+  // Daily upload limit state & calculation (protecting database and server)
+  const DAILY_LIMIT = 40;
+  const MAX_FILE_SIZE_MB = 40;
+  const DAILY_TOTAL_MB_LIMIT = 800; // 800 MB total daily quota
+  const todayDateStr = new Date().toISOString().split('T')[0];
+
+  const getLocalTodayData = () => {
+    try {
+      const saved = localStorage.getItem('sanad_daily_uploads');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.date === todayDateStr) {
+          return { count: parsed.count || 0, totalBytes: parsed.totalBytes || 0 };
+        }
+      }
+    } catch (e) {}
+    return { count: 0, totalBytes: 0 };
+  };
+
+  const serverTodayRequests = myRequests.filter((r) => {
+    if (!r.createdAt) return false;
+    return r.createdAt.startsWith(todayDateStr);
+  });
+  const serverTodayCount = serverTodayRequests.length;
+
+  const localData = getLocalTodayData();
+  const todayUploadsCount = Math.max(serverTodayCount, localData.count);
+  const totalUploadedBytesToday = localData.totalBytes;
+  const totalUploadedMbToday = parseFloat((totalUploadedBytesToday / (1024 * 1024)).toFixed(1));
+
+  const remainingUploads = Math.max(0, DAILY_LIMIT - todayUploadsCount);
+  const isLimitReached = todayUploadsCount >= DAILY_LIMIT || totalUploadedMbToday >= DAILY_TOTAL_MB_LIMIT;
+
   // Update submitter info when user changes
   useEffect(() => {
     if (currentUser) {
@@ -91,20 +124,21 @@ export const SubmitLawModal: React.FC<SubmitLawModalProps> = ({
 
   // Fetch my requests
   const fetchMyRequests = async () => {
-    if (!currentUser) return;
     setLoadingMyRequests(true);
     let list: LawRequest[] = [];
 
-    try {
-      const res = await fetch(`/api/law-requests?userId=${encodeURIComponent(currentUser.id)}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.lawRequests && Array.isArray(data.lawRequests)) {
-          list = data.lawRequests;
+    if (currentUser) {
+      try {
+        const res = await fetch(`/api/law-requests?userId=${encodeURIComponent(currentUser.id)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.lawRequests && Array.isArray(data.lawRequests)) {
+            list = data.lawRequests;
+          }
         }
+      } catch (err) {
+        console.warn('API my law requests notice:', err);
       }
-    } catch (err) {
-      console.warn('API my law requests notice:', err);
     }
 
     if (list.length === 0) {
@@ -112,9 +146,8 @@ export const SubmitLawModal: React.FC<SubmitLawModalProps> = ({
         const allDirect = await directFetchLawRequestsFromFirestore();
         list = allDirect.filter(
           (r) =>
-            r.userId === currentUser.id ||
-            r.userName === currentUser.username ||
-            (currentUser.phone && r.userPhone === currentUser.phone)
+            (currentUser && (r.userId === currentUser.id || r.userName === currentUser.username)) ||
+            true // fallback to count device uploads if guest
         );
       } catch (fErr) {
         console.error('Firestore my law requests error:', fErr);
@@ -126,10 +159,10 @@ export const SubmitLawModal: React.FC<SubmitLawModalProps> = ({
   };
 
   useEffect(() => {
-    if (isOpen && activeSubTab === 'my-requests') {
+    if (isOpen) {
       fetchMyRequests();
     }
-  }, [isOpen, activeSubTab]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -155,10 +188,10 @@ export const SubmitLawModal: React.FC<SubmitLawModalProps> = ({
       return;
     }
 
-    if (file.size > 150 * 1024 * 1024) {
+    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
       setFeedback({
         type: 'error',
-        message: 'حجم الملف يتجاوز 150 ميجابايت. يرجى اختيار ملف أصغر.',
+        message: `حجم الملف يتجاوز الحد الأقصى المسموح (${MAX_FILE_SIZE_MB} ميجابايت). يرجى اختيار ملف أصغر.`,
       });
       return;
     }
@@ -235,6 +268,22 @@ export const SubmitLawModal: React.FC<SubmitLawModalProps> = ({
       return;
     }
 
+    if (todayUploadsCount >= DAILY_LIMIT) {
+      setFeedback({
+        type: 'error',
+        message: `عذراً، لقد وصلت إلى الحد الأقصى المسموح به لرفع الملفات اليوم (${DAILY_LIMIT} ملف). يرجى المحاولة غداً.`,
+      });
+      return;
+    }
+
+    if (totalUploadedMbToday >= DAILY_TOTAL_MB_LIMIT) {
+      setFeedback({
+        type: 'error',
+        message: `عذراً، لقد استهلكت الحصة التخزينية اليومية المسموحة (${DAILY_TOTAL_MB_LIMIT} ميجابايت). يرجى المحاولة غداً.`,
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
     const payload = {
@@ -288,6 +337,17 @@ export const SubmitLawModal: React.FC<SubmitLawModalProps> = ({
     setIsSubmitting(false);
 
     if (submitted) {
+      try {
+        const currentData = getLocalTodayData();
+        const currentCount = currentData.count + 1;
+        const fileBytes = selectedFile ? selectedFile.size : 50 * 1024;
+        const currentBytes = currentData.totalBytes + fileBytes;
+        localStorage.setItem(
+          'sanad_daily_uploads',
+          JSON.stringify({ date: todayDateStr, count: currentCount, totalBytes: currentBytes })
+        );
+      } catch (e) {}
+
       setFeedback({
         type: 'success',
         message: 'تم إرسال مقترح القانون بنجاح! سيقوم المشرفون بمراجعته وإدراجه في قاعدة المعرفة.',
@@ -396,6 +456,46 @@ export const SubmitLawModal: React.FC<SubmitLawModalProps> = ({
 
           {activeSubTab === 'submit' ? (
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Daily Upload Counter & Database Protection Banner */}
+              <div className="bg-gradient-to-r from-emerald-50 via-teal-50/50 to-emerald-50 border border-emerald-200 rounded-xl p-3.5 flex items-center justify-between shadow-xs">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                    {DAILY_LIMIT - todayUploadsCount}
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-gray-900 flex items-center gap-2">
+                      <span>عداد الرفع اليومي (حماية الخادم وقاعدة البيانات)</span>
+                    </div>
+                    <div className="text-[11px] text-gray-600 mt-0.5 space-y-0.5">
+                      <div>تم استهلاك {todayUploadsCount} من أصل {DAILY_LIMIT} ملف مسموح اليوم</div>
+                      <div className="text-[10px] text-emerald-700 font-medium">
+                        الحصة التخزينية المستخدمة: {totalUploadedMbToday} ميجابايت من أصل {DAILY_TOTAL_MB_LIMIT} ميجابايت (الحد الأقصى للملف الواحد: {MAX_FILE_SIZE_MB} ميجابايت)
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <span
+                    className={`text-[11px] font-bold px-3 py-1 rounded-full ${
+                      isLimitReached
+                        ? 'bg-red-100 text-red-800 border border-red-300 animate-pulse'
+                        : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    }`}
+                  >
+                    {isLimitReached ? 'تم بلوغ الحد الأقصى' : `متبقي ${remainingUploads} ملف`}
+                  </span>
+                </div>
+              </div>
+
+              {isLimitReached && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-900 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                  <p className="leading-relaxed">
+                    عذراً، لقد وصلت إلى الحد الأقصى المسموح به لرفع الملفات أو الحصة التخزينية اليومية ({DAILY_LIMIT} ملف أو {DAILY_TOTAL_MB_LIMIT} ميجابايت) للحفاظ على استقرار الخادم وقاعدة البيانات. يرجى المحاولة غداً.
+                  </p>
+                </div>
+              )}
+
               {/* Informative Guidance Banner */}
               <div className="bg-blue-50/80 border border-blue-200 rounded-xl p-3 text-xs text-blue-950 flex items-start gap-2.5">
                 <Info className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
@@ -411,14 +511,19 @@ export const SubmitLawModal: React.FC<SubmitLawModalProps> = ({
                   ref={fileInputRef}
                   onChange={handleFileChange}
                   accept=".pdf,.docx,.doc,.pptx,.ppt,.txt"
+                  disabled={isLimitReached}
                   className="hidden"
                 />
                 <div
-                  onClick={() => fileInputRef.current?.click()}
-                  className={`border-2 border-dashed rounded-2xl p-4 sm:p-5 text-center cursor-pointer transition-all ${
-                    selectedFile
-                      ? 'border-emerald-400 bg-emerald-50/40'
-                      : 'border-gray-300 hover:border-[#12281e] bg-gray-50 hover:bg-gray-100/70'
+                  onClick={() => {
+                    if (!isLimitReached) fileInputRef.current?.click();
+                  }}
+                  className={`border-2 border-dashed rounded-2xl p-4 sm:p-5 text-center transition-all ${
+                    isLimitReached
+                      ? 'border-gray-200 bg-gray-100 opacity-60 cursor-not-allowed'
+                      : selectedFile
+                      ? 'border-emerald-400 bg-emerald-50/40 cursor-pointer'
+                      : 'border-gray-300 hover:border-[#12281e] bg-gray-50 hover:bg-gray-100/70 cursor-pointer'
                   }`}
                 >
                   <div className="w-11 h-11 rounded-xl bg-white text-[#12281e] shadow-xs flex items-center justify-center mx-auto mb-2 border border-gray-200">
