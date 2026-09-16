@@ -30,6 +30,7 @@ import {
   Check,
 } from 'lucide-react';
 import { PlatformAboutData, AboutSectionCard } from '../../types';
+import { useSync } from '../../utils/sync';
 
 interface AboutPlatformAdminTabProps {
   onAboutUpdated?: (about: PlatformAboutData) => void;
@@ -117,6 +118,10 @@ export const AboutPlatformAdminTab: React.FC<AboutPlatformAdminTabProps> = ({ on
   useEffect(() => {
     fetchData();
   }, []);
+
+  useSync(['platform_about', 'system_settings', 'all'], () => {
+    fetchData();
+  });
 
   // Save changes
   const handleSave = async () => {

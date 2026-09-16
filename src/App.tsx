@@ -253,11 +253,11 @@ export default function App() {
     return () => cleanupSync();
   }, []);
 
-  useSync(['users'], () => {
+  useSync(['users', 'all'], () => {
     fetchCurrentUser();
   });
 
-  useSync(['laws', 'system_settings'], () => {
+  useSync(['laws', 'system_settings', 'platform_about', 'contact_info', 'supervisors', 'partners', 'related_sites', 'all'], () => {
     fetchLawsCount();
     fetchBranding();
     fetchPlatformAbout();

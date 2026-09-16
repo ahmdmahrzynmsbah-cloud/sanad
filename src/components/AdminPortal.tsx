@@ -1047,9 +1047,31 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     loadAllAdminData();
   }, []);
 
-  useSync(['users', 'laws', 'categories', 'system_settings'], () => {
+  useSync(['users', 'laws', 'categories', 'system_settings', 'supervisors', 'related_sites', 'partners', 'subscription_plans', 'law_requests', 'platform_about', 'contact_info', 'all'], () => {
     loadAllAdminData();
   });
+
+  const handleFullSync = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await fetch('/api/admin/sync-all', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setLawListFeedback({
+          type: 'success',
+          message: data.message || 'تمت مزامنة جميع البيانات مع السحابة بنجاح',
+        });
+        setTimeout(() => setLawListFeedback(null), 5000);
+      }
+      await loadAllAdminData();
+      window.dispatchEvent(new CustomEvent('sync_update', { detail: { collection: 'all' } }));
+    } catch (err) {
+      console.warn('Full sync warning:', err);
+      await loadAllAdminData();
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // Add new dynamic category
   const handleAddCategory = async (e?: React.FormEvent) => {
@@ -2183,16 +2205,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
           </div>
         </div>
         <button
-          onClick={() => {
-            fetchUsers();
-            fetchLaws();
-            fetchSystemStatus();
-          }}
+          onClick={handleFullSync}
           disabled={isSyncing}
           className="px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer min-h-[36px]"
+          title="مزامنة شاملة وفورية لجميع الجداول والبيانات مع السحابة"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-          {isSyncing ? 'جارِ التحقق...' : 'تحديث البيانات السحابية'}
+          {isSyncing ? 'جارِ المزامنة الشاملة...' : 'مزامنة السحابة الفورية'}
         </button>
       </div>
 

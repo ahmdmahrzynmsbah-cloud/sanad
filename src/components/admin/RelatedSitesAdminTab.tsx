@@ -19,6 +19,7 @@ import {
   Filter
 } from 'lucide-react';
 import { RelatedSite } from '../../types';
+import { useSync } from '../../utils/sync';
 
 interface RelatedSitesAdminTabProps {
   initialSites?: RelatedSite[];
@@ -103,6 +104,10 @@ export const RelatedSitesAdminTab: React.FC<RelatedSitesAdminTabProps> = ({
       fetchCategories();
     }
   }, []);
+
+  useSync(['related_sites', 'all'], () => {
+    fetchSites();
+  });
 
   // Compute live counts if categories list is empty or to keep them reactive
   useEffect(() => {

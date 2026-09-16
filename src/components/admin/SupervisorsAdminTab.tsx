@@ -19,6 +19,7 @@ import {
   Link2
 } from 'lucide-react';
 import { Supervisor } from '../../types';
+import { useSync } from '../../utils/sync';
 
 interface SupervisorsAdminTabProps {
   initialSupervisors?: Supervisor[];
@@ -72,6 +73,10 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
       fetchSupervisors();
     }
   }, []);
+
+  useSync(['supervisors', 'all'], () => {
+    fetchSupervisors();
+  });
 
   const openAddModal = () => {
     setEditingSupervisor(null);

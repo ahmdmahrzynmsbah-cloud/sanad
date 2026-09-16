@@ -24,6 +24,7 @@ import {
   Edit3
 } from 'lucide-react';
 import { LawRequest, LegalCategory } from '../../types';
+import { useSync } from '../../utils/sync';
 import { SEED_LAW_REQUESTS } from '../../data/seedData';
 import {
   directFetchLawRequestsFromFirestore,
@@ -158,6 +159,10 @@ export const LawRequestsAdminTab: React.FC<LawRequestsAdminTabProps> = ({
   useEffect(() => {
     fetchRequests();
   }, []);
+
+  useSync(['law_requests', 'all'], () => {
+    fetchRequests();
+  });
 
   const showNotification = (type: 'success' | 'error', message: string) => {
     setFeedback({ type, message });

@@ -1358,6 +1358,54 @@ app.use(async (req, res, next) => {
   next();
 });
 
+// Background synchronization heartbeat every 15 seconds to keep database in continuous real-time sync
+if (!process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  setInterval(async () => {
+    try {
+      if (!isQuotaExceeded()) {
+        await syncWithFirestore();
+      }
+    } catch (e) {
+      // Quiet background pulse
+    }
+  }, 15000);
+}
+
+// Full Two-way Cloud Sync Endpoint
+app.post('/api/admin/sync-all', async (req, res, next) => {
+  try {
+    await syncWithFirestore();
+    
+    // Broadcast all collections updated to active SSE stream clients
+    ['users', 'laws', 'categories', 'system_settings', 'supervisors', 'related_sites', 'partners', 'subscription_plans', 'law_requests', 'platform_about', 'contact_info', 'all'].forEach((col) => {
+      syncClients.forEach((client) => {
+        try {
+          if (!client.writableEnded && client.socket && !client.socket.destroyed) {
+            client.write(`data: ${JSON.stringify({ type: 'update', collection: col })}\n\n`);
+          }
+        } catch {}
+      });
+    });
+
+    res.json({
+      success: true,
+      message: 'تمت المزامنة الشاملة لجميع السجلات والبيانات مع السحابة بنجاح',
+      stats: {
+        usersCount: db.users?.length || 0,
+        lawsCount: db.laws?.length || 0,
+        categoriesCount: db.categories?.length || 0,
+        supervisorsCount: db.supervisors?.length || 0,
+        partnersCount: db.partners?.length || 0,
+        relatedSitesCount: db.relatedSites?.length || 0,
+        plansCount: db.subscriptionPlans?.length || 0,
+        lawRequestsCount: db.lawRequests?.length || 0,
+      },
+    });
+  } catch (err: any) {
+    next(err);
+  }
+});
+
 // Fixed Admin credentials
 const ADMIN_CREDENTIALS = {
   username: 'admin',

@@ -10,6 +10,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { ContactInfo, ContactWhatsappItem } from '../types';
+import { useSync } from '../utils/sync';
 
 interface ContactUsViewProps {
   onBackToHome?: () => void;
@@ -76,6 +77,17 @@ export const ContactUsView: React.FC<ContactUsViewProps> = ({ onBackToHome, cont
 
     fetchContact();
   }, [propData]);
+
+  useSync(['contact_info', 'system_settings', 'all'], () => {
+    fetch('/api/system/contact')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && data.contactInfo) {
+          setContact(data.contactInfo);
+        }
+      })
+      .catch(() => {});
+  });
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);

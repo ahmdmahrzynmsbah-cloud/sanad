@@ -18,6 +18,7 @@ import {
   HeartHandshake,
 } from 'lucide-react';
 import { PlatformAboutData, AboutSectionCard } from '../types';
+import { useSync } from '../utils/sync';
 
 interface AboutPlatformViewProps {
   aboutData?: PlatformAboutData | null;
@@ -97,6 +98,17 @@ export const AboutPlatformView: React.FC<AboutPlatformViewProps> = ({
         });
     }
   }, [aboutData]);
+
+  useSync(['platform_about', 'system_settings', 'all'], () => {
+    fetch('/api/system/about')
+      .then((res) => (res.ok ? res.json() : DEFAULT_ABOUT))
+      .then((resData) => {
+        if (resData && resData.overviewContent) {
+          setData(resData);
+        }
+      })
+      .catch(() => {});
+  });
 
   const activeCustomSections = (data.customSections || []).filter(
     (sec) => sec.isActive !== false && sec.id !== 'sec-goals' && sec.id !== 'sec-values'

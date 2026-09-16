@@ -20,6 +20,7 @@ import {
   X
 } from 'lucide-react';
 import { ContactInfo, ContactWhatsappItem, ContactPhoneItem } from '../../types';
+import { useSync } from '../../utils/sync';
 import {
   directSaveContactInfoToFirestore,
   directFetchContactInfoFromFirestore,
@@ -88,47 +89,51 @@ export const ContactAdminTab: React.FC<ContactAdminTabProps> = ({ onContactUpdat
   const [phoneNum, setPhoneNum] = useState('');
 
   // Fetch initial data
-  useEffect(() => {
-    const fetchContactData = async () => {
-      let loaded = false;
+  const fetchContactData = async () => {
+    let loaded = false;
+    try {
+      setLoading(true);
+      const res = await fetch('/api/system/contact');
+      if (res.ok) {
+        const data = await res.json();
+        const info: ContactInfo = data.contactInfo || DEFAULT_CONTACT_DATA;
+        setWhatsappNumbers(info.whatsappNumbers || DEFAULT_CONTACT_DATA.whatsappNumbers);
+        setEmail(info.email || DEFAULT_CONTACT_DATA.email);
+        setSecondaryEmail(info.secondaryEmail || '');
+        setPhoneNumbers(info.phoneNumbers || DEFAULT_CONTACT_DATA.phoneNumbers || []);
+        setWorkHours(info.workHours || DEFAULT_CONTACT_DATA.workHours || '');
+        setAddress(info.address || DEFAULT_CONTACT_DATA.address || '');
+        setNotes(info.notes || DEFAULT_CONTACT_DATA.notes || '');
+        setUpdatedAt(info.updatedAt);
+        loaded = true;
+      }
+    } catch {}
+
+    if (!loaded) {
       try {
-        setLoading(true);
-        const res = await fetch('/api/system/contact');
-        if (res.ok) {
-          const data = await res.json();
-          const info: ContactInfo = data.contactInfo || DEFAULT_CONTACT_DATA;
-          setWhatsappNumbers(info.whatsappNumbers || DEFAULT_CONTACT_DATA.whatsappNumbers);
-          setEmail(info.email || DEFAULT_CONTACT_DATA.email);
-          setSecondaryEmail(info.secondaryEmail || '');
-          setPhoneNumbers(info.phoneNumbers || DEFAULT_CONTACT_DATA.phoneNumbers || []);
-          setWorkHours(info.workHours || DEFAULT_CONTACT_DATA.workHours || '');
-          setAddress(info.address || DEFAULT_CONTACT_DATA.address || '');
-          setNotes(info.notes || DEFAULT_CONTACT_DATA.notes || '');
-          setUpdatedAt(info.updatedAt);
-          loaded = true;
+        const direct = await directFetchContactInfoFromFirestore();
+        if (direct) {
+          setWhatsappNumbers(direct.whatsappNumbers || DEFAULT_CONTACT_DATA.whatsappNumbers);
+          setEmail(direct.email || DEFAULT_CONTACT_DATA.email);
+          setSecondaryEmail(direct.secondaryEmail || '');
+          setPhoneNumbers(direct.phoneNumbers || DEFAULT_CONTACT_DATA.phoneNumbers || []);
+          setWorkHours(direct.workHours || DEFAULT_CONTACT_DATA.workHours || '');
+          setAddress(direct.address || DEFAULT_CONTACT_DATA.address || '');
+          setNotes(direct.notes || DEFAULT_CONTACT_DATA.notes || '');
+          setUpdatedAt(direct.updatedAt);
         }
       } catch {}
+    }
+    setLoading(false);
+  };
 
-      if (!loaded) {
-        try {
-          const direct = await directFetchContactInfoFromFirestore();
-          if (direct) {
-            setWhatsappNumbers(direct.whatsappNumbers || DEFAULT_CONTACT_DATA.whatsappNumbers);
-            setEmail(direct.email || DEFAULT_CONTACT_DATA.email);
-            setSecondaryEmail(direct.secondaryEmail || '');
-            setPhoneNumbers(direct.phoneNumbers || DEFAULT_CONTACT_DATA.phoneNumbers || []);
-            setWorkHours(direct.workHours || DEFAULT_CONTACT_DATA.workHours || '');
-            setAddress(direct.address || DEFAULT_CONTACT_DATA.address || '');
-            setNotes(direct.notes || DEFAULT_CONTACT_DATA.notes || '');
-            setUpdatedAt(direct.updatedAt);
-          }
-        } catch {}
-      }
-      setLoading(false);
-    };
-
+  useEffect(() => {
     fetchContactData();
   }, []);
+
+  useSync(['contact_info', 'system_settings', 'all'], () => {
+    fetchContactData();
+  });
 
   const showFeedbackMessage = (type: 'success' | 'error', message: string) => {
     setFeedback({ type, message });

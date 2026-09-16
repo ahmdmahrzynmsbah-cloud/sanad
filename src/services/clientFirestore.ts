@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc, updateDoc, setLogLevel, query, where } from 'firebase/firestore';
+import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc, updateDoc, setLogLevel, query, where, onSnapshot } from 'firebase/firestore';
 import type { Law, User, LawRequest, SubscriptionPlan } from '../types';
 
 try {
@@ -1296,3 +1296,57 @@ export async function directDeleteSubscriptionPlanFromFirestore(id: string): Pro
     return false;
   }
 }
+
+/**
+ * Setup Realtime Firestore onSnapshot listeners for all core collections
+ */
+export function setupFirestoreRealtimeListeners(onUpdate: (collectionName: string) => void): () => void {
+  const db = getClientDb();
+  if (!db || isClientQuotaExceeded()) return () => {};
+
+  const unsubscribers: (() => void)[] = [];
+  const collectionsToWatch = [
+    { col: 'users', name: 'users' },
+    { col: 'laws', name: 'laws' },
+    { col: 'legal_categories', name: 'categories' },
+    { col: 'system_settings', name: 'system_settings' },
+    { col: 'supervisors', name: 'supervisors' },
+    { col: 'related_sites', name: 'related_sites' },
+    { col: 'partners', name: 'partners' },
+    { col: 'subscription_plans', name: 'subscription_plans' },
+    { col: 'law_requests', name: 'law_requests' },
+    { col: 'platform_about', name: 'platform_about' },
+    { col: 'contact_info', name: 'contact_info' },
+  ];
+
+  collectionsToWatch.forEach(({ col, name }) => {
+    try {
+      const colRef = collection(db, col);
+      const unsub = onSnapshot(
+        colRef,
+        { includeMetadataChanges: false },
+        (snapshot) => {
+          // Trigger sync on changes
+          if (!snapshot.metadata.hasPendingWrites) {
+            onUpdate(name);
+          }
+        },
+        (error) => {
+          handleClientFirestoreError(`onSnapshot listener for ${col}`, error);
+        }
+      );
+      unsubscribers.push(unsub);
+    } catch (e) {
+      console.warn(`Could not attach realtime listener for ${col}:`, e);
+    }
+  });
+
+  return () => {
+    unsubscribers.forEach((unsub) => {
+      try {
+        unsub();
+      } catch {}
+    });
+  };
+}
+

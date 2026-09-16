@@ -18,6 +18,7 @@ import {
   Check,
 } from 'lucide-react';
 import { Partner } from '../../types';
+import { useSync } from '../../utils/sync';
 
 const CATEGORY_PRESETS = [
   'نقابات وجمعيات مهنية',
@@ -80,6 +81,10 @@ export const PartnersAdminTab: React.FC = () => {
   useEffect(() => {
     fetchPartners();
   }, []);
+
+  useSync(['partners', 'all'], () => {
+    fetchPartners();
+  });
 
   const openAddModal = () => {
     setEditingPartner(null);

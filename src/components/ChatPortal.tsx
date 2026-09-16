@@ -197,7 +197,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
     fetchCloudConversations();
   }, [currentUser.id]);
 
-  useSync(['conversations'], () => {
+  useSync(['conversations', 'all'], () => {
     fetchCloudConversations();
   });
 

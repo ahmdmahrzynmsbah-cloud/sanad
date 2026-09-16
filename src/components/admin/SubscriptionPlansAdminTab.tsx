@@ -23,6 +23,7 @@ import {
   Layers
 } from 'lucide-react';
 import { SubscriptionPlan } from '../../types';
+import { useSync } from '../../utils/sync';
 import {
   directFetchSubscriptionPlansFromFirestore,
   directSaveSubscriptionPlanToFirestore,
@@ -174,6 +175,10 @@ export const SubscriptionPlansAdminTab: React.FC = () => {
   useEffect(() => {
     fetchPlans();
   }, []);
+
+  useSync(['subscription_plans', 'all'], () => {
+    fetchPlans();
+  });
 
   const openAddModal = () => {
     setEditingPlan(null);

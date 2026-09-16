@@ -16,6 +16,7 @@ import {
   CreditCard,
 } from 'lucide-react';
 import { SubscriptionPlan, User } from '../types';
+import { useSync } from '../utils/sync';
 import { directFetchSubscriptionPlansFromFirestore } from '../services/clientFirestore';
 
 interface SubscriptionPlansSectionProps {
@@ -223,6 +224,33 @@ export const SubscriptionPlansSection: React.FC<SubscriptionPlansSectionProps> =
       window.removeEventListener('storage', handlePlansUpdated);
     };
   }, []);
+
+  useSync(['subscription_plans', 'contact_info', 'all'], async () => {
+    let deletedIds: string[] = [];
+    try {
+      deletedIds = JSON.parse(localStorage.getItem('sanad_deleted_plan_ids') || '[]');
+    } catch {}
+
+    try {
+      const plansRes = await fetch('/api/subscription-plans');
+      if (plansRes.ok) {
+        const data = await plansRes.json();
+        if (data && Array.isArray(data.plans)) {
+          const filtered = data.plans.filter((p: SubscriptionPlan) => !deletedIds.includes(p.id));
+          setPlans(filtered);
+          return;
+        }
+      }
+    } catch {}
+
+    try {
+      const cloudPlans = await directFetchSubscriptionPlansFromFirestore();
+      if (cloudPlans && Array.isArray(cloudPlans)) {
+        const filtered = cloudPlans.filter((p) => p.isActive !== false && !deletedIds.includes(p.id));
+        setPlans(filtered);
+      }
+    } catch {}
+  });
 
   const handleAction = (plan: SubscriptionPlan) => {
     const action = plan.buttonActionType || 'register';
