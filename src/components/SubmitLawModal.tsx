@@ -144,14 +144,30 @@ export const SubmitLawModal: React.FC<SubmitLawModalProps> = ({
     if (list.length === 0) {
       try {
         const allDirect = await directFetchLawRequestsFromFirestore();
-        list = allDirect.filter(
-          (r) =>
-            (currentUser && (r.userId === currentUser.id || r.userName === currentUser.username)) ||
-            true // fallback to count device uploads if guest
-        );
+        if (allDirect && allDirect.length > 0) {
+          list = allDirect.filter(
+            (r) =>
+              (currentUser && (r.userId === currentUser.id || r.userName === currentUser.username))
+          );
+        }
       } catch (fErr) {
         console.error('Firestore my law requests error:', fErr);
       }
+    }
+
+    if (list.length === 0 && typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('sanad_cached_law_requests');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            list = parsed.filter(
+              (r: any) =>
+                (currentUser && (r.userId === currentUser.id || r.userName === currentUser.username))
+            );
+          }
+        }
+      } catch {}
     }
 
     setMyRequests(list);
@@ -346,6 +362,18 @@ export const SubmitLawModal: React.FC<SubmitLawModalProps> = ({
           'sanad_daily_uploads',
           JSON.stringify({ date: todayDateStr, count: currentCount, totalBytes: currentBytes })
         );
+
+        // Update cached law requests list
+        const cachedRaw = localStorage.getItem('sanad_cached_law_requests');
+        let existingRequests: any[] = [];
+        if (cachedRaw) {
+          try {
+            existingRequests = JSON.parse(cachedRaw);
+          } catch {}
+        }
+        if (!Array.isArray(existingRequests)) existingRequests = [];
+        const updated = [payload, ...existingRequests.filter((r) => r.id !== payload.id)];
+        localStorage.setItem('sanad_cached_law_requests', JSON.stringify(updated));
       } catch (e) {}
 
       setFeedback({

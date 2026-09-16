@@ -66,6 +66,7 @@ import { LawRequestsAdminTab } from './admin/LawRequestsAdminTab';
 import { UserDetailsModal } from './admin/UserDetailsModal';
 import { useSync } from '../utils/sync';
 import { safeFetchJson } from '../utils/safeApi';
+import { SEED_USERS } from '../data/seedData';
 import {
   directSaveLawToFirestore,
   directSaveLawsBatchToFirestore,
@@ -146,8 +147,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   // Law Requests state
   const [pendingLawRequestsCount, setPendingLawRequestsCount] = useState<number>(0);
 
-  // Users state
-  const [users, setUsers] = useState<User[]>([]);
+  // Users state with resilient local persistence
+  const [users, setUsers] = useState<User[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('sanad_cached_users');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return SEED_USERS;
+  });
   const [usersLoading, setUsersLoading] = useState(false);
   const [usersFilter, setUsersFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'frozen'>('all');
   const [userActionMessage, setUserActionMessage] = useState<string | null>(null);
@@ -390,13 +402,35 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       }
     }
 
-    if (loadedUsers) {
+    if (loadedUsers && loadedUsers.length > 0) {
       setUsers(loadedUsers);
+      try {
+        localStorage.setItem('sanad_cached_users', JSON.stringify(loadedUsers));
+      } catch {}
+    } else {
+      // Secondary fallback: recover previously cached users from localStorage or SEED_USERS
+      try {
+        const cached = localStorage.getItem('sanad_cached_users');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setUsers(parsed);
+          }
+        }
+      } catch {}
     }
     setUsersLoading(false);
   };
 
-  // Laws and categories localStorage persistence
+  // Users, Laws, and categories localStorage persistence
+  useEffect(() => {
+    if (typeof window !== 'undefined' && users.length > 0) {
+      try {
+        localStorage.setItem('sanad_cached_users', JSON.stringify(users));
+      } catch {}
+    }
+  }, [users]);
+
   useEffect(() => {
     if (typeof window !== 'undefined' && laws.length > 0) {
       try {

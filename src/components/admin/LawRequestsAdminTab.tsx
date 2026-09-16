@@ -24,6 +24,7 @@ import {
   Edit3
 } from 'lucide-react';
 import { LawRequest, LegalCategory } from '../../types';
+import { SEED_LAW_REQUESTS } from '../../data/seedData';
 import {
   directFetchLawRequestsFromFirestore,
   directUpdateLawRequestStatusInFirestore,
@@ -46,8 +47,19 @@ export const LawRequestsAdminTab: React.FC<LawRequestsAdminTabProps> = ({
   onLawApproved,
   onRequestCountChanged,
 }) => {
-  const [requests, setRequests] = useState<LawRequest[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [requests, setRequests] = useState<LawRequest[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('sanad_cached_law_requests');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return SEED_LAW_REQUESTS as LawRequest[];
+  });
+  const [loading, setLoading] = useState(false);
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -74,6 +86,15 @@ export const LawRequestsAdminTab: React.FC<LawRequestsAdminTabProps> = ({
 
   const reviewerName = currentAdmin?.fullName || currentAdmin?.username || 'المشرف';
 
+  // Persistence to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined' && requests.length > 0) {
+      try {
+        localStorage.setItem('sanad_cached_law_requests', JSON.stringify(requests));
+      } catch {}
+    }
+  }, [requests]);
+
   // Fetch all requests
   const fetchRequests = async () => {
     setLoading(true);
@@ -84,8 +105,11 @@ export const LawRequestsAdminTab: React.FC<LawRequestsAdminTabProps> = ({
       const res = await fetch('/api/law-requests');
       if (res.ok) {
         const data = await res.json();
-        if (data.lawRequests && Array.isArray(data.lawRequests)) {
+        if (data.lawRequests && Array.isArray(data.lawRequests) && data.lawRequests.length > 0) {
           setRequests(data.lawRequests);
+          try {
+            localStorage.setItem('sanad_cached_law_requests', JSON.stringify(data.lawRequests));
+          } catch {}
           loaded = true;
           const pending = (data.lawRequests || []).filter((r: LawRequest) => r.status === 'pending').length;
           onRequestCountChanged?.(pending);
@@ -99,14 +123,33 @@ export const LawRequestsAdminTab: React.FC<LawRequestsAdminTabProps> = ({
     if (!loaded) {
       try {
         const directList = await directFetchLawRequestsFromFirestore();
-        const safeList = directList || [];
-        setRequests(safeList);
-        const pending = safeList.filter((r) => r.status === 'pending').length;
-        onRequestCountChanged?.(pending);
+        if (directList && directList.length > 0) {
+          setRequests(directList);
+          try {
+            localStorage.setItem('sanad_cached_law_requests', JSON.stringify(directList));
+          } catch {}
+          loaded = true;
+          const pending = directList.filter((r) => r.status === 'pending').length;
+          onRequestCountChanged?.(pending);
+        }
       } catch (fErr) {
         console.error('Firestore law requests fetch error:', fErr);
-        setRequests([]);
       }
+    }
+
+    // 3. Secondary fallback: check localStorage or SEED_LAW_REQUESTS
+    if (!loaded) {
+      try {
+        const cached = localStorage.getItem('sanad_cached_law_requests');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setRequests(parsed);
+            const pending = parsed.filter((r: LawRequest) => r.status === 'pending').length;
+            onRequestCountChanged?.(pending);
+          }
+        }
+      } catch {}
     }
 
     setLoading(false);
