@@ -1573,3 +1573,67 @@ export async function seedFirestoreIfEmpty(
     handleFirestoreError('seedFirestoreIfEmpty', err);
   }
 }
+
+export async function fetchVideosFromFirestore(): Promise<any[] | null> {
+  if (isQuotaExceeded()) return null;
+  const db = initFirestore();
+  if (!db) return null;
+
+  try {
+    const col = collection(db, 'videos');
+    const snapshot = await getDocs(col);
+    if (snapshot.empty) {
+      return [];
+    }
+    const items: any[] = [];
+    snapshot.forEach((docSnap) => {
+      items.push(docSnap.data());
+    });
+    return items;
+  } catch (err) {
+    handleFirestoreError('fetchVideosFromFirestore', err);
+    return null;
+  }
+}
+
+export async function saveVideoToFirestore(video: any): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
+  const db = initFirestore();
+  if (!db) return false;
+
+  try {
+    const docRef = doc(db, 'videos', video.id);
+    await setDoc(docRef, {
+      id: video.id,
+      title: video.title || '',
+      description: video.description || '',
+      url: video.url || '',
+      thumbnailUrl: video.thumbnailUrl || '',
+      order: Number(video.order) || 0,
+      isActive: video.isActive !== false,
+      createdAt: video.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    notifyChange('videos');
+    return true;
+  } catch (err) {
+    handleFirestoreError(`saveVideoToFirestore ${video.id}`, err);
+    return false;
+  }
+}
+
+export async function deleteVideoFromFirestore(id: string): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
+  const db = initFirestore();
+  if (!db) return false;
+
+  try {
+    const docRef = doc(db, 'videos', id);
+    await deleteDoc(docRef);
+    notifyChange('videos');
+    return true;
+  } catch (err) {
+    handleFirestoreError(`deleteVideoFromFirestore ${id}`, err);
+    return false;
+  }
+}

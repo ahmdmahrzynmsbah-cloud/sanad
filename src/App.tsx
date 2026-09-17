@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Header, ActiveView } from './components/Header';
 import { AuthModal } from './components/AuthModal';
 import { AdminLogin } from './components/AdminLogin';
@@ -42,6 +42,11 @@ export default function App() {
     }
   });
 
+  const currentUserRef = useRef<User | null>(currentUser);
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
+
   const [currentAdmin, setCurrentAdmin] = useState<{ username: string; role: string } | null>(() => {
     try {
       const saved = localStorage.getItem('pal_tax_admin');
@@ -65,6 +70,11 @@ export default function App() {
     return 'home';
   });
 
+  const activeViewRef = useRef<ActiveView>(activeView);
+  useEffect(() => {
+    activeViewRef.current = activeView;
+  }, [activeView]);
+
   const [lawsCount, setLawsCount] = useState<number>(3);
   const [showWelcomeModal, setShowWelcomeModal] = useState<boolean>(() => {
     return localStorage.getItem('sanad_welcome_seen') !== 'true';
@@ -86,10 +96,10 @@ export default function App() {
   };
 
   // Fetch Laws count
-  const fetchLawsCount = async () => {
+  const fetchLawsCount = useCallback(async () => {
     let loadedCount = 0;
     try {
-      const res = await fetch('/api/laws');
+      const res = await fetch(`/api/laws?_t=${Date.now()}`, { cache: 'no-store' });
       const data = await res.json();
       if (res.ok && data.laws) {
         loadedCount = data.laws.length;
@@ -109,13 +119,13 @@ export default function App() {
     }
 
     setLawsCount(loadedCount);
-  };
+  }, []);
 
   // Fetch System Branding
-  const fetchBranding = async () => {
+  const fetchBranding = useCallback(async () => {
     let loaded = false;
     try {
-      const res = await fetch('/api/system/branding');
+      const res = await fetch(`/api/system/branding?_t=${Date.now()}`, { cache: 'no-store' });
       const data = await res.json();
       if (res.ok && data) {
         setBranding(data);
@@ -159,13 +169,13 @@ export default function App() {
         console.warn('Direct Firestore branding notice:', directErr);
       }
     }
-  };
+  }, []);
 
   // Fetch Platform About
-  const fetchPlatformAbout = async () => {
+  const fetchPlatformAbout = useCallback(async () => {
     let loaded = false;
     try {
-      const res = await fetch('/api/system/about');
+      const res = await fetch(`/api/system/about?_t=${Date.now()}`, { cache: 'no-store' });
       const data = await res.json();
       if (res.ok && data) {
         setPlatformAbout(data);
@@ -193,13 +203,13 @@ export default function App() {
         }
       } catch {}
     }
-  };
+  }, []);
 
   // Fetch Contact Info
-  const fetchContactInfo = async () => {
+  const fetchContactInfo = useCallback(async () => {
     let loaded = false;
     try {
-      const res = await fetch('/api/system/contact');
+      const res = await fetch(`/api/system/contact?_t=${Date.now()}`, { cache: 'no-store' });
       const data = await res.json();
       if (res.ok && data && data.contactInfo) {
         setContactInfo(data.contactInfo);
@@ -227,24 +237,28 @@ export default function App() {
         }
       } catch {}
     }
-  };
+  }, []);
 
-  const fetchCurrentUser = async () => {
-    if (!currentUser) return;
+  const fetchCurrentUser = useCallback(async () => {
+    const userToSync = currentUserRef.current;
+    if (!userToSync) return;
     try {
-      const res = await fetch(`/api/users/by-username/${encodeURIComponent(currentUser.username)}`);
+      const res = await fetch(`/api/users/by-username/${encodeURIComponent(userToSync.username)}?_t=${Date.now()}`, {
+        cache: 'no-store',
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.user) {
           setCurrentUser(data.user);
           localStorage.setItem('pal_tax_user', JSON.stringify(data.user));
           
+          const currentView = activeViewRef.current;
           // Redirect pending users to chat if they just got approved
-          if (activeView === 'auth' && data.user.status === 'approved') {
+          if (currentView === 'auth' && data.user.status === 'approved') {
             setActiveView('chat');
           }
           // Redirect active users out of chat if they got frozen or rejected
-          if (activeView === 'chat' && data.user.status !== 'approved') {
+          if (currentView === 'chat' && data.user.status !== 'approved') {
             setActiveView('auth');
           }
         }
@@ -252,7 +266,7 @@ export default function App() {
     } catch (e) {
       console.warn('Failed to sync current user', e);
     }
-  };
+  }, []);
 
   useEffect(() => {
     const cleanupSync = initGlobalSync();
@@ -264,13 +278,13 @@ export default function App() {
     fetchContactInfo();
     
     return () => cleanupSync();
-  }, []);
+  }, [fetchLawsCount, fetchBranding, fetchPlatformAbout, fetchContactInfo]);
 
   useSync(['users', 'all'], () => {
     fetchCurrentUser();
   });
 
-  useSync(['laws', 'system_settings', 'platform_about', 'contact_info', 'supervisors', 'partners', 'related_sites', 'all'], () => {
+  useSync(['laws', 'system_settings', 'branding', 'platform_about', 'contact_info', 'supervisors', 'partners', 'related_sites', 'videos', 'all'], () => {
     fetchLawsCount();
     fetchBranding();
     fetchPlatformAbout();

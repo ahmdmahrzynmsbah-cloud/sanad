@@ -29,6 +29,7 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 // Vite is dynamically imported in local dev mode
+import { fetchVideosFromFirestore } from './server/firestore';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
 import {
@@ -237,6 +238,46 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 // SSE Sync Endpoint for Realtime Client Updates
 const syncClients = new Set<express.Response>();
 
+const syncVersionTimestamps: Record<string, number> = {
+  version: Date.now(),
+  users: Date.now(),
+  laws: Date.now(),
+  categories: Date.now(),
+  supervisors: Date.now(),
+  related_sites: Date.now(),
+  partners: Date.now(),
+  videos: Date.now(),
+  subscription_plans: Date.now(),
+  platform_about: Date.now(),
+  contact_info: Date.now(),
+  system_settings: Date.now(),
+  branding: Date.now(),
+  law_requests: Date.now(),
+  conversations: Date.now(),
+};
+
+function broadcastSync(collectionName: string = 'all') {
+  const now = Date.now();
+  syncVersionTimestamps.version = now;
+  syncVersionTimestamps[collectionName] = now;
+  if (collectionName !== 'all') {
+    syncVersionTimestamps['all'] = now;
+  }
+
+  const payload = `data: ${JSON.stringify({ type: 'update', collection: collectionName, timestamp: now, version: now })}\n\n`;
+  syncClients.forEach(client => {
+    try {
+      if (!client.writableEnded && client.socket && !client.socket.destroyed) {
+        client.write(payload);
+      } else {
+        syncClients.delete(client);
+      }
+    } catch {
+      syncClients.delete(client);
+    }
+  });
+}
+
 app.get('/api/sync', (req, res) => {
   const isServerless = Boolean(
     process.env.VERCEL ||
@@ -247,17 +288,35 @@ app.get('/api/sync', (req, res) => {
   );
 
   if (isServerless) {
-    // In serverless environments, avoid holding long-lived HTTP streams
-    return res.status(200).json({ status: 'ok', mode: 'serverless-sync' });
+    // In serverless environments, return timestamps directly
+    return res.status(200).json({ status: 'ok', mode: 'serverless-sync', timestamps: syncVersionTimestamps });
   }
 
   res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders();
   
+  // Send immediate init frame with all collection timestamps
+  res.write(`data: ${JSON.stringify({ type: 'init', version: syncVersionTimestamps.version, timestamps: syncVersionTimestamps })}\n\n`);
+
+  const keepAlive = setInterval(() => {
+    try {
+      if (!res.writableEnded && res.socket && !res.socket.destroyed) {
+        res.write(':keep-alive\n\n');
+      } else {
+        clearInterval(keepAlive);
+        syncClients.delete(res);
+      }
+    } catch {
+      clearInterval(keepAlive);
+      syncClients.delete(res);
+    }
+  }, 10000);
+
   const cleanup = () => {
+    clearInterval(keepAlive);
     syncClients.delete(res);
   };
 
@@ -269,19 +328,28 @@ app.get('/api/sync', (req, res) => {
   syncClients.add(res);
 });
 
+// Fast Version-Polling endpoint for instant lightweight client synchronization
+app.get('/api/sync/version', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.json({
+    status: 'ok',
+    version: syncVersionTimestamps.version,
+    timestamps: syncVersionTimestamps,
+  });
+});
+
+// Manual sync pulse endpoint
+app.all('/api/sync/pulse', (req, res) => {
+  const col = (req.body?.collection || req.query?.collection || 'all') as string;
+  broadcastSync(col);
+  res.json({ status: 'ok', broadcasted: col, version: syncVersionTimestamps.version });
+});
+
 // Broadcast changes from Firestore to connected SSE clients
 onDatabaseChange((collectionName) => {
-  syncClients.forEach(client => {
-    try {
-      if (!client.writableEnded && client.socket && !client.socket.destroyed) {
-        client.write(`data: ${JSON.stringify({ type: 'update', collection: collectionName })}\n\n`);
-      } else {
-        syncClients.delete(client);
-      }
-    } catch (e) {
-      syncClients.delete(client);
-    }
-  });
+  broadcastSync(collectionName);
 });
 
 // Path to JSON database
@@ -550,14 +618,15 @@ interface DBData {
   lawRequests?: StoredLawRequest[];
   categories?: StoredCategory[];
   settings?: DBSettings;
-  supervisors?: StoredSupervisor[];
-  relatedSites?: StoredRelatedSite[];
-  relatedSiteCategories?: string[];
-  partners?: StoredPartner[];
-  subscriptionPlans?: StoredSubscriptionPlan[];
-  platformAbout?: StoredPlatformAbout;
-  contactInfo?: StoredContactInfo;
-  conversations?: StoredConversation[];
+  supervisors?: any[];
+  relatedSites?: any[];
+  partners?: any[];
+  subscriptionPlans?: any[];
+  platformAbout?: any;
+  contactInfo?: any;
+  videos?: any[];
+  relatedSiteCategories?: any[];
+  conversations?: any[];
 }
 
 const INITIAL_LAWS: StoredLaw[] = [
@@ -1054,16 +1123,15 @@ if (db.subscriptionPlans === undefined) {
   db.subscriptionPlans = [...DEFAULT_SUBSCRIPTION_PLANS];
 }
 
-function saveDB() {
-  if (process.env.VERCEL) {
-    // Skip saving to local disk on Vercel to prevent OOM crashes and EROFS errors
-    return;
+function saveDB(collectionName: string = 'all') {
+  if (!process.env.VERCEL) {
+    try {
+      fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf-8');
+    } catch (err) {
+      // Gracefully ignore write errors on read-only environments
+    }
   }
-  try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf-8');
-  } catch (err) {
-    // Gracefully ignore write errors on read-only environments
-  }
+  broadcastSync(collectionName);
 }
 
 /**
@@ -1297,7 +1365,7 @@ async function syncWithFirestore() {
 
     // If quota hasn't been exceeded, sync remaining collections
     if (!isQuotaExceeded()) {
-      const [cloudAbout, cloudContact, cloudCategories, cloudSupervisors, cloudRelatedSites, cloudPartners, cloudPlans, cloudLaws, cloudLawRequests] = await Promise.all([
+      const [cloudAbout, cloudContact, cloudCategories, cloudSupervisors, cloudRelatedSites, cloudPartners, cloudPlans, cloudVideos, cloudLaws, cloudLawRequests] = await Promise.all([
         fetchPlatformAboutFromFirestore().catch(() => null),
         fetchContactInfoFromFirestore().catch(() => null),
         fetchCategoriesFromFirestore().catch(() => null),
@@ -1305,6 +1373,7 @@ async function syncWithFirestore() {
         fetchRelatedSitesFromFirestore().catch(() => null),
         fetchPartnersFromFirestore().catch(() => null),
         fetchSubscriptionPlansFromFirestore().catch(() => null),
+        fetchVideosFromFirestore().catch(() => null),
         fetchLawsFromFirestore().catch(() => null),
         fetchLawRequestsFromFirestore().catch(() => null),
       ]);
@@ -1313,8 +1382,16 @@ async function syncWithFirestore() {
         db.contactInfo = cloudContact;
         changed = true;
       }
+      if (cloudVideos) {
+        db.videos = cloudVideos;
+        changed = true;
+      }
       if (cloudAbout) {
         db.platformAbout = cloudAbout;
+        changed = true;
+      }
+      if (cloudVideos && cloudVideos.length > 0) {
+        db.videos = cloudVideos;
         changed = true;
       }
       if (cloudLaws && cloudLaws.length > 0) {
@@ -1432,6 +1509,7 @@ app.post('/api/admin/sync-all', async (req, res, next) => {
         categoriesCount: db.categories?.length || 0,
         supervisorsCount: db.supervisors?.length || 0,
         partnersCount: db.partners?.length || 0,
+      videosCount: db.videos?.length || 0,
         relatedSitesCount: db.relatedSites?.length || 0,
         plansCount: db.subscriptionPlans?.length || 0,
         lawRequestsCount: db.lawRequests?.length || 0,
@@ -1856,6 +1934,7 @@ app.get('/api/admin/init', async (req, res) => {
     supervisors: (db.supervisors || []).sort((a, b) => (a.order || 0) - (b.order || 0)),
     relatedSites: db.relatedSites || [],
     partners: (db.partners || []).sort((a, b) => (a.order || 0) - (b.order || 0)),
+    videos: (db.videos || []).sort((a, b) => (a.order || 0) - (b.order || 0)),
     subscriptionPlans: (db.subscriptionPlans || []).sort((a, b) => (a.order || 0) - (b.order || 0)),
     platformAbout: db.platformAbout || DEFAULT_PLATFORM_ABOUT,
     contactInfo: db.contactInfo || DEFAULT_CONTACT_INFO,
@@ -5463,3 +5542,51 @@ if (!isServerless && isMainEntry) {
 }
 
 export default app;
+
+// Videos endpoints
+app.get('/api/videos', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  const videos = db.videos || [];
+  res.json({ ok: true, videos });
+});
+
+app.post('/api/admin/videos', async (req, res) => {
+  if (!db.videos) db.videos = [];
+  const newVideo = { ...req.body, id: 'vid-' + Date.now(), createdAt: new Date().toISOString() };
+  db.videos.push(newVideo);
+  saveDB('videos');
+  try {
+    const { saveVideoToFirestore } = await import('./server/firestore.js');
+    await saveVideoToFirestore(newVideo);
+  } catch {}
+  res.status(201).json({ message: 'Video added', video: newVideo });
+});
+
+app.put('/api/admin/videos/:id', async (req, res) => {
+  const { id } = req.params;
+  if (!db.videos) db.videos = [];
+  const index = db.videos.findIndex(v => v.id === id);
+  if (index !== -1) {
+    db.videos[index] = { ...db.videos[index], ...req.body };
+    saveDB('videos');
+    try {
+      const { saveVideoToFirestore } = await import('./server/firestore.js');
+      await saveVideoToFirestore(db.videos[index]);
+    } catch {}
+    res.json({ message: 'Video updated', video: db.videos[index] });
+  } else {
+    res.status(404).json({ error: 'Not found' });
+  }
+});
+
+app.delete('/api/admin/videos/:id', async (req, res) => {
+  const { id } = req.params;
+  if (!db.videos) db.videos = [];
+  db.videos = db.videos.filter(v => v.id !== id);
+  saveDB('videos');
+  try {
+    const { deleteVideoFromFirestore } = await import('./server/firestore.js');
+    await deleteVideoFromFirestore(id);
+  } catch {}
+  res.json({ message: 'Video deleted' });
+});

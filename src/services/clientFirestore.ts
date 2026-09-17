@@ -1317,6 +1317,7 @@ export function setupFirestoreRealtimeListeners(onUpdate: (collectionName: strin
     { col: 'law_requests', name: 'law_requests' },
     { col: 'platform_about', name: 'platform_about' },
     { col: 'contact_info', name: 'contact_info' },
+    { col: 'videos', name: 'videos' },
   ];
 
   collectionsToWatch.forEach(({ col, name }) => {
@@ -1350,3 +1351,44 @@ export function setupFirestoreRealtimeListeners(onUpdate: (collectionName: strin
   };
 }
 
+
+// Videos fallback
+export async function directFetchVideosFromFirestore(): Promise<any[]> {
+  const db = getClientDb();
+  if (!db) return [];
+  try {
+    const col = collection(db, 'videos');
+    const snapshot = await getDocs(col);
+    if (snapshot.empty) return [];
+    const items: any[] = [];
+    snapshot.forEach((d) => items.push(d.data()));
+    return items;
+  } catch (err) {
+    handleClientFirestoreError('directFetchVideosFromFirestore', err);
+    return [];
+  }
+}
+export async function directSaveVideoToFirestore(video: any): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+  try {
+    const vidId = video.id || 'vid-' + Date.now();
+    const docRef = doc(db, 'videos', vidId);
+    await setDoc(docRef, { ...video, id: vidId });
+    return true;
+  } catch (err) {
+    handleClientFirestoreError('directSaveVideoToFirestore', err);
+    return false;
+  }
+}
+export async function directDeleteVideoFromFirestore(id: string): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+  try {
+    await deleteDoc(doc(db, 'videos', id));
+    return true;
+  } catch (err) {
+    handleClientFirestoreError('directDeleteVideoFromFirestore', err);
+    return false;
+  }
+}

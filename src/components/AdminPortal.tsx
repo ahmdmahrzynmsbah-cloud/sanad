@@ -53,7 +53,7 @@ import {
   User as UserIcon,
   Bot
 } from 'lucide-react';
-import { User, Law, LawCategory, LegalCategory, SystemBranding, PlatformAboutData, ContactInfo } from '../types';
+import { User, Law, LawCategory, LegalCategory, SystemBranding, PlatformAboutData, ContactInfo, Video, RelatedSite, Partner, SubscriptionPlan, Supervisor } from '../types';
 import { formatBytes, sanitizeLawTitle, PDFProgress } from '../utils/pdfParser';
 import { extractTextFromAnyDocument } from '../utils/documentParser';
 import { compressImageClientSide } from '../utils/imageCompressor';
@@ -63,6 +63,7 @@ import { RelatedSitesAdminTab } from './admin/RelatedSitesAdminTab';
 import { PartnersAdminTab } from './admin/PartnersAdminTab';
 import { SubscriptionPlansAdminTab } from './admin/SubscriptionPlansAdminTab';
 import { AboutPlatformAdminTab } from './admin/AboutPlatformAdminTab';
+import { VideosAdminTab } from './admin/VideosAdminTab';
 import { ContactAdminTab } from './admin/ContactAdminTab';
 import { LawRequestsAdminTab } from './admin/LawRequestsAdminTab';
 import { UserDetailsModal } from './admin/UserDetailsModal';
@@ -118,7 +119,8 @@ interface AdminPortalProps {
 export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUpdated, onBrandingUpdated, onAboutUpdated, onContactUpdated }) => {
   const isSupervisor = currentAdmin?.role === 'supervisor';
 
-  const [activeTab, setActiveTab] = useState<'requests' | 'laws' | 'law-requests' | 'supervisors' | 'related-sites' | 'partners' | 'plans' | 'about' | 'contact' | 'settings'>('requests');
+  const [videos, setVideos] = useState<Video[]>([]);
+  const [activeTab, setActiveTab] = useState<'requests' | 'laws' | 'law-requests' | 'supervisors' | 'related-sites' | 'partners' | 'plans' | 'about' | 'contact' | 'settings' | 'videos'>('requests');
 
   // Admin Daily Upload Limit & Quota (40 files max, 40MB per file, 800MB total quota per day)
   const ADMIN_DAILY_LIMIT = 40;
@@ -398,6 +400,24 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   };
 
   // Fetch pending law requests count
+  
+  const fetchVideos = async () => {
+    try {
+      const res = await fetch('/api/videos');
+      if (res.ok) {
+        const data = await res.json();
+        setVideos(data.videos || []);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch videos from API, trying direct Firestore:', err);
+      try {
+        const { directFetchVideosFromFirestore } = await import('../services/clientFirestore');
+        const v = await directFetchVideosFromFirestore();
+        setVideos(v);
+      } catch (e) {}
+    }
+  };
+
   const fetchPendingLawRequestsCount = async () => {
     try {
       const res = await fetch('/api/law-requests');
@@ -497,7 +517,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     setLawsLoading(true);
     let loaded = false;
     try {
-      const res = await fetch('/api/laws');
+      const res = await fetch(`/api/laws?t=${Date.now()}`);
       const result = await safeFetchJson<{ laws?: Law[] }>(res);
       if (result.ok && result.data && result.data.laws && result.data.laws.length > 0) {
         setLaws(result.data.laws);
@@ -636,6 +656,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
             localStorage.setItem('sanad_default_trial_days', String(data.defaultTrialDays));
           }
         }
+        if (data.videos && Array.isArray(data.videos)) {
+          setVideos(data.videos);
+        } else {
+          fetchVideos();
+        }
+
         if (data.branding) {
           applyBrandingState(data.branding);
         }
@@ -729,7 +755,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     setLawsLoading(true);
     setCategoriesLoading(true);
     try {
-      const res = await fetch('/api/admin/init');
+      const res = await fetch(`/api/admin/init?t=${Date.now()}`);
       if (res.ok) {
         const data = await res.json();
         if (data.users && Array.isArray(data.users) && data.users.length > 0) {
@@ -806,6 +832,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
           fetchSystemStatus(),
           fetchSettings(),
           fetchBranding(),
+        fetchVideos(),
+          fetchVideos(),
           fetchPendingLawRequestsCount(),
         ]);
       }
@@ -5649,7 +5677,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       {/* ======================================================== */}
       {/* TAB 6: PLATFORM ABOUT & VISION (عن المنصة والرؤية والرسالة) */}
       {/* ======================================================== */}
-      {activeTab === 'about' && (
+      {activeTab === 'videos' && (
+          <VideosAdminTab
+            videos={videos}
+            setVideos={setVideos}
+            fetchVideos={fetchVideos}
+          />
+        )}
+
+        {activeTab === 'about' && (
         <AboutPlatformAdminTab onAboutUpdated={onAboutUpdated} />
       )}
 

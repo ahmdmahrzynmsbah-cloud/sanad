@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { SystemBranding, User, SubscriptionPlan } from '../types';
 import { SubscriptionPlansSection } from './SubscriptionPlansSection';
+import { VideosSection } from './VideosSection';
 
 interface HomeLandingViewProps {
   branding?: SystemBranding;

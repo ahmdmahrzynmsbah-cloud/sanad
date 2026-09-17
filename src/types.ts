@@ -248,3 +248,14 @@ export interface ContactInfo {
   updatedAt?: string;
 }
 
+
+export interface Video {
+  id: string;
+  title: string;
+  description?: string;
+  url: string;
+  thumbnailUrl?: string;
+  order?: number;
+  isActive?: boolean;
+  createdAt: string;
+}
