@@ -28,7 +28,7 @@ import {
   Sliders
 } from 'lucide-react';
 import { SubscriptionPlan } from '../../types';
-import { useSync } from '../../utils/sync';
+import { useSync, notifySync } from '../../utils/sync';
 import {
   directFetchSubscriptionPlansFromFirestore,
   directSaveSubscriptionPlanToFirestore,
@@ -186,6 +186,7 @@ export const SubscriptionPlansAdminTab: React.FC = () => {
           localStorage.setItem('sanad_custom_branding', JSON.stringify(finalBranding));
         } catch {}
         window.dispatchEvent(new CustomEvent('sanad_branding_updated', { detail: finalBranding }));
+        notifySync('branding');
         setSectionHeaderSuccess(true);
         setTimeout(() => setSectionHeaderSuccess(false), 4000);
       } else {
@@ -194,6 +195,7 @@ export const SubscriptionPlansAdminTab: React.FC = () => {
           localStorage.setItem('sanad_custom_branding', JSON.stringify(updatedBranding));
         } catch {}
         window.dispatchEvent(new CustomEvent('sanad_branding_updated', { detail: updatedBranding }));
+        notifySync('branding');
         setSectionHeaderSuccess(true);
         setTimeout(() => setSectionHeaderSuccess(false), 4000);
       }
@@ -496,6 +498,7 @@ export const SubscriptionPlansAdminTab: React.FC = () => {
       setPlans(nextPlans);
       localStorage.setItem('admin_cached_plans', JSON.stringify(nextPlans));
       window.dispatchEvent(new CustomEvent('sanad_plans_updated', { detail: { plans: nextPlans } }));
+      notifySync('subscription_plans');
 
       setShowModal(false);
     } catch (err: any) {
@@ -513,6 +516,7 @@ export const SubscriptionPlansAdminTab: React.FC = () => {
         setPlans(nextPlans);
         localStorage.setItem('admin_cached_plans', JSON.stringify(nextPlans));
         window.dispatchEvent(new CustomEvent('sanad_plans_updated', { detail: { plans: nextPlans } }));
+        notifySync('subscription_plans');
         setFeedback({ type: 'success', message: `تم حفظ الخطة "${name}" في قاعدة البيانات السحابية بنجاح` });
         setShowModal(false);
       } catch (directErr: any) {
@@ -530,6 +534,7 @@ export const SubscriptionPlansAdminTab: React.FC = () => {
     setPlans(nextPlans);
     localStorage.setItem('admin_cached_plans', JSON.stringify(nextPlans));
     window.dispatchEvent(new CustomEvent('sanad_plans_updated', { detail: { plans: nextPlans } }));
+    notifySync('subscription_plans');
 
     try {
       await directSaveSubscriptionPlanToFirestore(updated);
@@ -545,6 +550,7 @@ export const SubscriptionPlansAdminTab: React.FC = () => {
           setPlans(data.plans);
           localStorage.setItem('admin_cached_plans', JSON.stringify(data.plans));
           window.dispatchEvent(new CustomEvent('sanad_plans_updated', { detail: { plans: data.plans } }));
+          notifySync('subscription_plans');
         }
       }
       setFeedback({
@@ -572,6 +578,7 @@ export const SubscriptionPlansAdminTab: React.FC = () => {
     setPlans(newPlans);
     localStorage.setItem('admin_cached_plans', JSON.stringify(newPlans));
     window.dispatchEvent(new CustomEvent('sanad_plans_updated', { detail: { plans: newPlans } }));
+    notifySync('subscription_plans');
 
     try {
       const orderMap = newPlans.map((p) => p.id);
@@ -616,6 +623,7 @@ export const SubscriptionPlansAdminTab: React.FC = () => {
         detail: { deletedId: targetId, plans: remainingPlans },
       })
     );
+    notifySync('subscription_plans');
 
     // 5. Delete from client Firestore directly
     try {

@@ -24,7 +24,7 @@ import {
   Edit3
 } from 'lucide-react';
 import { LawRequest, LegalCategory } from '../../types';
-import { useSync } from '../../utils/sync';
+import { useSync, notifySync } from '../../utils/sync';
 import { SEED_LAW_REQUESTS } from '../../data/seedData';
 import {
   directFetchLawRequestsFromFirestore,
@@ -252,6 +252,8 @@ export const LawRequestsAdminTab: React.FC<LawRequestsAdminTabProps> = ({
       );
       setApproveModalOpen(false);
       setSelectedRequest(null);
+      notifySync('laws');
+      notifySync('law_requests');
       await fetchRequests();
       onLawsUpdated?.();
       onLawApproved?.();
@@ -313,6 +315,7 @@ export const LawRequestsAdminTab: React.FC<LawRequestsAdminTabProps> = ({
       showNotification('success', `تم رفض طلب القانون "${selectedRequest.title}".`);
       setRejectModalOpen(false);
       setSelectedRequest(null);
+      notifySync('law_requests');
       await fetchRequests();
     } else {
       showNotification('error', 'حدث خطأ أثناء رفض الطلب. يرجى المحاولة ثانية.');
@@ -352,6 +355,7 @@ export const LawRequestsAdminTab: React.FC<LawRequestsAdminTabProps> = ({
 
     if (success) {
       showNotification('success', 'تم حذف طلب القانون بنجاح.');
+      notifySync('law_requests');
       await fetchRequests();
     } else {
       showNotification('error', 'تعذر حذف طلب القانون.');

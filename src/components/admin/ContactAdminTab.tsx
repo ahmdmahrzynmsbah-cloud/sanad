@@ -20,7 +20,7 @@ import {
   X
 } from 'lucide-react';
 import { ContactInfo, ContactWhatsappItem, ContactPhoneItem } from '../../types';
-import { useSync } from '../../utils/sync';
+import { useSync, notifySync } from '../../utils/sync';
 import {
   directSaveContactInfoToFirestore,
   directFetchContactInfoFromFirestore,
@@ -292,6 +292,7 @@ export const ContactAdminTab: React.FC<ContactAdminTabProps> = ({ onContactUpdat
         if (onContactUpdated) {
           onContactUpdated(resultingInfo);
         }
+        notifySync('contact_info');
         showFeedbackMessage(
           'success',
           'تم حفظ وتحديث بيانات التواصل وأرقام الواتساب والبريد بنجاح في قاعدة البيانات السحابية (Cloud Firestore)!'
@@ -333,6 +334,7 @@ export const ContactAdminTab: React.FC<ContactAdminTabProps> = ({ onContactUpdat
           onContactUpdated(data.contactInfo);
         }
 
+        notifySync('contact_info');
         showFeedbackMessage('success', 'تمت استعادة بيانات التواصل الافتراضية بنجاح.');
       }
     } catch (err: any) {

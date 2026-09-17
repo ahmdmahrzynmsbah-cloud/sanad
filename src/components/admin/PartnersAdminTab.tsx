@@ -18,7 +18,7 @@ import {
   Check,
 } from 'lucide-react';
 import { Partner } from '../../types';
-import { useSync } from '../../utils/sync';
+import { useSync, notifySync } from '../../utils/sync';
 
 const CATEGORY_PRESETS = [
   'نقابات وجمعيات مهنية',
@@ -165,6 +165,7 @@ export const PartnersAdminTab: React.FC = () => {
       const data = await res.json();
 
       if (res.ok) {
+        notifySync('partners');
         setFeedback({
           type: 'success',
           message: editingPartner
@@ -199,6 +200,7 @@ export const PartnersAdminTab: React.FC = () => {
       const data = await res.json();
 
       if (res.ok) {
+        notifySync('partners');
         setFeedback({
           type: 'success',
           message: `تم حذف المؤسسة الشريكة "${partnerToDelete.name}" بنجاح.`,

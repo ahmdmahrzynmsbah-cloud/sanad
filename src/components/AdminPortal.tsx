@@ -67,7 +67,7 @@ import { VideosAdminTab } from './admin/VideosAdminTab';
 import { ContactAdminTab } from './admin/ContactAdminTab';
 import { LawRequestsAdminTab } from './admin/LawRequestsAdminTab';
 import { UserDetailsModal } from './admin/UserDetailsModal';
-import { useSync } from '../utils/sync';
+import { useSync, notifySync } from '../utils/sync';
 import { safeFetchJson } from '../utils/safeApi';
 import { SEED_USERS } from '../data/seedData';
 import {
@@ -1080,6 +1080,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       }
 
       if (savedSuccessfully && resultingBranding) {
+        notifySync('branding');
+        notifySync('system_settings');
         setBrandingFeedback({
           type: 'success',
           message: 'تم حفظ وتطبيق الإعدادات وتخصيص الهوية بنجاح وحفظها سحابياً.',
@@ -1159,6 +1161,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         try {
           localStorage.setItem('sanad_custom_branding', JSON.stringify(targetBranding));
         } catch {}
+        notifySync('branding');
+        notifySync('system_settings');
         setBrandingFeedback({
           type: 'success',
           message: 'تمت استعادة الاسم والشعار الافتراضي للسيستم بنجاح وحفظها سحابياً.',
@@ -1246,6 +1250,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       setCategoryModalSuccess(`تمت إضافة التصنيف "${trimmed}" وحفظه في السحابة بنجاح`);
       setNewCategoryInput('');
       setNewCategory(trimmed); // Select newly added category
+      notifySync('laws');
       await fetchCategories();
       fetchSystemStatus();
       setTimeout(() => setCategoryModalSuccess(null), 3500);
@@ -1272,6 +1277,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       }
       setCategoryModalSuccess(`تم حذف التصنيف "${cat.name}" بنجاح من قاعدة البيانات`);
       setCategoryToDelete(null);
+      notifySync('laws');
       await fetchCategories();
       fetchSystemStatus();
 
@@ -1314,6 +1320,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       directSaveAutoApproveToFirestore(nextVal).catch(() => {});
     } catch {}
 
+    notifySync('system_settings');
     setUserActionMessage(
       nextVal
         ? '⚡ تم تفعيل نظام القبول التلقائي! سيتم اعتماد وقبول أي حساب جديد فور تسجيله مباشرة.'
@@ -1334,6 +1341,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       });
       const data = await res.json();
       if (res.ok) {
+        notifySync('users');
         setUserActionMessage(
           `⚡ تم قبول واعتماد جميع الطلبات المعلقة (${data.count || pendingCount}) بنجاح وتصريحهم للشات!`
         );
@@ -1351,6 +1359,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       try {
         const directRes = await directAutoApproveAllPendingInFirestore(defaultTrialDays);
         if (directRes.success) {
+          notifySync('users');
           setUserActionMessage(
             `⚡ تم قبول واعتماد جميع الطلبات المعلقة (${directRes.count}) بنجاح في قاعدة البيانات!`
           );
@@ -1382,6 +1391,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       });
       const data = await res.json();
       if (res.ok) {
+        notifySync('users');
         setUserActionMessage(
           status === 'approved'
             ? '✅ تم قبول المستخدم واعتماده بنجاح! حسابه الآن مصرّح ويمكنه الدخول للشات.'
@@ -1396,6 +1406,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       } else {
         const directOk = await directUpdateUserStatusInFirestore(id, status);
         if (directOk) {
+          notifySync('users');
           setUserActionMessage(
             status === 'approved'
               ? '✅ تم اعتماد المستخدم وتصريحه مباشرة في السحابة!'
@@ -1413,6 +1424,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       try {
         const directOk = await directUpdateUserStatusInFirestore(id, status);
         if (directOk) {
+          notifySync('users');
           setUserActionMessage(
             status === 'approved'
               ? '✅ تم اعتماد المستخدم وتصريحه مباشرة في السحابة!'
@@ -1477,6 +1489,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
 
     setDefaultTrialDays(days);
     setEditingTrialDays(days);
+    notifySync('system_settings');
     setTrialSettingsFeedback(`✅ تم حفظ وتطبيق مدة الفترة التجريبية الافتراضية (${days} يوم) بنجاح.`);
     setTimeout(() => setTrialSettingsFeedback(null), 5000);
     setSavingTrialSettings(false);
@@ -1497,6 +1510,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       
       if (res.ok) {
         setUsers((prev) => prev.filter((u) => u.id !== targetUserId));
+        notifySync('users');
         setUserActionMessage(`تم حذف المستخدم "${targetUserName}" نهائياً بنجاح.`);
         setTimeout(() => setUserActionMessage(null), 3000);
         setUserToDelete(null);
@@ -1509,6 +1523,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         
         // In all cases, aggressively remove from UI so they aren't stuck
         setUsers((prev) => prev.filter((u) => u.id !== targetUserId));
+        notifySync('users');
         setUserActionMessage(`تم حذف المستخدم "${targetUserName}" من العرض (محاولة سحابية).`);
         setTimeout(() => setUserActionMessage(null), 3000);
         setUserToDelete(null);
@@ -1526,6 +1541,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       
       // Optimistically remove from UI anyway
       setUsers((prev) => prev.filter((u) => u.id !== targetUserId));
+      notifySync('users');
       setUserActionMessage(`تم حذف المستخدم "${targetUserName}" من العرض.`);
       setTimeout(() => setUserActionMessage(null), 3000);
       setUserToDelete(null);
@@ -1549,6 +1565,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       });
       const data = await res.json();
       if (res.ok) {
+        notifySync('users');
         setUserActionMessage(
           newSubscriptionState
             ? `👑 تم تفعيل الاشتراك الدائم للمستخدم "${user.fullName || user.username}" بنجاح! حسابه نشط دائماً.`
@@ -1563,6 +1580,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       } else {
         const directOk = await directUpdateUserSubscriptionInFirestore(user.id, newSubscriptionState);
         if (directOk) {
+          notifySync('users');
           setUserActionMessage(
             newSubscriptionState
               ? `👑 تم تفعيل الاشتراك الدائم للمستخدم "${user.fullName || user.username}" مباشرة في السحابة!`
@@ -1579,6 +1597,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       try {
         const directOk = await directUpdateUserSubscriptionInFirestore(user.id, newSubscriptionState);
         if (directOk) {
+          notifySync('users');
           setUserActionMessage(
             newSubscriptionState
               ? `👑 تم تفعيل الاشتراك الدائم للمستخدم "${user.fullName || user.username}" مباشرة في السحابة!`
@@ -1609,6 +1628,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       });
       const data = await res.json();
       if (res.ok) {
+        notifySync('users');
         setUserActionMessage(`⏳ تم تمديد الفترة التجريبية للمستخدم بنجاح بمقدار (${daysToAdd} يوم)!`);
         setTrialModalUser(null);
         if (data.users) {
@@ -1620,6 +1640,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       } else {
         const directOk = await directUpdateUserTrialInFirestore(userId, daysToAdd);
         if (directOk) {
+          notifySync('users');
           setUserActionMessage(`⏳ تم تمديد الفترة التجريبية للمستخدم بنجاح بمقدار (${daysToAdd} يوم) في السحابة!`);
           setTrialModalUser(null);
           fetchUsers();
@@ -1633,6 +1654,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       try {
         const directOk = await directUpdateUserTrialInFirestore(userId, daysToAdd);
         if (directOk) {
+          notifySync('users');
           setUserActionMessage(`⏳ تم تمديد الفترة التجريبية للمستخدم بنجاح بمقدار (${daysToAdd} يوم) في السحابة!`);
           setTrialModalUser(null);
           fetchUsers();
@@ -1664,6 +1686,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       });
       const data = await res.json();
       if (res.ok) {
+        notifySync('users');
         setUserActionMessage(
           isCurrentlyFrozen
             ? `🔓 تم إلغاء تجميد حساب "${user.fullName || user.username}" بنجاح ومنحه فترة تجريبية إضافية (${defaultTrialDays} يوم).`
@@ -1678,6 +1701,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       } else {
         const directOk = await directToggleFreezeUserInFirestore(user.id, !isCurrentlyFrozen);
         if (directOk) {
+          notifySync('users');
           setUserActionMessage(
             isCurrentlyFrozen
               ? `🔓 تم إلغاء تجميد حساب "${user.fullName || user.username}" مباشرة في السحابة!`
@@ -1694,6 +1718,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       try {
         const directOk = await directToggleFreezeUserInFirestore(user.id, !isCurrentlyFrozen);
         if (directOk) {
+          notifySync('users');
           setUserActionMessage(
             isCurrentlyFrozen
               ? `🔓 تم إلغاء تجميد حساب "${user.fullName || user.username}" مباشرة في السحابة!`
@@ -2264,6 +2289,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       setLawFormSuccess('تم حفظ القانون في قاعدة البيانات بنجاح وتحديث قاعدة معرفة البوت فورياً.');
       setNewTitle('');
       setNewContent('');
+      notifySync('laws');
       await fetchLaws();
       setTimeout(() => setLawFormSuccess(null), 4000);
     } else {
@@ -2356,6 +2382,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
 
     if (updated) {
       setEditingLaw(null);
+      notifySync('laws');
       fetchLaws();
     }
     
@@ -2408,6 +2435,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     setLawToDelete(null);
 
     // Refresh list & stats
+    notifySync('laws');
     await fetchLaws();
     fetchSystemStatus();
     if (onLawsUpdated) {

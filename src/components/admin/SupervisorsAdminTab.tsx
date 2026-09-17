@@ -19,7 +19,7 @@ import {
   Link2
 } from 'lucide-react';
 import { Supervisor } from '../../types';
-import { useSync } from '../../utils/sync';
+import { useSync, notifySync } from '../../utils/sync';
 
 interface SupervisorsAdminTabProps {
   initialSupervisors?: Supervisor[];
@@ -182,6 +182,7 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
         await fetchSupervisors();
       }
 
+      notifySync('supervisors');
       setFeedback({
         type: 'success',
         message: data.message || (editingSupervisor
@@ -222,6 +223,7 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
         setSupervisors((prev) => prev.filter((s) => s.id !== supervisorToDelete.id));
       }
 
+      notifySync('supervisors');
       setFeedback({
         type: 'success',
         message: `تم حذف المشرف "${supervisorToDelete.name}" نهائياً من النظام.`,

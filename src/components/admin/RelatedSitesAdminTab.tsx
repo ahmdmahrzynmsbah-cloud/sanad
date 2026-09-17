@@ -19,7 +19,7 @@ import {
   Filter
 } from 'lucide-react';
 import { RelatedSite } from '../../types';
-import { useSync } from '../../utils/sync';
+import { useSync, notifySync } from '../../utils/sync';
 
 interface RelatedSitesAdminTabProps {
   initialSites?: RelatedSite[];
@@ -209,6 +209,7 @@ export const RelatedSitesAdminTab: React.FC<RelatedSitesAdminTabProps> = ({
         await fetchSites();
       }
 
+      notifySync('related_sites');
       // Refresh categories
       await fetchCategories();
 
@@ -252,6 +253,7 @@ export const RelatedSitesAdminTab: React.FC<RelatedSitesAdminTabProps> = ({
         setSites((prev) => prev.filter((s) => s.id !== siteToDelete.id));
       }
 
+      notifySync('related_sites');
       await fetchCategories();
 
       setFeedback({
@@ -294,6 +296,7 @@ export const RelatedSitesAdminTab: React.FC<RelatedSitesAdminTabProps> = ({
       }
 
       setNewCategoryName('');
+      notifySync('related_sites');
       await fetchCategories();
       setCategoryFeedback({
         type: 'success',
@@ -344,6 +347,7 @@ export const RelatedSitesAdminTab: React.FC<RelatedSitesAdminTabProps> = ({
         setSelectedCategory(editingCategory.newName.trim());
       }
 
+      notifySync('related_sites');
       await fetchCategories();
       setEditingCategory(null);
       setCategoryFeedback({
@@ -377,6 +381,7 @@ export const RelatedSitesAdminTab: React.FC<RelatedSitesAdminTabProps> = ({
         setSelectedCategory('all');
       }
 
+      notifySync('related_sites');
       await fetchCategories();
       setCategoryToDelete(null);
       setCategoryFeedback({

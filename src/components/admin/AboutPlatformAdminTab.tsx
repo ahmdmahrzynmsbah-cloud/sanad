@@ -30,7 +30,7 @@ import {
   Check,
 } from 'lucide-react';
 import { PlatformAboutData, AboutSectionCard } from '../../types';
-import { useSync } from '../../utils/sync';
+import { useSync, notifySync } from '../../utils/sync';
 
 interface AboutPlatformAdminTabProps {
   onAboutUpdated?: (about: PlatformAboutData) => void;
@@ -169,6 +169,7 @@ export const AboutPlatformAdminTab: React.FC<AboutPlatformAdminTabProps> = ({ on
     }
 
     if (saved) {
+      notifySync('platform_about');
       setFeedback({
         type: 'success',
         message: 'تم حفظ وتحديث محتوى «عن المنصة والرؤية والرسالة» بنجاح في قاعدة البيانات السحابية.',
@@ -205,6 +206,7 @@ export const AboutPlatformAdminTab: React.FC<AboutPlatformAdminTabProps> = ({ on
         setCustomSections(data.platformAbout.customSections || []);
         setUpdatedAt(data.platformAbout.updatedAt);
         setShowResetConfirm(false);
+        notifySync('platform_about');
         setFeedback({
           type: 'success',
           message: 'تمت استعادة المحتوى الافتراضي المعتمد لمنصة «سَنَد» بنجاح.',

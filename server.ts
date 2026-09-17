@@ -4131,7 +4131,7 @@ app.post('/api/laws/batch', async (req, res) => {
         continue;
       }
 
-      // Check for duplicates
+      // Check for existing/duplicate law
       const dup = isDuplicateLawServer({
         title: String(item.title).trim(),
         sourceFileName: item.sourceFileName ? String(item.sourceFileName).trim() : undefined,
@@ -4139,7 +4139,15 @@ app.post('/api/laws/batch', async (req, res) => {
       });
 
       if (dup) {
-        errors.push(`الملف "${item.sourceFileName || item.title}" موجود بالفعل في قاعدة المعرفة بعنوان "${dup.title}"`);
+        // Gracefully update existing law with new content & metadata
+        dup.title = String(item.title).trim();
+        if (item.category) dup.category = String(item.category).trim();
+        dup.content = String(item.content).trim();
+        if (item.sourceFileName) dup.sourceFileName = String(item.sourceFileName).trim();
+        if (item.sourceFileSize) dup.sourceFileSize = String(item.sourceFileSize).trim();
+        if (item.pageCount) dup.pageCount = Number(item.pageCount);
+        dup.updatedAt = new Date().toISOString();
+        createdLaws.push(dup);
         continue;
       }
 
@@ -4161,20 +4169,20 @@ app.post('/api/laws/batch', async (req, res) => {
 
     if (createdLaws.length === 0) {
       return res.status(400).json({
-        error: errors.length > 0 ? errors.join(' • ') : 'هذا الملف أو التشريع موجود بالفعل في قاعدة المعرفة.',
+        error: errors.length > 0 ? errors.join(' • ') : 'تعذر إضافة المستندات، يرجى التأكد من احتوائها على نصوص صالحة.',
         errors,
       });
     }
 
     cachedIndexedChunks = null;
-    saveDB();
+    saveDB('laws');
 
     // CRITICAL FOR VERCEL & CLOUD RUN: Explicitly await Firestore persistence before returning response
     try {
       await Promise.all(
-        createdLaws.map((newLaw) =>
-          saveLawToFirestore(newLaw).catch((err) => {
-            console.error(`[Firestore] Error saving batch law ${newLaw.id}:`, err);
+        createdLaws.map((lawItem) =>
+          saveLawToFirestore(lawItem).catch((err) => {
+            console.error(`[Firestore] Error saving batch law ${lawItem.id}:`, err);
             return false;
           })
         )
@@ -4184,7 +4192,7 @@ app.post('/api/laws/batch', async (req, res) => {
     }
 
     res.status(201).json({
-      message: `تمت إضافة ${createdLaws.length} تشريعات إلى قاعدة المعرفة بنجاح`,
+      message: `تمت إضافة وتحديث ${createdLaws.length} تشريعات في قاعدة المعرفة بنجاح`,
       laws: createdLaws,
       errors: errors.length > 0 ? errors : undefined,
     });
@@ -4209,9 +4217,20 @@ app.post('/api/laws', async (req, res) => {
   });
 
   if (dup) {
-    return res.status(400).json({
-      error: `هذا الملف أو التشريع موجود بالفعل في قاعدة المعرفة بعنوان "${dup.title}" ولا يمكن إعادة إضافته.`,
-    });
+    // Gracefully update existing law
+    dup.title = String(title).trim();
+    dup.category = category;
+    dup.content = String(content).trim();
+    if (sourceFileName) dup.sourceFileName = sourceFileName;
+    if (sourceFileSize) dup.sourceFileSize = sourceFileSize;
+    if (pageCount) dup.pageCount = Number(pageCount);
+    dup.updatedAt = new Date().toISOString();
+    
+    cachedIndexedChunks = null;
+    saveDB('laws');
+    saveLawToFirestore(dup).catch(e => console.error('Firestore save error:', e));
+
+    return res.status(200).json({ message: 'تم تحديث القانون في قاعدة المعرفة بنجاح', law: dup });
   }
 
   const newLaw: StoredLaw = {
@@ -4228,7 +4247,7 @@ app.post('/api/laws', async (req, res) => {
 
   db.laws.unshift(newLaw);
   cachedIndexedChunks = null;
-  saveDB();
+  saveDB('laws');
   saveLawToFirestore(newLaw).catch(e => console.error('Firestore save error:', e));
 
   res.status(201).json({ message: 'تمت إضافة القانون بنجاح', law: newLaw });
