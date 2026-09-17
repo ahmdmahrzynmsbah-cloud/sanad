@@ -267,6 +267,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   const [chatbotNameInput, setChatbotNameInput] = useState('المستشار القانوني والمالي سَنَد');
   const [chatbotBadgeInput, setChatbotBadgeInput] = useState('الذكاء الاصطناعي التشريعي 24/7');
   const [showChatbotLogoInHeroInput, setShowChatbotLogoInHeroInput] = useState(true);
+  const [chatbotLogoShapeInput, setChatbotLogoShapeInput] = useState<'horizontal' | 'square' | 'auto' | 'compact'>('horizontal');
+  const [chatbotLogoWidthInput, setChatbotLogoWidthInput] = useState<'compact' | 'medium' | 'wide' | 'extrawide' | 'full'>('wide');
+  const [chatbotLogoBgStyleInput, setChatbotLogoBgStyleInput] = useState<'light-card' | 'transparent' | 'glass-dark' | 'glow'>('light-card');
+  const [chatbotLogoPaddingInput, setChatbotLogoPaddingInput] = useState<'none' | 'compact' | 'normal' | 'generous'>('normal');
 
   // Auth Portal Dynamic Texts
   const [authPortalHeaderTopInput, setAuthPortalHeaderTopInput] = useState('دولة فلسطين');
@@ -276,6 +280,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   const [authPortalFeature1Input, setAuthPortalFeature1Input] = useState('تشريعات محيّنة ومفهرسة بنصوص المواد الرسمية');
   const [authPortalFeature2Input, setAuthPortalFeature2Input] = useState('تدقيق واعتماد أمني ورقابي للحسابات المصرح لها');
   const [authPortalFeature3Input, setAuthPortalFeature3Input] = useState('حفظ وتزامن سحابي فوري عبر Cloud Firestore');
+
+  // Subscription Plans Section Customization (تخصيص نصوص قسم باقات الاشتراك بالصفحة الرئيسية)
+  const [plansSectionBadgeInput, setPlansSectionBadgeInput] = useState('خطط وباقات مرنة ومناسبة لكافة القطاعات');
+  const [plansSectionTitleInput, setPlansSectionTitleInput] = useState('خطط وباقات الاشتراك');
+  const [plansSectionSubtitleInput, setPlansSectionSubtitleInput] = useState(
+    'اختر الباقة المثالية لاحتياجاتك واستفد من مرجع ذكاء اصطناعي قانوني وضريبي فلسطيني متكامل يواكب التشريعات والقرارات والتعرفة الجمركية لحظة بلحظة.'
+  );
+  const [showPlansSectionInLandingInput, setShowPlansSectionInLandingInput] = useState(true);
 
   // Laws state with resilient local caching
   const [laws, setLaws] = useState<Law[]>(() => {
@@ -690,6 +702,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     if (b.chatbotName !== undefined) setChatbotNameInput(b.chatbotName || 'المستشار القانوني والمالي سَنَد');
     if (b.chatbotBadge !== undefined) setChatbotBadgeInput(b.chatbotBadge || 'الذكاء الاصطناعي التشريعي 24/7');
     if (b.showChatbotLogoInHero !== undefined) setShowChatbotLogoInHeroInput(b.showChatbotLogoInHero !== false);
+    if (b.chatbotLogoShape) setChatbotLogoShapeInput(b.chatbotLogoShape);
+    if (b.chatbotLogoWidth) setChatbotLogoWidthInput(b.chatbotLogoWidth);
+    if (b.chatbotLogoBgStyle) setChatbotLogoBgStyleInput(b.chatbotLogoBgStyle);
+    if (b.chatbotLogoPadding) setChatbotLogoPaddingInput(b.chatbotLogoPadding);
 
     // Auth Portal Text state
     setAuthPortalHeaderTopInput(b.authPortalHeaderTop ?? 'دولة فلسطين');
@@ -699,6 +715,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     setAuthPortalFeature1Input(b.authPortalFeature1 ?? 'تشريعات محيّنة ومفهرسة بنصوص المواد الرسمية');
     setAuthPortalFeature2Input(b.authPortalFeature2 ?? 'تدقيق واعتماد أمني ورقابي للحسابات المصرح لها');
     setAuthPortalFeature3Input(b.authPortalFeature3 ?? 'حفظ وتزامن سحابي فوري عبر Cloud Firestore');
+
+    // Subscription Plans Section Customization
+    if (b.plansSectionBadge !== undefined) setPlansSectionBadgeInput(b.plansSectionBadge || '');
+    if (b.plansSectionTitle !== undefined) setPlansSectionTitleInput(b.plansSectionTitle || '');
+    if (b.plansSectionSubtitle !== undefined) setPlansSectionSubtitleInput(b.plansSectionSubtitle || '');
+    if (b.showPlansSectionInLanding !== undefined) setShowPlansSectionInLandingInput(b.showPlansSectionInLanding !== false);
   };
 
   // Ultra-fast consolidated initial data load (Single round-trip)
@@ -962,6 +984,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       chatbotName: chatbotNameInput.trim(),
       chatbotBadge: chatbotBadgeInput.trim(),
       showChatbotLogoInHero: showChatbotLogoInHeroInput,
+      chatbotLogoShape: chatbotLogoShapeInput,
+      chatbotLogoWidth: chatbotLogoWidthInput,
+      chatbotLogoBgStyle: chatbotLogoBgStyleInput,
+      chatbotLogoPadding: chatbotLogoPaddingInput,
       founderName: founderNameInput.trim(),
       founderTitle: founderTitleInput.trim(),
       founderBio: founderBioInput.trim(),
@@ -977,6 +1003,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       authPortalFeature1: authPortalFeature1Input,
       authPortalFeature2: authPortalFeature2Input,
       authPortalFeature3: authPortalFeature3Input,
+
+      plansSectionBadge: plansSectionBadgeInput.trim(),
+      plansSectionTitle: plansSectionTitleInput.trim(),
+      plansSectionSubtitle: plansSectionSubtitleInput.trim(),
+      showPlansSectionInLanding: showPlansSectionInLandingInput,
     };
 
     const payloadStr = JSON.stringify(payload);
@@ -1077,6 +1108,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
           chatbotName: 'المستشار القانوني والمالي سَنَد',
           chatbotBadge: 'الذكاء الاصطناعي التشريعي 24/7',
           showChatbotLogoInHero: true,
+          chatbotLogoShape: 'horizontal',
+          chatbotLogoWidth: 'wide',
+          chatbotLogoBgStyle: 'light-card',
+          chatbotLogoPadding: 'normal',
           founderName: 'المستشار القانوني أ. محمد ناصر خليل',
           founderTitle: 'مستشار السياسات الجمركية والتشريعات الضريبية',
           founderBio: 'خبير ومستشار قانوني وتشريعي متخصص في النظم الجمركية والضريبية الفلسطينية',
@@ -5026,41 +5061,191 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                   )}
                 </div>
 
-                {/* Real-time Hero Card Preview Banner */}
-                <div className="p-4 rounded-xl bg-gradient-to-l from-emerald-950 via-[#0a231b] to-[#04130e] text-white border border-emerald-500/30 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-[#061510] border border-emerald-400/50 p-1 flex items-center justify-center relative shrink-0">
-                      {chatbotLogoUrlInput ? (
-                        <img
-                          src={chatbotLogoUrlInput}
-                          alt="Bot"
-                          className="w-full h-full object-contain"
-                          onError={(e) => {
-                            (e.target as HTMLElement).style.display = 'none';
-                          }}
-                        />
-                      ) : (
-                        <Bot className="w-6 h-6 text-emerald-300" />
-                      )}
-                      <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                  {/* Layout & Dimension Settings for Hero Logo */}
+                  <div className="pt-4 border-t border-gray-100 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>شكل ومقاس كارت اللوجو في ترويسة الصفحة (Hero Header)</span>
+                      </label>
+                      <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-bold">
+                        تخصيص كامل
+                      </span>
                     </div>
+
+                    {/* Shape selector */}
                     <div>
-                      <div className="text-[10px] font-bold text-emerald-300 bg-emerald-900/60 border border-emerald-600/40 px-2 py-0.5 rounded-full inline-block mb-0.5">
-                        {chatbotBadgeInput || 'الذكاء الاصطناعي التشريعي 24/7'}
+                      <label className="block text-[11px] font-bold text-gray-700 mb-1.5">
+                        1. شكل ونسبة أبعاد الكارت (Shape):
+                      </label>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {[
+                          { id: 'horizontal', label: 'مستطيل أفقي عريض (شعار سند Tax)', desc: 'نسبة 2.5:1 للشعارات الأفقية' },
+                          { id: 'square', label: 'مربع متناسق (1:1)', desc: 'للشعارات والأيقونات المربعة' },
+                          { id: 'auto', label: 'تلقائي حر', desc: 'يتكيف بحرية مع أبعاد الشعار' },
+                        ].map((s) => (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => setChatbotLogoShapeInput(s.id as any)}
+                            className={`p-2.5 rounded-xl border text-right transition-all cursor-pointer ${
+                              chatbotLogoShapeInput === s.id
+                                ? 'border-emerald-600 bg-emerald-50/80 ring-2 ring-emerald-500/20 shadow-xs'
+                                : 'border-gray-200 hover:border-gray-300 bg-gray-50/50'
+                            }`}
+                          >
+                            <div className="text-xs font-bold text-gray-900">{s.label}</div>
+                            <div className="text-[10px] text-gray-500 mt-0.5">{s.desc}</div>
+                          </button>
+                        ))}
                       </div>
-                      <h5 className="text-xs font-bold text-white">
-                        {chatbotNameInput || 'المستشار القانوني والمالي سَنَد'}
-                      </h5>
-                      <span className="text-[10px] text-emerald-200/70">معاينة بطاقة الشات بوت الحية</span>
+                    </div>
+
+                    {/* Width / Size selector */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-700 mb-1.5">
+                        2. عرض ومقاس اللوجو (Width):
+                      </label>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {[
+                          { id: 'compact', label: 'مضغوط (160px)' },
+                          { id: 'medium', label: 'متوسط (220px)' },
+                          { id: 'wide', label: 'عريض موصى به (280px)' },
+                          { id: 'extrawide', label: 'عريض جداً (340px)' },
+                        ].map((w) => (
+                          <button
+                            key={w.id}
+                            type="button"
+                            onClick={() => setChatbotLogoWidthInput(w.id as any)}
+                            className={`p-2 rounded-xl border text-center transition-all cursor-pointer text-xs font-bold ${
+                              chatbotLogoWidthInput === w.id
+                                ? 'border-emerald-600 bg-emerald-50 text-emerald-900 ring-2 ring-emerald-500/20'
+                                : 'border-gray-200 hover:border-gray-300 bg-gray-50/50 text-gray-700'
+                            }`}
+                          >
+                            {w.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Background Style Selector */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-700 mb-1.5">
+                        3. مظهر وخلفية كارت اللوجو (Background Style):
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {[
+                          { id: 'light-card', label: 'كارت أبيض ناصع مع إطار زمردي', desc: 'لإبراز النصوص والشعارات الداكنة بأعلى وضوح' },
+                          { id: 'transparent', label: 'خلفية شفافة بدون كارت', desc: 'عرض اللوجو مباشرة على خلفية الترويسة' },
+                          { id: 'glass-dark', label: 'زجاجي زمردي فخم (Dark Glass)', desc: 'تدرج زمردي داكن مع تأثير زجاجي' },
+                          { id: 'glow', label: 'إطار مضيء ومتوهج (Emerald Glow)', desc: 'إطار مشع مع إضاءة نيون زمردية' },
+                        ].map((bg) => (
+                          <button
+                            key={bg.id}
+                            type="button"
+                            onClick={() => setChatbotLogoBgStyleInput(bg.id as any)}
+                            className={`p-2.5 rounded-xl border text-right transition-all cursor-pointer ${
+                              chatbotLogoBgStyleInput === bg.id
+                                ? 'border-emerald-600 bg-emerald-50/80 ring-2 ring-emerald-500/20 shadow-xs'
+                                : 'border-gray-200 hover:border-gray-300 bg-gray-50/50'
+                            }`}
+                          >
+                            <div className="text-xs font-bold text-gray-900">{bg.label}</div>
+                            <div className="text-[10px] text-gray-500 mt-0.5">{bg.desc}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Inner Padding Selector */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-700 mb-1.5">
+                        4. الهوامش الداخلية للّوجو (Padding):
+                      </label>
+                      <div className="grid grid-cols-4 gap-2">
+                        {[
+                          { id: 'none', label: 'بدون (ملء الحواف)' },
+                          { id: 'compact', label: 'خفيفة' },
+                          { id: 'normal', label: 'متوازنة (موصى بها)' },
+                          { id: 'generous', label: 'واسعة' },
+                        ].map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => setChatbotLogoPaddingInput(p.id as any)}
+                            className={`p-2 rounded-xl border text-center transition-all cursor-pointer text-xs font-bold ${
+                              chatbotLogoPaddingInput === p.id
+                                ? 'border-emerald-600 bg-emerald-50 text-emerald-900 ring-2 ring-emerald-500/20'
+                                : 'border-gray-200 hover:border-gray-300 bg-gray-50/50 text-gray-700'
+                            }`}
+                          >
+                            {p.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg ${showChatbotLogoInHeroInput ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-gray-800 text-gray-400'}`}>
+                </div>
+
+                {/* Real-time Hero Header Live Preview Card */}
+                <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-[#0b1f1a] via-[#102d24] to-[#081814] text-white border border-[#1b4337] shadow-xl space-y-3">
+                  <div className="flex items-center justify-between border-b border-emerald-800/40 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                      <span className="text-xs font-bold text-emerald-300">معاينة حية دقيقة لمكان وشكل اللوجو في ترويسة الرئيسية</span>
+                    </div>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${showChatbotLogoInHeroInput ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-gray-800 text-gray-400'}`}>
                       {showChatbotLogoInHeroInput ? 'مفعل في الرئيسية' : 'مخفي في الرئيسية'}
                     </span>
                   </div>
+
+                  {/* Header Row replica matching HomeLandingView */}
+                  <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                    {/* National Badge Mock */}
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/15 text-white text-[11px] font-bold w-fit">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                      <span>دولة فلسطين • المنظومة الرقمية الأولى</span>
+                    </div>
+
+                    {/* Logo container rendered exactly as in HomeLandingView */}
+                    {showChatbotLogoInHeroInput && (
+                      <div
+                        className={`relative transition-all duration-300 rounded-2xl overflow-hidden flex items-center justify-center ${
+                          chatbotLogoShapeInput === 'square'
+                            ? chatbotLogoWidthInput === 'compact' ? 'w-16 h-16' : chatbotLogoWidthInput === 'medium' ? 'w-20 h-20' : chatbotLogoWidthInput === 'extrawide' ? 'w-28 h-28' : 'w-24 h-24'
+                            : chatbotLogoWidthInput === 'compact' ? 'w-36 h-12' : chatbotLogoWidthInput === 'medium' ? 'w-44 h-14' : chatbotLogoWidthInput === 'extrawide' ? 'w-64 h-20' : 'w-52 h-16'
+                        } ${
+                          chatbotLogoBgStyleInput === 'transparent'
+                            ? 'bg-transparent border-none shadow-none'
+                            : chatbotLogoBgStyleInput === 'glass-dark'
+                            ? 'bg-gradient-to-br from-emerald-950/90 via-[#071d15]/80 to-[#030d0a]/90 border border-emerald-500/40 shadow-md'
+                            : chatbotLogoBgStyleInput === 'glow'
+                            ? 'bg-gradient-to-br from-emerald-900/60 to-teal-950/80 border-2 border-emerald-400/80 shadow-[0_0_20px_rgba(16,185,129,0.35)]'
+                            : 'bg-slate-50/95 border-2 border-emerald-600/30 shadow-md'
+                        } ${
+                          chatbotLogoPaddingInput === 'none' ? 'p-0' : chatbotLogoPaddingInput === 'compact' ? 'p-1' : chatbotLogoPaddingInput === 'generous' ? 'p-3' : 'p-2'
+                        }`}
+                      >
+                        {chatbotLogoUrlInput ? (
+                          <img
+                            src={chatbotLogoUrlInput}
+                            alt="Logo"
+                            className="w-full h-full object-contain"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-br from-emerald-600/80 to-teal-800/80 rounded-xl flex items-center justify-center text-white">
+                            <Bot className="w-7 h-7 text-emerald-100" />
+                          </div>
+                        )}
+                        <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-400"></span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
 
               {/* Auth Portal Customization */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-6 space-y-5">
@@ -5159,6 +5344,79 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                     placeholder="الميزة الثالثة..."
                     className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]/20 transition-all"
                   />
+                </div>
+              </div>
+
+              {/* Subscription Plans Section Customization (تخصيص نصوص قسم خطط وباقات الاشتراك في الصفحة الرئيسية) */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-6 space-y-5">
+                <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
+                      <CreditCard className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-gray-900">
+                        تخصيص نصوص وعناوين قسم باقات الاشتراك (الصفحة الرئيسية)
+                      </h3>
+                      <p className="text-xs text-gray-500 mt-1">
+                        تحكم في العنوان، الشارة العلوية، والفقرة الوصفية لقسم الباقات بالواجهة الرئيسية
+                      </p>
+                    </div>
+                  </div>
+
+                  <label className="flex items-center gap-2 cursor-pointer select-none bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+                    <input
+                      type="checkbox"
+                      checked={showPlansSectionInLandingInput}
+                      onChange={(e) => setShowPlansSectionInLandingInput(e.target.checked)}
+                      className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500 cursor-pointer"
+                    />
+                    <span className="text-xs font-bold text-slate-800">إظهار القسم في الرئيسية</span>
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                      الشارة العلوية للقسم (Badge)
+                    </label>
+                    <input
+                      type="text"
+                      value={plansSectionBadgeInput}
+                      onChange={(e) => setPlansSectionBadgeInput(e.target.value)}
+                      placeholder="خطط وباقات مرنة ومناسبة لكافة القطاعات"
+                      className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]/20 transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                      عنوان القسم الرئيسي (Title)
+                    </label>
+                    <input
+                      type="text"
+                      value={plansSectionTitleInput}
+                      onChange={(e) => setPlansSectionTitleInput(e.target.value)}
+                      placeholder="خطط وباقات الاشتراك"
+                      className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]/20 transition-all font-bold"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                    الفقرة والوصف التوضيحي للقسم (Description / Subtitle)
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={plansSectionSubtitleInput}
+                    onChange={(e) => setPlansSectionSubtitleInput(e.target.value)}
+                    placeholder="اختر الباقة المثالية لاحتياجاتك واستفد من مرجع ذكاء اصطناعي قانوني وضريبي فلسطيني متكامل يواكب التشريعات والقرارات والتعرفة الجمركية لحظة بلحظة."
+                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]/20 transition-all leading-relaxed"
+                  />
+                  <p className="text-[11px] text-gray-500 mt-1.5">
+                    * هذا النص يظهر أسفل العنوان الرئيسي مباشرة في الصفحة الرئيسية، ويمكنك تعديله وصياغته بحرية في أي وقت.
+                  </p>
                 </div>
               </div>
 

@@ -202,6 +202,10 @@ export interface SystemBranding {
   chatbotName?: string;
   chatbotBadge?: string;
   showChatbotLogoInHero?: boolean;
+  chatbotLogoShape?: 'horizontal' | 'square' | 'auto' | 'compact';
+  chatbotLogoWidth?: 'compact' | 'medium' | 'wide' | 'extrawide' | 'full';
+  chatbotLogoBgStyle?: 'light-card' | 'transparent' | 'glass-dark' | 'glow';
+  chatbotLogoPadding?: 'none' | 'compact' | 'normal' | 'generous';
   
   // Auth Portal Dynamic Texts
   authPortalHeaderTop?: string;
@@ -212,6 +216,12 @@ export interface SystemBranding {
   authPortalFeature1?: string;
   authPortalFeature2?: string;
   authPortalFeature3?: string;
+
+  // Subscription Plans Section Customization
+  plansSectionBadge?: string;
+  plansSectionTitle?: string;
+  plansSectionSubtitle?: string;
+  showPlansSectionInLanding?: boolean;
 }
 
 export interface ContactWhatsappItem {

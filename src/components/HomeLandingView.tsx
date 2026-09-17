@@ -79,6 +79,58 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
   const chatbotName = branding?.chatbotName || 'المستشار القانوني والمالي سَنَد';
   const chatbotBadge = branding?.chatbotBadge || 'الذكاء الاصطناعي التشريعي 24/7';
   const showChatbotLogo = branding?.showChatbotLogoInHero !== false;
+  const logoShape = branding?.chatbotLogoShape || 'horizontal';
+  const logoWidth = branding?.chatbotLogoWidth || 'wide';
+  const logoBgStyle = branding?.chatbotLogoBgStyle || 'light-card';
+  const logoPadding = branding?.chatbotLogoPadding || 'normal';
+
+  // Helper classes for dynamic logo container sizing
+  const getLogoSizeClasses = () => {
+    if (logoShape === 'square') {
+      switch (logoWidth) {
+        case 'compact': return 'w-16 h-16 sm:w-20 sm:h-20';
+        case 'medium': return 'w-20 h-20 sm:w-24 sm:h-24';
+        case 'extrawide': return 'w-28 h-28 sm:w-36 sm:h-36';
+        case 'wide':
+        default: return 'w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32';
+      }
+    }
+    // Horizontal / Banner style (perfect for 'سند Tax' style logos)
+    switch (logoWidth) {
+      case 'compact': return 'w-36 sm:w-44 h-12 sm:h-14';
+      case 'medium': return 'w-44 sm:w-56 h-14 sm:h-16 md:h-18';
+      case 'extrawide': return 'w-64 sm:w-80 md:w-96 h-18 sm:h-22 md:h-26';
+      case 'full': return 'w-full h-20 sm:h-24';
+      case 'wide':
+      default: return 'w-48 sm:w-60 md:w-72 h-16 sm:h-18 md:h-22';
+    }
+  };
+
+  // Helper classes for dynamic logo background styling
+  const getLogoBgClasses = () => {
+    switch (logoBgStyle) {
+      case 'transparent':
+        return 'bg-transparent border-none shadow-none';
+      case 'glass-dark':
+        return 'bg-gradient-to-br from-emerald-950/90 via-[#071d15]/80 to-[#030d0a]/90 border border-emerald-500/40 shadow-xl shadow-emerald-950/60 backdrop-blur-md hover:border-emerald-400';
+      case 'glow':
+        return 'bg-gradient-to-br from-emerald-900/60 to-teal-950/80 border-2 border-emerald-400/80 shadow-[0_0_25px_rgba(16,185,129,0.3)] hover:shadow-[0_0_35px_rgba(16,185,129,0.5)]';
+      case 'light-card':
+      default:
+        return 'bg-slate-50/95 hover:bg-white border-2 border-emerald-600/30 hover:border-emerald-500 shadow-xl shadow-black/30 backdrop-blur-sm';
+    }
+  };
+
+  // Helper classes for padding
+  const getLogoPaddingClasses = () => {
+    switch (logoPadding) {
+      case 'none': return 'p-0';
+      case 'compact': return 'p-1 sm:p-1.5';
+      case 'generous': return 'p-3 sm:p-4';
+      case 'normal':
+      default: return 'p-2 sm:p-2.5';
+    }
+  };
 
   return (
     <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-8 space-y-6 sm:space-y-8 animate-in fade-in duration-300">
@@ -92,8 +144,8 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
           
           {/* الجانب الأيمن: اسم المؤسس، لقبه، معلومات عنه، معلومات عن الموقع، وأزرار تسجيل الدخول وإنشاء الحساب */}
           <div className="flex-1 w-full text-right space-y-4">
-            {/* National Badge & Chatbot Identity Header Row */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
+            {/* National Badge & Chatbot Identity Header Row (Where User Circled in Red) */}
+            <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-3.5 w-full">
               {/* National Badge */}
               <div className="inline-flex flex-wrap items-center gap-1.5 sm:gap-2 px-3.5 py-1.5 rounded-full bg-white/10 border border-white/15 text-white text-xs sm:text-sm font-bold w-fit">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -102,55 +154,52 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
                   {lawsCount} تشريع وقانون معتمد
                 </span>
               </div>
-            </div>
 
-            {/* Founder Info & Chatbot Identity Box (In the Green Highlighted Area) */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 w-full">
-              {/* Founder Name on the Right */}
-              <div className="flex-1 min-w-0">
-                <div className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-emerald-400 mb-1">
-                  <Sparkles className="w-4 h-4 text-emerald-400" />
-                  <span>مؤسس ومطوّر المنظومة</span>
-                </div>
-                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight leading-tight">
-                  {founderName}
-                </h1>
-                <p className="text-xs sm:text-sm font-semibold text-emerald-300 mt-1">
-                  {founderTitle}
-                </p>
-              </div>
-
-              {/* Chatbot Logo - Pure Square Image Container without any text */}
+              {/* Top-Left Customizable Hero Logo Container (Exact Red Circled Area) */}
               {showChatbotLogo && (
                 <div
                   id="hero-chatbot-branding-badge"
                   onClick={onOpenSanadIntro || onNavigateToChat}
-                  className="group relative w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 aspect-square rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-950 via-[#071d15] to-[#030d0a] border-2 border-emerald-500/50 hover:border-emerald-400 shadow-xl shadow-emerald-950/70 hover:shadow-emerald-700/50 transition-all duration-300 cursor-pointer shrink-0 p-2 sm:p-2.5 flex items-center justify-center backdrop-blur-md hover:scale-105"
+                  className={`group relative ${getLogoSizeClasses()} ${getLogoBgClasses()} ${getLogoPaddingClasses()} rounded-2xl overflow-hidden transition-all duration-300 cursor-pointer shrink-0 flex items-center justify-center hover:scale-[1.03]`}
                   title="المستشار الذكي سَنَد - انقر للمحادثة والاستشارة الفورية"
                 >
-                  {/* Image/Icon occupying the entire space neatly */}
+                  {/* Image/Icon occupying the entire container neatly */}
                   {chatbotLogoUrl ? (
                     <img
                       src={chatbotLogoUrl}
-                      alt="شعار المستشار الذكي"
-                      className="w-full h-full object-contain drop-shadow-md rounded-xl"
+                      alt={chatbotName}
+                      className="w-full h-full object-contain drop-shadow-sm select-none"
                       onError={(e) => {
                         (e.target as HTMLElement).style.display = 'none';
                       }}
                     />
                   ) : (
                     <div className="w-full h-full bg-gradient-to-br from-emerald-600/80 to-teal-800/80 rounded-xl flex items-center justify-center text-white border border-emerald-400/40">
-                      <Bot className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 text-emerald-100 drop-shadow" />
+                      <Bot className="w-8 h-8 sm:w-10 sm:h-10 text-emerald-100 drop-shadow" />
                     </div>
                   )}
 
                   {/* Pulsing Active Indicator in the corner */}
-                  <span className="absolute top-2 right-2 flex h-2.5 w-2.5 pointer-events-none">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400"></span>
+                  <span className="absolute top-1.5 right-1.5 flex h-2 w-2 pointer-events-none">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
                   </span>
                 </div>
               )}
+            </div>
+
+            {/* Founder Info */}
+            <div className="w-full">
+              <div className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-emerald-400 mb-1">
+                <Sparkles className="w-4 h-4 text-emerald-400" />
+                <span>مؤسس ومطوّر المنظومة</span>
+              </div>
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight leading-tight">
+                {founderName}
+              </h1>
+              <p className="text-xs sm:text-sm font-semibold text-emerald-300 mt-1">
+                {founderTitle}
+              </p>
             </div>
 
             {/* Founder Bio / معلومات عن المؤسس */}
@@ -330,6 +379,7 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
       <SubscriptionPlansSection
         initialPlans={subscriptionPlans}
         currentUser={currentUser}
+        branding={branding}
         onNavigateToAuth={onNavigateToAuth}
         onOpenContact={onOpenContact}
       />

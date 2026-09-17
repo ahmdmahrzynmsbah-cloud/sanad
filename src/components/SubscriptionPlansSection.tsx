@@ -15,13 +15,14 @@ import {
   Building2,
   CreditCard,
 } from 'lucide-react';
-import { SubscriptionPlan, User } from '../types';
+import { SubscriptionPlan, User, SystemBranding } from '../types';
 import { useSync } from '../utils/sync';
 import { directFetchSubscriptionPlansFromFirestore } from '../services/clientFirestore';
 
 interface SubscriptionPlansSectionProps {
   initialPlans?: SubscriptionPlan[];
   currentUser: User | null;
+  branding?: SystemBranding;
   onNavigateToAuth: (mode: 'login' | 'register') => void;
   onOpenContact?: () => void;
 }
@@ -106,9 +107,46 @@ const DEFAULT_FALLBACK_PLANS: SubscriptionPlan[] = [
 export const SubscriptionPlansSection: React.FC<SubscriptionPlansSectionProps> = ({
   initialPlans,
   currentUser,
+  branding,
   onNavigateToAuth,
   onOpenContact,
 }) => {
+  const [currentBranding, setCurrentBranding] = useState<SystemBranding | undefined>(() => {
+    if (branding) return branding;
+    try {
+      const cached = localStorage.getItem('sanad_custom_branding');
+      if (cached) return JSON.parse(cached);
+    } catch {}
+    return undefined;
+  });
+
+  useEffect(() => {
+    if (branding) {
+      setCurrentBranding(branding);
+    }
+  }, [branding]);
+
+  useEffect(() => {
+    const handleBrandingUpdated = (e?: any) => {
+      if (e?.detail) {
+        setCurrentBranding((prev) => ({ ...prev, ...e.detail }));
+      } else {
+        try {
+          const cached = localStorage.getItem('sanad_custom_branding');
+          if (cached) setCurrentBranding(JSON.parse(cached));
+        } catch {}
+      }
+    };
+
+    window.addEventListener('sanad_branding_updated', handleBrandingUpdated);
+    window.addEventListener('storage', handleBrandingUpdated);
+
+    return () => {
+      window.removeEventListener('sanad_branding_updated', handleBrandingUpdated);
+      window.removeEventListener('storage', handleBrandingUpdated);
+    };
+  }, []);
+
   const [plans, setPlans] = useState<SubscriptionPlan[]>(() => {
     let deletedIds: string[] = [];
     try {
@@ -291,21 +329,32 @@ export const SubscriptionPlansSection: React.FC<SubscriptionPlansSectionProps> =
 
   const activePlans = plans.filter((p) => p.isActive !== false);
 
+  const sectionBadge = currentBranding?.plansSectionBadge || branding?.plansSectionBadge || 'خطط وباقات مرنة ومناسبة لكافة القطاعات';
+  const sectionTitle = currentBranding?.plansSectionTitle || branding?.plansSectionTitle || 'خطط وباقات الاشتراك';
+  const sectionSubtitle = currentBranding?.plansSectionSubtitle || branding?.plansSectionSubtitle || 'اختر الباقة المثالية لاحتياجاتك واستفد من مرجع ذكاء اصطناعي قانوني وضريبي فلسطيني متكامل يواكب التشريعات والقرارات والتعرفة الجمركية لحظة بلحظة.';
+  const isSectionVisible = (currentBranding?.showPlansSectionInLanding ?? branding?.showPlansSectionInLanding) !== false;
+
+  if (!isSectionVisible) {
+    return null;
+  }
+
   return (
     <section id="subscription-plans-section" className="w-full space-y-6 sm:space-y-8 my-2">
       {/* Header with Title and Badges */}
       <div className="text-center max-w-3xl mx-auto space-y-3 px-4">
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs sm:text-sm font-bold shadow-xs">
-          <Sparkles className="w-4 h-4 text-emerald-600" />
-          <span>خطط وباقات مرنة ومناسبة لكافة القطاعات</span>
-        </div>
+        {sectionBadge && (
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs sm:text-sm font-bold shadow-xs">
+            <Sparkles className="w-4 h-4 text-emerald-600" />
+            <span>{sectionBadge}</span>
+          </div>
+        )}
 
         <h3 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 tracking-tight">
-          خطط وباقات الاشتراك
+          {sectionTitle}
         </h3>
 
-        <p className="text-sm sm:text-base text-slate-600 leading-relaxed font-normal">
-          اختر الباقة المثالية لاحتياجاتك واستفد من مرجع ذكاء اصطناعي قانوني وضريبي فلسطيني متكامل يواكب التشريعات والقرارات والتعرفة الجمركية لحظة بلحظة.
+        <p className="text-sm sm:text-base text-slate-600 leading-relaxed font-normal whitespace-pre-line">
+          {sectionSubtitle}
         </p>
       </div>
 

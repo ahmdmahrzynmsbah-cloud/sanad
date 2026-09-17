@@ -377,6 +377,12 @@ interface DBSettings {
   authPortalFeature1?: string;
   authPortalFeature2?: string;
   authPortalFeature3?: string;
+
+  // Subscription Plans Section Customization
+  plansSectionBadge?: string;
+  plansSectionTitle?: string;
+  plansSectionSubtitle?: string;
+  showPlansSectionInLanding?: boolean;
 }
 
 const DEFAULT_FOUNDER = {
@@ -401,6 +407,14 @@ const DEFAULT_BRANDING = {
   chatbotName: 'المستشار القانوني والمالي سَنَد',
   chatbotBadge: 'الذكاء الاصطناعي التشريعي 24/7',
   showChatbotLogoInHero: true,
+  chatbotLogoShape: 'horizontal' as const,
+  chatbotLogoWidth: 'wide' as const,
+  chatbotLogoBgStyle: 'light-card' as const,
+  chatbotLogoPadding: 'normal' as const,
+  plansSectionBadge: 'خطط وباقات مرنة ومناسبة لكافة القطاعات',
+  plansSectionTitle: 'خطط وباقات الاشتراك',
+  plansSectionSubtitle: 'اختر الباقة المثالية لاحتياجاتك واستفد من مرجع ذكاء اصطناعي قانوني وضريبي فلسطيني متكامل يواكب التشريعات والقرارات والتعرفة الجمركية لحظة بلحظة.',
+  showPlansSectionInLanding: true,
   ...DEFAULT_FOUNDER,
 };
 
@@ -1260,6 +1274,11 @@ async function syncWithFirestore() {
         founderPhotoUrl: cloudSettings.founderPhotoUrl !== undefined ? cloudSettings.founderPhotoUrl : (db.settings?.founderPhotoUrl || DEFAULT_FOUNDER.founderPhotoUrl),
         founderQuote: cloudSettings.founderQuote || db.settings?.founderQuote || DEFAULT_FOUNDER.founderQuote,
         siteOverview: cloudSettings.siteOverview || db.settings?.siteOverview || DEFAULT_FOUNDER.siteOverview,
+
+        plansSectionBadge: cloudSettings.plansSectionBadge || db.settings?.plansSectionBadge || DEFAULT_BRANDING.plansSectionBadge,
+        plansSectionTitle: cloudSettings.plansSectionTitle || db.settings?.plansSectionTitle || DEFAULT_BRANDING.plansSectionTitle,
+        plansSectionSubtitle: cloudSettings.plansSectionSubtitle || db.settings?.plansSectionSubtitle || DEFAULT_BRANDING.plansSectionSubtitle,
+        showPlansSectionInLanding: cloudSettings.showPlansSectionInLanding !== undefined ? cloudSettings.showPlansSectionInLanding : (db.settings?.showPlansSectionInLanding !== false),
       };
       changed = true;
       console.log(`✅ Loaded settings from Cloud Firestore.`);
@@ -1912,6 +1931,11 @@ app.get('/api/admin/settings', (req, res) => {
       founderPhotoUrl: db.settings?.founderPhotoUrl || DEFAULT_FOUNDER.founderPhotoUrl,
       founderQuote: db.settings?.founderQuote || DEFAULT_FOUNDER.founderQuote,
       siteOverview: db.settings?.siteOverview || DEFAULT_FOUNDER.siteOverview,
+
+      plansSectionBadge: db.settings?.plansSectionBadge || DEFAULT_BRANDING.plansSectionBadge,
+      plansSectionTitle: db.settings?.plansSectionTitle || DEFAULT_BRANDING.plansSectionTitle,
+      plansSectionSubtitle: db.settings?.plansSectionSubtitle || DEFAULT_BRANDING.plansSectionSubtitle,
+      showPlansSectionInLanding: db.settings?.showPlansSectionInLanding !== undefined ? db.settings.showPlansSectionInLanding : (DEFAULT_BRANDING.showPlansSectionInLanding !== false),
     },
   });
 });
@@ -1952,6 +1976,10 @@ app.post('/api/admin/settings/branding', async (req, res, next) => {
       authPortalFeature1,
       authPortalFeature2,
       authPortalFeature3,
+      plansSectionBadge,
+      plansSectionTitle,
+      plansSectionSubtitle,
+      showPlansSectionInLanding,
     } = body || {};
 
     if (!systemName || !String(systemName).trim()) {
@@ -2029,6 +2057,11 @@ app.post('/api/admin/settings/branding', async (req, res, next) => {
     if (authPortalFeature2 !== undefined) db.settings.authPortalFeature2 = String(authPortalFeature2).trim();
     if (authPortalFeature3 !== undefined) db.settings.authPortalFeature3 = String(authPortalFeature3).trim();
 
+    if (plansSectionBadge !== undefined) db.settings.plansSectionBadge = String(plansSectionBadge).trim();
+    if (plansSectionTitle !== undefined) db.settings.plansSectionTitle = String(plansSectionTitle).trim();
+    if (plansSectionSubtitle !== undefined) db.settings.plansSectionSubtitle = String(plansSectionSubtitle).trim();
+    if (showPlansSectionInLanding !== undefined) db.settings.showPlansSectionInLanding = Boolean(showPlansSectionInLanding);
+
     saveDB();
 
     const firestorePayload = {
@@ -2064,6 +2097,11 @@ app.post('/api/admin/settings/branding', async (req, res, next) => {
       authPortalFeature1: db.settings.authPortalFeature1,
       authPortalFeature2: db.settings.authPortalFeature2,
       authPortalFeature3: db.settings.authPortalFeature3,
+
+      plansSectionBadge: db.settings.plansSectionBadge,
+      plansSectionTitle: db.settings.plansSectionTitle,
+      plansSectionSubtitle: db.settings.plansSectionSubtitle,
+      showPlansSectionInLanding: db.settings.showPlansSectionInLanding !== false,
     };
 
     // Await cloud Firestore save with a safety timeout so Vercel doesn't freeze in-flight connections
@@ -2100,6 +2138,11 @@ app.post('/api/admin/settings/branding', async (req, res, next) => {
         founderPhotoUrl: db.settings.founderPhotoUrl,
         founderQuote: db.settings.founderQuote,
         siteOverview: db.settings.siteOverview,
+
+        plansSectionBadge: db.settings.plansSectionBadge,
+        plansSectionTitle: db.settings.plansSectionTitle,
+        plansSectionSubtitle: db.settings.plansSectionSubtitle,
+        showPlansSectionInLanding: db.settings.showPlansSectionInLanding !== false,
       },
     });
   } catch (err: any) {
