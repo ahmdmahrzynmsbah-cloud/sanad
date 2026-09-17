@@ -87,15 +87,28 @@ export default function App() {
 
   // Fetch Laws count
   const fetchLawsCount = async () => {
+    let loadedCount = 0;
     try {
       const res = await fetch('/api/laws');
       const data = await res.json();
       if (res.ok && data.laws) {
-        setLawsCount(data.laws.length);
+        loadedCount = data.laws.length;
       }
     } catch (err) {
-      console.warn('Failed to load laws count:', err);
+      console.warn('Failed to load laws count from API:', err);
     }
+
+    try {
+      const { directFetchLawsFromFirestore } = await import('./services/clientFirestore');
+      const firestoreLaws = await directFetchLawsFromFirestore();
+      if (firestoreLaws && firestoreLaws.length > loadedCount) {
+        loadedCount = firestoreLaws.length;
+      }
+    } catch (fsErr) {
+      console.warn('Direct Firestore laws count notice:', fsErr);
+    }
+
+    setLawsCount(loadedCount);
   };
 
   // Fetch System Branding

@@ -2258,26 +2258,46 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     if (!editingLaw) return;
 
     setUpdatingLaw(true);
+    let updated = false;
+
+    const payload = {
+      title: editTitle.trim(),
+      category: editCategory,
+      content: editContent.trim(),
+    };
+
     try {
       const res = await fetch(`/api/laws/${editingLaw.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: editTitle.trim(),
-          category: editCategory,
-          content: editContent.trim(),
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
-        setEditingLaw(null);
-        fetchLaws();
+        updated = true;
       }
     } catch (err) {
-      console.error('Failed to update law:', err);
-    } finally {
-      setUpdatingLaw(false);
+      console.warn('API update law failed, falling back to direct Firestore:', err);
     }
+
+    if (!updated) {
+      const updatedLaw = {
+        ...editingLaw,
+        ...payload,
+        updatedAt: new Date().toISOString()
+      };
+      const directOk = await directSaveLawToFirestore(updatedLaw);
+      if (directOk) {
+        updated = true;
+      }
+    }
+
+    if (updated) {
+      setEditingLaw(null);
+      fetchLaws();
+    }
+    
+    setUpdatingLaw(false);
   };
 
   // Delete Law: Open in-app confirmation modal (works flawlessly in sandboxed iframes)
