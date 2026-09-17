@@ -2245,11 +2245,45 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   };
 
   // Start Edit Law
-  const handleStartEdit = (law: Law) => {
+  const handleStartEdit = async (law: Law) => {
     setEditingLaw(law);
     setEditTitle(law.title);
     setEditCategory(law.category);
-    setEditContent(law.content);
+    
+    // In case content was omitted from the list payload, fetch it
+    if (!law.content) {
+      setEditContent('جاري تحميل النص السحابي...');
+      try {
+        const res = await fetch(`/api/laws/${law.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.law && data.law.content) {
+            setEditContent(data.law.content);
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to fetch full law content from API:', e);
+      }
+      
+      // Fallback to direct Firestore
+      try {
+        const { directFetchLawsFromFirestore } = await import('../services/clientFirestore');
+        // We could write a directFetchLawFromFirestore(id), but for now if laws are few it's fine,
+        // Actually since we don't have directFetchLawFromFirestore(id) let's just do:
+        const dbLaws = await directFetchLawsFromFirestore();
+        const found = dbLaws.find(l => l.id === law.id);
+        if (found && found.content) {
+          setEditContent(found.content);
+        } else {
+          setEditContent('');
+        }
+      } catch (err) {
+        setEditContent('');
+      }
+    } else {
+      setEditContent(law.content);
+    }
   };
 
   // Save Edited Law

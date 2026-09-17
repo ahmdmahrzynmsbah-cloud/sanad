@@ -1850,7 +1850,7 @@ app.get('/api/admin/init', async (req, res) => {
   const adminUsers = (db.users || []).map(toAdminUser);
   res.json({
     users: adminUsers,
-    laws: db.laws,
+    laws: (db.laws || []).map(l => ({ ...l, content: "" })),
     lawRequests: db.lawRequests || [],
     categories: db.categories || [],
     supervisors: (db.supervisors || []).sort((a, b) => (a.order || 0) - (b.order || 0)),
@@ -4019,7 +4019,19 @@ function isDuplicateLawServer(candidate: { title?: string; sourceFileName?: stri
 
 // Get all laws
 app.get('/api/laws', (req, res) => {
-  res.json({ laws: db.laws });
+  // Omit content to prevent hitting Vercel 4.5MB payload limit
+  const lightweightLaws = db.laws.map(l => ({ ...l, content: '' }));
+  res.json({ laws: lightweightLaws });
+});
+
+app.get('/api/laws/:id', (req, res) => {
+  const { id } = req.params;
+  const law = db.laws.find(l => l.id === id);
+  if (law) {
+    res.json({ law });
+  } else {
+    res.status(404).json({ error: 'Law not found' });
+  }
 });
 
 // Create multiple laws in batch
