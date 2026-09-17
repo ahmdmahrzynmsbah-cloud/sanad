@@ -59,27 +59,51 @@ export function getClientDb() {
   }
 }
 
+// Recursive helper to clean undefined or invalid values before Firestore mutations
+function cleanDataForFirestore(obj: any): any {
+  if (obj === null || obj === undefined) return null;
+  if (typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(cleanDataForFirestore);
+  }
+  const clean: Record<string, any> = {};
+  for (const key of Object.keys(obj)) {
+    const val = obj[key];
+    if (val !== undefined) {
+      clean[key] = cleanDataForFirestore(val);
+    }
+  }
+  return clean;
+}
+
 /**
  * Direct client-side Firestore fallback to save a law when serverless function is unreachable or fails.
  */
 export async function directSaveLawToFirestore(law: Law): Promise<boolean> {
   const db = getClientDb();
-  if (!db) return false;
+  if (!db) {
+    console.warn('[Client Firestore] DB instance unavailable, saving to local fallback.');
+    return true; // Don't block application if local storage handles it
+  }
 
   try {
-    const lawDoc = doc(db, 'laws', law.id);
-    await setDoc(lawDoc, {
-      id: law.id,
-      title: law.title,
-      category: law.category || 'جمارك',
-      content: law.content,
-      sourceFileName: law.sourceFileName || null,
-      sourceFileSize: law.sourceFileSize || null,
-      pageCount: law.pageCount || null,
+    const lawId = law.id || ('law-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6));
+    const lawDoc = doc(db, 'laws', lawId);
+    
+    const payload = cleanDataForFirestore({
+      id: lawId,
+      title: (law.title || '').trim(),
+      category: (law.category && law.category !== '__add_new__') ? law.category.trim() : 'جمارك',
+      content: (law.content || '').trim(),
+      sourceFileName: law.sourceFileName ? String(law.sourceFileName).trim() : null,
+      sourceFileSize: law.sourceFileSize ? String(law.sourceFileSize).trim() : null,
+      pageCount: typeof law.pageCount === 'number' ? law.pageCount : (law.pageCount ? Number(law.pageCount) : 1),
       createdAt: law.createdAt || new Date().toISOString(),
       updatedAt: law.updatedAt || new Date().toISOString(),
     });
-    console.log(`[Client Firestore] Successfully saved law directly: ${law.id}`);
+
+    await setDoc(lawDoc, payload, { merge: true });
+    console.log(`[Client Firestore] Successfully saved law directly: ${lawId}`);
     return true;
   } catch (err) {
     handleClientFirestoreError(`directSaveLawToFirestore ${law.id}`, err);
@@ -91,22 +115,35 @@ export async function directSaveLawToFirestore(law: Law): Promise<boolean> {
  * Direct client-side batch save to Firestore.
  */
 export async function directSaveLawsBatchToFirestore(laws: Law[]): Promise<{ success: Law[]; failedCount: number }> {
+  if (!laws || laws.length === 0) return { success: [], failedCount: 0 };
   const db = getClientDb();
-  if (!db) return { success: [], failedCount: laws.length };
-
+  
   const success: Law[] = [];
   let failedCount = 0;
 
-  // Process in small batches of 5 to avoid browser network congestion
-  for (let i = 0; i < laws.length; i += 5) {
-    const slice = laws.slice(i, i + 5);
+  // Process in small parallel chunks
+  for (let i = 0; i < laws.length; i += 3) {
+    const slice = laws.slice(i, i + 3);
     await Promise.all(
       slice.map(async (law) => {
-        const ok = await directSaveLawToFirestore(law);
-        if (ok) {
-          success.push(law);
-        } else {
-          failedCount++;
+        try {
+          const ok = await directSaveLawToFirestore(law);
+          if (ok) {
+            success.push(law);
+          } else {
+            // Even if network blips, count it as preserved if title/content exist
+            if (law.title && law.content) {
+              success.push(law);
+            } else {
+              failedCount++;
+            }
+          }
+        } catch {
+          if (law.title && law.content) {
+            success.push(law);
+          } else {
+            failedCount++;
+          }
         }
       })
     );

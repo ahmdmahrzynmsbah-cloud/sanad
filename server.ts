@@ -4138,10 +4138,14 @@ app.post('/api/laws/batch', async (req, res) => {
         content: String(item.content).trim(),
       });
 
+      const safeCategory = (item.category && String(item.category).trim() !== '__add_new__') 
+        ? String(item.category).trim() 
+        : (db.categories?.[0]?.name || 'جمارك');
+
       if (dup) {
         // Gracefully update existing law with new content & metadata
         dup.title = String(item.title).trim();
-        if (item.category) dup.category = String(item.category).trim();
+        dup.category = safeCategory;
         dup.content = String(item.content).trim();
         if (item.sourceFileName) dup.sourceFileName = String(item.sourceFileName).trim();
         if (item.sourceFileSize) dup.sourceFileSize = String(item.sourceFileSize).trim();
@@ -4152,15 +4156,15 @@ app.post('/api/laws/batch', async (req, res) => {
       }
 
       const newLaw: StoredLaw = {
-        id: 'law-' + (Date.now() + i) + '-' + Math.random().toString(36).substring(2, 6),
+        id: item.id || ('law-' + (Date.now() + i) + '-' + Math.random().toString(36).substring(2, 6)),
         title: String(item.title).trim(),
-        category: item.category ? String(item.category).trim() : 'جمارك',
+        category: safeCategory,
         content: String(item.content).trim(),
         sourceFileName: item.sourceFileName ? String(item.sourceFileName).trim() : undefined,
         sourceFileSize: item.sourceFileSize ? String(item.sourceFileSize).trim() : undefined,
         pageCount: item.pageCount ? Number(item.pageCount) : undefined,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: item.createdAt || new Date().toISOString(),
+        updatedAt: item.updatedAt || new Date().toISOString(),
       };
 
       createdLaws.push(newLaw);

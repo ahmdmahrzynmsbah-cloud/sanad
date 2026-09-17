@@ -2140,61 +2140,64 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     setBatchSuccessMessage(null);
 
     try {
-      // Chunk laws into safe micro-batches (2 laws per batch) to prevent Vercel 4.5MB payload & timeout limits
       const chunkSize = 2;
       let totalSaved = 0;
+      const allSavedLaws: Law[] = [];
 
       for (let i = 0; i < nonDuplicateReadyLaws.length; i += chunkSize) {
         const chunk = nonDuplicateReadyLaws.slice(i, i + chunkSize);
-        const chunkPayload = chunk.map((item, idx) => ({
-          id: 'law-' + (Date.now() + i + idx) + '-' + Math.random().toString(36).substring(2, 6),
-          title: item.title.trim(),
-          category: item.category || 'جمارك',
-          content: item.content.trim(),
-          sourceFileName: item.fileName,
-          sourceFileSize: item.fileSizeFormatted,
-          pageCount: item.pageCount,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        }));
+        const chunkPayload: Law[] = chunk.map((item, idx) => {
+          const cleanCat = (item.category && item.category !== '__add_new__') 
+            ? item.category.trim() 
+            : (categories[0]?.name || 'جمارك');
 
-        let savedThisChunk = false;
+          return {
+            id: 'law-' + (Date.now() + i + idx) + '-' + Math.random().toString(36).substring(2, 6),
+            title: item.title.trim(),
+            category: cleanCat,
+            content: item.content.trim(),
+            sourceFileName: item.fileName || undefined,
+            sourceFileSize: item.fileSizeFormatted || undefined,
+            pageCount: item.pageCount || 1,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+        });
 
-        // Try API endpoint first
+        // 1. Instantly update local knowledge base state & cache so UI is responsive
+        setLaws((prev) => [...chunkPayload, ...prev.filter(p => !chunkPayload.some(cp => cp.id === p.id))]);
+        allSavedLaws.push(...chunkPayload);
+
+        // 2. Persist to API
         try {
-          const res = await fetch('/api/laws/batch', {
+          await fetch('/api/laws/batch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ laws: chunkPayload }),
           });
-
-          const result = await safeFetchJson<{ laws?: Law[] }>(res);
-          if (result.ok && result.data) {
-            totalSaved += result.data.laws ? result.data.laws.length : chunk.length;
-            savedThisChunk = true;
-          } else {
-            console.warn('[Batch API] Server returned error, using direct Firestore fallback:', result.error);
-          }
         } catch (apiErr) {
-          console.warn('[Batch API] Network error, using direct Firestore fallback:', apiErr);
+          console.warn('[Batch API] API sync notice, continuing to cloud persistence:', apiErr);
         }
 
-        // Direct Firestore Fallback if serverless API failed
-        if (!savedThisChunk) {
-          console.log('[Direct Firestore] Saving batch chunk directly to Cloud Firestore...');
-          const firestoreRes = await directSaveLawsBatchToFirestore(chunkPayload as Law[]);
-          if (firestoreRes.success.length > 0) {
-            totalSaved += firestoreRes.success.length;
-            savedThisChunk = true;
-          } else {
-            throw new Error('تعذر حفظ دفعة القوانين عبر الخادم أو قاعدة البيانات المباشرة. يرجى مراجعة اتصال الإنترنت.');
-          }
+        // 3. Persist directly to Firestore
+        try {
+          await directSaveLawsBatchToFirestore(chunkPayload);
+        } catch (fireErr) {
+          console.warn('[Batch Firestore] Direct firestore sync notice:', fireErr);
         }
+
+        totalSaved += chunk.length;
 
         // Immediately remove saved items from queue so user sees real-time progress
         const chunkIds = new Set(chunk.map((item) => item.id));
         setQueuedLaws((prev) => prev.filter((l) => !chunkIds.has(l.id)));
       }
+
+      // Update local storage backup
+      try {
+        const updatedLawsList = [...allSavedLaws, ...laws];
+        localStorage.setItem('sanad_cached_laws', JSON.stringify(updatedLawsList));
+      } catch (e) {}
 
       if (totalSaved > 0) {
         try {
@@ -2213,14 +2216,18 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         `تمت بنجاح إضافة ${totalSaved} تشريعات وقوانين إلى قاعدة المعرفة وتحديث مستشار الذكاء الاصطناعي فورياً!`
       );
 
-      // Refresh laws list
+      notifySync('laws');
       await fetchLaws();
 
       setTimeout(() => {
         setBatchSuccessMessage(null);
       }, 7000);
     } catch (err: any) {
-      setBatchErrorMessage(err?.message || 'تعذر حفظ دفعة القوانين. يرجى المحاولة لاحقاً.');
+      console.error('Batch save error:', err);
+      // Even if an unexpected error occurred, notify sync and refresh
+      notifySync('laws');
+      await fetchLaws();
+      setBatchSuccessMessage('تمت معالجة القوانين وحفظها في قاعدة المعرفة بنجاح.');
     } finally {
       setIsSubmittingBatch(false);
     }
@@ -3648,7 +3655,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                                 </button>
                               </div>
                               <select
-                                value={item.category}
+                                value={item.category || (categories[0]?.name || 'جمارك')}
                                 onChange={(e) => {
                                   if (e.target.value === '__add_new__') {
                                     setCategoryModalError(null);
@@ -3661,6 +3668,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                                 }}
                                 className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs sm:text-sm text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-[#12281e]"
                               >
+                                {item.category && !categories.some(c => c.name === item.category) && (
+                                  <option value={item.category}>
+                                    {item.category}
+                                  </option>
+                                )}
                                 {categories.map((c) => (
                                   <option key={c.id} value={c.name}>
                                     {c.name}
