@@ -4289,11 +4289,10 @@ app.put('/api/laws/:id', async (req, res) => {
   res.json({ message: 'تم تحديث القانون بنجاح', law });
 });
 
-// Delete law
+// Delete law (supports both DELETE and POST for maximum proxy & static hosting compatibility)
 app.delete('/api/laws/:id', async (req, res) => {
   try {
     const id = decodeURIComponent(req.params.id).trim();
-    const initialLen = db.laws.length;
     db.laws = db.laws.filter((l) => l.id !== id);
 
     // Ensure deleted from Cloud Firestore
@@ -4303,6 +4302,21 @@ app.delete('/api/laws/:id', async (req, res) => {
     return res.json({ message: 'تم حذف القانون بنجاح من قاعدة البيانات والسحابة' });
   } catch (err: any) {
     console.error('Error deleting law:', err);
+    return res.status(500).json({ error: 'حدث خطأ أثناء حذف القانون: ' + (err?.message || '') });
+  }
+});
+
+app.post('/api/laws/:id/delete', async (req, res) => {
+  try {
+    const id = decodeURIComponent(req.params.id).trim();
+    db.laws = db.laws.filter((l) => l.id !== id);
+
+    await deleteLawFromFirestore(id);
+    saveDB();
+
+    return res.json({ message: 'تم حذف القانون بنجاح من قاعدة البيانات والسحابة' });
+  } catch (err: any) {
+    console.error('Error deleting law via POST:', err);
     return res.status(500).json({ error: 'حدث خطأ أثناء حذف القانون: ' + (err?.message || '') });
   }
 });

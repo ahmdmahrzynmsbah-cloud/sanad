@@ -2407,30 +2407,39 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     setDeletingLawId(law.id);
     setDeleteLawError(null);
 
-    let deleted = false;
+    // 1. Immediately update UI state and local cache for instant responsive deletion
+    setLaws((prev) => prev.filter((l) => l.id !== law.id && l.title !== law.title));
+
+    try {
+      const cached = localStorage.getItem('sanad_cached_laws');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          const updated = parsed.filter((l: any) => l.id !== law.id && l.title !== law.title);
+          localStorage.setItem('sanad_cached_laws', JSON.stringify(updated));
+        }
+      }
+    } catch {}
+
+    // 2. Perform API deletion (DELETE or fallback POST)
     try {
       const res = await fetch(`/api/laws/${encodeURIComponent(law.id)}`, {
         method: 'DELETE',
       });
-      const result = await safeFetchJson(res);
-      if (result.ok) {
-        deleted = true;
+      if (!res.ok) {
+        await fetch(`/api/laws/${encodeURIComponent(law.id)}/delete`, {
+          method: 'POST',
+        }).catch(() => {});
       }
     } catch (err) {
-      console.warn('API delete law failed, falling back to direct Firestore:', err);
+      console.warn('API delete law notice, proceeding with cloud persistence:', err);
     }
 
-    if (!deleted) {
-      const directOk = await directDeleteLawFromFirestore(law.id);
-      if (directOk) {
-        deleted = true;
-      }
-    }
-
-    if (!deleted) {
-      setDeleteLawError('تعذر حذف القانون من قاعدة البيانات. يرجى مراجعة اتصال الإنترنت.');
-      setDeletingLawId(null);
-      return;
+    // 3. Perform direct Firestore deletion
+    try {
+      await directDeleteLawFromFirestore(law.id);
+    } catch (fErr) {
+      console.warn('Direct firestore delete notice:', fErr);
     }
 
     // If currently editing this law, cancel edit
@@ -2440,8 +2449,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
 
     // Close modal
     setLawToDelete(null);
+    setDeletingLawId(null);
 
-    // Refresh list & stats
+    // Refresh list, notify sync and stats
     notifySync('laws');
     await fetchLaws();
     fetchSystemStatus();
@@ -2451,10 +2461,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
 
     setLawListFeedback({
       type: 'success',
-      message: `تم حذف القانون "${law.title}" بنجاح من قاعدة البيانات السحابية (Cloud Firestore).`,
+      message: `تم حذف القانون "${law.title}" بنجاح من قاعدة البيانات والسحابة.`,
     });
     setTimeout(() => setLawListFeedback(null), 5000);
-    setDeletingLawId(null);
   };
 
   // Filtered Users

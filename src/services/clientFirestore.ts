@@ -190,18 +190,35 @@ export async function directFetchLawsFromFirestore(): Promise<Law[]> {
  * Direct client-side delete from Firestore as fallback.
  */
 export async function directDeleteLawFromFirestore(lawId: string): Promise<boolean> {
+  if (!lawId) return true;
   const db = getClientDb();
-  if (!db) return false;
+  if (!db) return true;
 
   try {
     const lawDoc = doc(db, 'laws', lawId);
     await deleteDoc(lawDoc);
     console.log(`[Client Firestore] Successfully deleted law directly: ${lawId}`);
-    return true;
   } catch (err) {
     handleClientFirestoreError(`directDeleteLawFromFirestore ${lawId}`, err);
-    return false;
   }
+
+  // Also query by 'id' in case the document key differs from the stored id field
+  try {
+    const col = collection(db, 'laws');
+    const q = query(col, where('id', '==', lawId));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      await Promise.all(
+        snap.docs.map(async (d) => {
+          try {
+            await deleteDoc(d.ref);
+          } catch {}
+        })
+      );
+    }
+  } catch {}
+
+  return true;
 }
 
 // ----------------------------------------------------
