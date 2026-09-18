@@ -4818,9 +4818,22 @@ app.post('/api/chat', async (req, res) => {
 
   // 1. Organize knowledge base with smart RAG search: ALWAYS search Palestinian knowledge base & uploaded law files FIRST for legal queries
   const laws = db.laws || [];
-  const { prioritizedContext, fullCatalog } = isLegal
-    ? buildStructuredLegalContext(message, laws)
-    : { prioritizedContext: '', fullCatalog: '' };
+  const searchResult = isLegal ? searchRelevantPalestinianLaws(message, laws) : null;
+  const prioritizedContext = searchResult?.prioritizedContext || '';
+  const fullCatalog = searchResult?.fullCatalog || '';
+
+  const citations: any[] = searchResult?.topChunks?.slice(0, 3).map((c, idx) => ({
+    id: `cit-${idx + 1}-${c.lawId}`,
+    lawId: c.lawId,
+    lawTitle: c.lawTitle,
+    articleNumber: c.articleNumber || extractRequestedArticleNumber(c.sectionHeader) || undefined,
+    sectionHeader: c.sectionHeader,
+    sourceFileName: c.sourceFileName,
+    category: c.category,
+    originalText: c.text,
+    snippet: c.text.length > 300 ? c.text.substring(0, 290).trim() + '...' : c.text,
+    matchScore: c.score,
+  })) || [];
 
   // 2. Focused, authoritative system instruction enforcing comprehensive Palestinian legal grounding and detailed structured formatting
   const systemInstruction = `أنت "سَنَد"، المستشار القانوني والتشريعي الذكي والشخصية الافتراضية المتطورة (خبير متخصص ومعتمد في القوانين والضرائب والجمارك في دولة فلسطين وكافة الوثائق والملفات والتشريعات المرفوعة في النظام).
@@ -4858,10 +4871,17 @@ ${fullCatalog ? `\n[فهرس التشريعات والملفات الفلسطي�
 
   try {
     const ai = getGemini();
-    // Valid candidate models in optimal priority from gemini-api skill
+    // Valid candidate models in optimal priority: super-fast gemini-2.5-flash first, then gemini-3.8-flash, then gemini-3.1-flash-lite
     const candidateConfigs = [
       {
-        model: 'gemini-flash-latest',
+        model: 'gemini-2.5-flash',
+        config: {
+          systemInstruction,
+          temperature: 0.6,
+        },
+      },
+      {
+        model: 'gemini-3.8-flash',
         config: {
           systemInstruction,
           temperature: 0.6,
@@ -4874,15 +4894,8 @@ ${fullCatalog ? `\n[فهرس التشريعات والملفات الفلسطي�
           temperature: 0.6,
         },
       },
-      {
-        model: 'gemini-3.1-pro-preview',
-        config: {
-          systemInstruction,
-          temperature: 0.6,
-        },
-      },
     ];
-    let response = null;
+    let response: any = null;
     let lastErr = null;
 
     // Build multi-turn conversational contents if conversationHistory is sent (keep last 4 messages for rapid processing)
@@ -4928,57 +4941,25 @@ ${fullCatalog ? `\n[فهرس التشريعات والملفات الفلسطي�
     const contentsToSend = multiTurnContents.length > 1 ? multiTurnContents : message;
 
     for (const candidate of candidateConfigs) {
-      let retryCount = 0;
-      while (retryCount < 2) {
-        try {
-          response = await ai.models.generateContent({
-            model: candidate.model,
-            contents: contentsToSend,
-            config: candidate.config,
-          });
-          if (response?.text) {
-            break;
-          }
-        } catch (e: any) {
-          lastErr = e;
-          const isQuotaError =
-            e?.status === 429 ||
-            e?.message?.includes('429') ||
-            e?.message?.includes('quota') ||
-            e?.message?.includes('RESOURCE_EXHAUSTED');
-          const isUnavailable =
-            e?.status === 503 ||
-            e?.message?.includes('503') ||
-            e?.message?.includes('UNAVAILABLE') ||
-            e?.message?.includes('high demand');
+      try {
+        // Enforce 9-second timeout promise race so no model ever hangs the client
+        const generatePromise = ai.models.generateContent({
+          model: candidate.model,
+          contents: contentsToSend,
+          config: candidate.config,
+        });
 
-          if (isUnavailable && retryCount === 0) {
-            console.log(`[AI Model] ${candidate.model} 503 spike, waiting 600ms retry...`);
-            await new Promise((r) => setTimeout(r, 600));
-            retryCount++;
-            continue;
-          }
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`Model ${candidate.model} timed out after 9000ms`)), 9000)
+        );
 
-          console.log(`[AI Model] ${candidate.model} note: ${isQuotaError ? 'Quota limit' : isUnavailable ? 'Unavailable 503' : 'Fallback'}, trying next...`);
-          
-          // If it failed possibly due to multi-turn contents structure, retry once with simple message
-          if (typeof contentsToSend !== 'string') {
-            try {
-              response = await ai.models.generateContent({
-                model: candidate.model,
-                contents: message,
-                config: candidate.config,
-              });
-              if (response?.text) {
-                break;
-              }
-            } catch {}
-          }
+        response = await Promise.race([generatePromise, timeoutPromise]);
+        if (response?.text) {
           break;
         }
-      }
-      if (response?.text) {
-        break;
+      } catch (e: any) {
+        lastErr = e;
+        console.warn(`[AI Model] ${candidate.model} error: ${e?.message || e}, trying next candidate...`);
       }
     }
 
@@ -4997,6 +4978,7 @@ ${fullCatalog ? `\n[فهرس التشريعات والملفات الفلسطي�
         isLegal,
         queryType: isLegal ? 'legal' : 'general',
         suggestedDetails,
+        citations: citations.length > 0 ? citations : undefined,
       });
     }
 
@@ -5009,11 +4991,26 @@ ${fullCatalog ? `\n[فهرس التشريعات والملفات الفلسطي�
       isLegal,
       queryType: isLegal ? 'legal' : 'general',
       suggestedDetails,
+      citations: citations.length > 0 ? citations : undefined,
     });
   } catch (error: any) {
     console.error('Error in AI handler, using fallback:', error?.message || error);
     // Even if client creation fails, provide direct database/general response
     const fallbackAnswer = generateKnowledgeFallback(message, db.laws);
+    const fallbackSearchResult = searchRelevantPalestinianLaws(message, db.laws || []);
+    const fallbackCitations = fallbackSearchResult.topChunks.slice(0, 3).map((c, idx) => ({
+      id: `cit-fb-${idx + 1}`,
+      lawId: c.lawId,
+      lawTitle: c.lawTitle,
+      articleNumber: c.articleNumber || extractRequestedArticleNumber(c.sectionHeader) || undefined,
+      sectionHeader: c.sectionHeader,
+      sourceFileName: c.sourceFileName,
+      category: c.category,
+      originalText: c.text,
+      snippet: c.text.length > 300 ? c.text.substring(0, 290).trim() + '...' : c.text,
+      matchScore: c.score,
+    }));
+
     return res.json({
       reply: fallbackAnswer,
       isFallback: true,
@@ -5027,6 +5024,7 @@ ${fullCatalog ? `\n[فهرس التشريعات والملفات الفلسطي�
             'شحنة أو طرد بريدي شخصي',
           ]
         : undefined,
+      citations: fallbackCitations.length > 0 ? fallbackCitations : undefined,
     });
   }
 });
@@ -5187,68 +5185,231 @@ app.delete('/api/conversations', async (req, res) => {
   res.json({ success: true, message: 'تم مسح سجل المحادثات بنجاح' });
 });
 
-// Helper to normalize Arabic text for precise search matching
+// Helper to convert Arabic-Indic numerals (٠١٢٣٤٥٦٧٨٩) to standard ASCII digits (0-9)
+function convertArabicIndicDigits(text: string): string {
+  if (!text) return '';
+  const indicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+  let res = text;
+  for (let i = 0; i < 10; i++) {
+    res = res.split(indicDigits[i]).join(String(i));
+  }
+  return res;
+}
+
+// Helper to normalize Arabic text for deep search matching and comparison
 function normalizeArabic(text: string): string {
   if (!text) return '';
-  return text
+  let str = convertArabicIndicDigits(text);
+  return str
     .replace(/[\u064B-\u0652\u0670\u0640]/g, '') // remove diacritics / tatweel
-    .replace(/[أإآا]/g, 'ا')
+    .replace(/[أإآٱ]/g, 'ا')
     .replace(/ة/g, 'ه')
     .replace(/ى/g, 'ي')
+    .replace(/ؤ/g, 'و')
+    .replace(/ئ/g, 'ي')
     .replace(/[^\u0621-\u064A0-9a-zA-Z\s]/g, ' ')
     .toLowerCase()
-    .trim();
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+// Convert textual Arabic numbers and ordinals (e.g. "التاسعة عشرة", "الخامسة", "العشرون") into numeric digits
+function parseArabicWordNumber(text: string): number | null {
+  if (!text) return null;
+  const norm = normalizeArabic(text);
+
+  const directMap: Record<string, number> = {
+    'واحد': 1, 'واحده': 1, 'اول': 1, 'اولي': 1, 'اولى': 1, 'الاول': 1, 'الاولى': 1, 'الاولي': 1,
+    'اثنين': 2, 'اثنان': 2, 'ثاني': 2, 'ثانيه': 2, 'الثاني': 2, 'الثانيه': 2,
+    'ثلاثه': 3, 'ثلاث': 3, 'ثالث': 3, 'ثالثه': 3, 'الثالث': 3, 'الثالثه': 3,
+    'اربعه': 4, 'اربع': 4, 'رابع': 4, 'رابعه': 4, 'الرابع': 4, 'الرابعه': 4,
+    'خمسه': 5, 'خمس': 5, 'خامس': 5, 'خامسه': 5, 'الخامس': 5, 'الخامسه': 5,
+    'سته': 6, 'ست': 6, 'سادس': 6, 'سادسه': 6, 'السادس': 6, 'السادسه': 6,
+    'سبعه': 7, 'سبع': 7, 'سابع': 7, 'سابعه': 7, 'السابع': 7, 'السابعه': 7,
+    'ثمانيه': 8, 'ثمان': 8, 'ثامن': 8, 'ثامنه': 8, 'الثامن': 8, 'الثامنه': 8,
+    'تسعه': 9, 'تسع': 9, 'تاسع': 9, 'تاسعه': 9, 'التاسع': 9, 'التاسعه': 9,
+    'عشره': 10, 'عشر': 10, 'عاشر': 10, 'عاشره': 10, 'العاشر': 10, 'العاشره': 10,
+    'حادي عشر': 11, 'حاديه عشر': 11, 'حاديه عشره': 11, 'الحادي عشر': 11, 'الحاديه عشر': 11, 'الحاديه عشره': 11, 'احد عشر': 11,
+    'ثاني عشر': 12, 'ثانيه عشر': 12, 'ثانيه عشره': 12, 'الثاني عشر': 12, 'الثانيه عشر': 12, 'الثانيه عشره': 12, 'اثنا عشر': 12, 'اثني عشر': 12,
+    'ثالث عشر': 13, 'ثالثه عشر': 13, 'ثالثه عشره': 13, 'الثالث عشر': 13, 'الثالثه عشر': 13, 'الثالثه عشره': 13, 'ثلاثه عشر': 13,
+    'رابع عشر': 14, 'رابعه عشر': 14, 'رابعه عشره': 14, 'الرابع عشر': 14, 'الرابعه عشر': 14, 'الرابعه عشره': 14, 'اربعه عشر': 14,
+    'خامس عشر': 15, 'خامسه عشر': 15, 'خامسه عشره': 15, 'الخامس عشر': 15, 'الخامسه عشر': 15, 'الخامسه عشره': 15, 'خمسه عشر': 15,
+    'سادس عشر': 16, 'سادسه عشر': 16, 'سادسه عشره': 16, 'السادس عشر': 16, 'السادسه عشر': 16, 'السادسه عشره': 16, 'سته عشر': 16,
+    'سابع عشر': 17, 'سابعه عشر': 17, 'سابعه عشره': 17, 'السابع عشر': 17, 'السابعه عشر': 17, 'السابعه عشره': 17, 'سبعه عشر': 17,
+    'ثامن عشر': 18, 'ثامنه عشر': 18, 'ثامنه عشره': 18, 'الثامن عشر': 18, 'الثامنه عشر': 18, 'الثامنه عشره': 18, 'ثمانيه عشر': 18,
+    'تاسع عشر': 19, 'تاسعه عشر': 19, 'تاسعه عشره': 19, 'التاسع عشر': 19, 'التاسعه عشر': 19, 'التاسعه عشره': 19, 'تسعه عشر': 19,
+    'عشرون': 20, 'عشرين': 20, 'العشرون': 20, 'العشرين': 20,
+    'ثلاثون': 30, 'ثلاثين': 30, 'الثلاثون': 30, 'الثلاثين': 30,
+    'اربعون': 40, 'اربعين': 40, 'الاربعون': 40, 'الاربعين': 40,
+    'خمسون': 50, 'خمسين': 50, 'الخمسون': 50, 'الخمسين': 50,
+    'ستون': 60, 'ستين': 60, 'الستون': 60, 'الستين': 60,
+    'سبعون': 70, 'سبعين': 70, 'السبعون': 70, 'السبعين': 70,
+    'ثمانون': 80, 'ثمانين': 80, 'الثمانون': 80, 'الثمانين': 80,
+    'تسعون': 90, 'تسعين': 90, 'التسعون': 90, 'التسعين': 90,
+    'مئه': 100, 'مائه': 100, 'المئه': 100, 'المائه': 100,
+  };
+
+  if (directMap[norm] !== undefined) {
+    return directMap[norm];
+  }
+
+  // Check compound expressions like "الحادية والعشرون" (21), "الخامسة والأربعون" (45)
+  const compoundMatch = norm.match(/^(?:ال)?(حادي|حاديه|واحد|واحده|ثاني|ثانيه|اثنين|ثالث|ثالثه|ثلاث|ثلاثه|رابع|رابعه|اربع|اربعه|خامس|خامسه|خمس|خمسه|سادس|سادسه|ست|سته|سابع|سابعه|سبع|سبعه|ثامن|ثامنه|ثمان|ثمانيه|تاسع|تاسعه|تسع|تسعه)\s+و\s*(?:ال)?(عشرون|عشرين|ثلاثون|ثلاثين|اربعون|اربعين|خمسون|خمسين|ستون|ستين|سبعون|سبعين|ثمانون|ثمانين|تسعون|تسعين)$/);
+  if (compoundMatch) {
+    const unitsMap: Record<string, number> = {
+      'حادي': 1, 'حاديه': 1, 'واحد': 1, 'واحده': 1,
+      'ثاني': 2, 'ثانيه': 2, 'اثنين': 2,
+      'ثالث': 3, 'ثالثه': 3, 'ثلاث': 3, 'ثلاثه': 3,
+      'رابع': 4, 'رابعه': 4, 'اربع': 4, 'اربعه': 4,
+      'خامس': 5, 'خامسه': 5, 'خمس': 5, 'خمسه': 5,
+      'سادس': 6, 'سادسه': 6, 'ست': 6, 'سته': 6,
+      'سابع': 7, 'سابعه': 7, 'سبع': 7, 'سبعه': 7,
+      'ثامن': 8, 'ثامنه': 8, 'ثمان': 8, 'ثمانيه': 8,
+      'تاسع': 9, 'تاسعه': 9, 'تسع': 9, 'تسعه': 9,
+    };
+    const tensMap: Record<string, number> = {
+      'عشرون': 20, 'عشرين': 20,
+      'ثلاثون': 30, 'ثلاثين': 30,
+      'اربعون': 40, 'اربعين': 40,
+      'خمسون': 50, 'خمسين': 50,
+      'ستون': 60, 'ستين': 60,
+      'سبعون': 70, 'سبعين': 70,
+      'ثمانون': 80, 'ثمانين': 80,
+      'تسعون': 90, 'تسعين': 90,
+    };
+    const u = unitsMap[compoundMatch[1]] || 0;
+    const t = tensMap[compoundMatch[2]] || 0;
+    if (u > 0 && t > 0) return u + t;
+  }
+
+  return null;
+}
+
+// Extract requested article or clause number with maximum precision from user queries
+function extractRequestedArticleNumber(query: string): string | null {
+  if (!query) return null;
+  const converted = convertArabicIndicDigits(query);
+
+  // 1. Direct digit matching: "المادة رقم 19", "مادة 19", "المادة (19)", "البند 5", "رقم 19"
+  const digitMatch = converted.match(/(?:المادة|مادة|الماده|البند|بند|الفقرة|فقرة|الفصل|فصل|رقم)\s*(?:رقم|عدد)?\s*[\(\[\"\'\s]*(\d+)[\)\]\"\'\s]*/i);
+  if (digitMatch && digitMatch[1]) {
+    return digitMatch[1];
+  }
+
+  // 2. Standalone number when preceded by asking keywords (e.g., "قولي 19", "عايز 19 من القانون")
+  const askKeywordsMatch = converted.match(/(?:قولي|هات|عايز|اريد|أريد|نص|شرح|وضح|اعطني|أعطني|استخرج)\s+.*?(?:مادة|المادة|بند|البند|الماده)?\s*(?:رقم)?\s*[\(\[\"\'\s]*(\d+)[\)\]\"\'\s]*/i);
+  if (askKeywordsMatch && askKeywordsMatch[1]) {
+    return askKeywordsMatch[1];
+  }
+
+  // 3. Word-based article matching: "المادة التاسعة عشرة", "المادة التاسعة عشر", "المادة الاولى"
+  const wordArticleMatch = converted.match(/(?:المادة|مادة|الماده|البند|بند|الفقرة|فقرة|الفصل|فصل)\s*(?:رقم)?\s*([ا-ي\s]{2,35})/i);
+  if (wordArticleMatch && wordArticleMatch[1]) {
+    const num = parseArabicWordNumber(wordArticleMatch[1].trim());
+    if (num !== null) {
+      return String(num);
+    }
+  }
+
+  return null;
 }
 
 // Helper to chunk legal texts into articles, clauses, and sections
 interface LegalChunk {
+  lawId?: string;
   lawTitle: string;
   category: string;
   sectionHeader: string;
   text: string;
   sourceFileName?: string;
+  articleNumber?: string;
   score?: number;
 }
 
 let cachedIndexedChunks: { lawsCount: number; chunks: LegalChunk[] } | null = null;
 
 function chunkLawContent(law: StoredLaw): LegalChunk[] {
-  const lines = (law.content || '').split('\n');
+  const content = law.content || '';
   const chunks: LegalChunk[] = [];
+  
+  // Normalize newlines
+  const normalizedText = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  // Split on article/section boundaries
+  // Matches: "المادة (19)", "المادة 19:", "مادة رقم 19", "البند الأول", "الفصل الأول", etc.
+  const regex = /(?:^|\n)(?=(?:[-•*]\s*)?(?:المادة|مادة|الماده|البند|بند|الفصل|فصل|الباب|باب|ملحق|الملحق|الفقرة|فقرة|أولاً|ثانياً|ثالثاً|رابعاً|خامساً|سادساً|سابعاً|ثامناً|تاسعاً|عاشراً)\s*(?:رقم)?\s*[\(\[]?(?:\d+|[٠-٩]+|[^\n\:\.\-]{1,35})[\)\]\:\.\-]?)/gi;
+  
+  const rawSections = normalizedText.split(regex);
+
   let currentHeader = 'أحكام تمهيدية وعامة';
-  let currentLines: string[] = [];
 
-  for (const line of lines) {
-    const trimmed = line.trim();
-    // Check if line represents an article or section boundary
-    const isNewArticle =
-      /^المادة\s*[\(0-9\:]/i.test(trimmed) ||
-      /^مادة\s*[\(0-9\:]/i.test(trimmed) ||
-      /^البند\s*[\(0-9\:]/i.test(trimmed) ||
-      /^الفصل\s*[\(0-9\:]/i.test(trimmed) ||
-      /^الباب\s*[\(0-9\:]/i.test(trimmed) ||
-      /^---\s*\[صفحة\s*[0-9]+\]/i.test(trimmed);
+  for (const rawSec of rawSections) {
+    const trimmed = rawSec.trim();
+    if (!trimmed) continue;
 
-    if (isNewArticle && currentLines.length > 0) {
+    const firstLineEnd = trimmed.indexOf('\n');
+    let header = firstLineEnd !== -1 ? trimmed.substring(0, firstLineEnd).trim() : trimmed.substring(0, 80).trim();
+    if (header.length > 90) header = header.substring(0, 90) + '...';
+
+    // Detect article number in chunk header
+    const extractedNum = extractRequestedArticleNumber(header) || extractRequestedArticleNumber(trimmed.substring(0, 200));
+
+    // Handle large single sections (> 3000 chars) by splitting gracefully on paragraph boundaries
+    if (trimmed.length > 3500) {
+      const paragraphs = trimmed.split(/\n\s*\n/);
+      let currentSub = '';
+      let partIdx = 1;
+      for (const p of paragraphs) {
+        if ((currentSub + '\n\n' + p).length > 2500) {
+          if (currentSub.trim()) {
+            chunks.push({
+              lawId: law.id,
+              lawTitle: law.title,
+              category: law.category,
+              sectionHeader: `${header} (جزء ${partIdx})`,
+              text: currentSub.trim(),
+              sourceFileName: law.sourceFileName,
+              articleNumber: extractedNum || undefined,
+            });
+            partIdx++;
+          }
+          currentSub = p;
+        } else {
+          currentSub += (currentSub ? '\n\n' : '') + p;
+        }
+      }
+      if (currentSub.trim()) {
+        chunks.push({
+          lawId: law.id,
+          lawTitle: law.title,
+          category: law.category,
+          sectionHeader: `${header} (جزء ${partIdx})`,
+          text: currentSub.trim(),
+          sourceFileName: law.sourceFileName,
+          articleNumber: extractedNum || undefined,
+        });
+      }
+    } else {
       chunks.push({
+        lawId: law.id,
         lawTitle: law.title,
         category: law.category,
-        sectionHeader: currentHeader,
-        text: currentLines.join('\n').trim(),
+        sectionHeader: header,
+        text: trimmed,
         sourceFileName: law.sourceFileName,
+        articleNumber: extractedNum || undefined,
       });
-      currentLines = [];
-      currentHeader = trimmed.slice(0, 120);
     }
-    currentLines.push(line);
   }
 
-  if (currentLines.length > 0) {
+  // Fallback if no sections were delimited
+  if (chunks.length === 0 && normalizedText.trim()) {
     chunks.push({
+      lawId: law.id,
       lawTitle: law.title,
       category: law.category,
-      sectionHeader: currentHeader,
-      text: currentLines.join('\n').trim(),
+      sectionHeader: 'النص الكامل للتشريع',
+      text: normalizedText.trim(),
       sourceFileName: law.sourceFileName,
     });
   }
@@ -5258,15 +5419,18 @@ function chunkLawContent(law: StoredLaw): LegalChunk[] {
 
 // Helper to extract law issuance year / date from title or text
 function extractLawTiming(title: string, text: string): string {
-  const matchYear = title.match(/(?:لسنة|عام)\s*(\d{4})[م|هـ]?/i) || text.match(/(?:لسنة|عام)\s*(\d{4})[م|هـ]?/i);
+  const convertedTitle = convertArabicIndicDigits(title || '');
+  const convertedText = convertArabicIndicDigits((text || '').substring(0, 500));
+
+  const matchYear = convertedTitle.match(/(?:لسنة|عام)\s*(\d{4})[م|هـ]?/i) || convertedText.match(/(?:لسنة|عام)\s*(\d{4})[م|هـ]?/i);
   if (matchYear && matchYear[1]) {
     return `لسنة ${matchYear[1]}م`;
   }
-  const matchPlainYear = title.match(/\b(19\d{2}|20\d{2})\b/);
+  const matchPlainYear = convertedTitle.match(/\b(19\d{2}|20\d{2})\b/);
   if (matchPlainYear && matchPlainYear[1]) {
     return `لسنة ${matchPlainYear[1]}م`;
   }
-  const matchDate = text.match(/بتاريخ\s*([\d\/\.\-]+)/i);
+  const matchDate = convertedText.match(/بتاريخ\s*([\d\/\.\-]+)/i);
   if (matchDate && matchDate[1]) {
     return `بتاريخ ${matchDate[1]}`;
   }
@@ -5281,12 +5445,12 @@ function extractConciseSummary(text: string): string {
     .filter((l) => Boolean(l) && !l.startsWith('مادة (') && !l.startsWith('المادة ('));
 
   if (lines.length === 0) {
-    return text.substring(0, 220).trim() + (text.length > 220 ? '...' : '');
+    return text.substring(0, 250).trim() + (text.length > 250 ? '...' : '');
   }
 
   const keyLines = lines.slice(0, 4).join(' ');
-  if (keyLines.length > 300) {
-    return keyLines.substring(0, 290).trim() + '...';
+  if (keyLines.length > 350) {
+    return keyLines.substring(0, 340).trim() + '...';
   }
   return keyLines;
 }
@@ -5328,7 +5492,12 @@ function isLegalTaxCustomsQuery(query: string): boolean {
   }
 
   // 4. Strict legal, tax, customs, and uploaded document keywords
-  const legalTermsRegex = /(قانون|قوانين|تشريع|تشريعات|مرسوم|مراسيم|قرار بقانون|قرار|قرارات|مادة|مواد|لائحة|لوائح|نظام|أنظمة|بند|بنود|فقرة|فقرات|ملف|ملفات|الملف|الملفات|مستند|مستندات|المستند|المستندات|وثيقة|وثائق|الوثيقة|رفعت|رفعته|المرفوع|المرفوعة|مرفق|مرفقات|ضريبة|ضرائب|ضريبي|ضريبية|جمارك|جمرك|جمركي|جمركية|بيان جمركي|رسوم جمركية|تعرفة جمركية|طرد بريدي|إعفاء ضريبي|إعفاء|إعفاءات|دخل كلي|ضريبة دخل|قيمة مضافة|مكوس|غرامة تأخير|غرامة|غرامات|عقوبة|عقوبات|محكمة الصلح|وزارة المالية|دائرة الجمارك|مكافحة غسل الأموال|فحص ضريبي|تهرب ضريبي|سجل تجاري|فاتورة ضريبية|مقاصة|استيراد|تصدير|معبر|ضريبة أملاك|شريحة ضريبية|شرائح|الخصم من المنبع|رد ضريبي)/i;
+  const legalTermsRegex = /(قانون|قوانين|تشريع|تشريعات|مرسوم|مراسيم|قرار بقانون|قرار|قرارات|مادة|مواد|الماده|المواد|لائحة|لوائح|نظام|أنظمة|بند|بنود|فقرة|فقرات|ملف|ملفات|الملف|الملفات|مستند|مستندات|المستند|المستندات|وثيقة|وثائق|الوثيقة|رفعت|رفعته|المرفوع|المرفوعة|مرفق|مرفقات|ضريبة|ضرائب|ضريبي|ضريبية|جمارك|جمرك|جمركي|جمركية|بيان جمركي|رسوم جمركية|تعرفة جمركية|طرد بريدي|إعفاء ضريبي|إعفاء|إعفاءات|دخل كلي|ضريبة دخل|قيمة مضافة|مكوس|غرامة تأخير|غرامة|غرامات|عقوبة|عقوبات|محكمة الصلح|وزارة المالية|دائرة الجمارك|مكافحة غسل الأموال|فحص ضريبي|تهرب ضريبي|سجل تجاري|فاتورة ضريبية|مقاصة|استيراد|تصدير|معبر|ضريبة أملاك|شريحة ضريبية|شرائح|الخصم من المنبع|رد ضريبي|استيراد سيارات|سيارة|بضاعة|ترخيص)/i;
+
+  // 5. If query specifies an article number or number with "قولي" / "عايز"
+  if (extractRequestedArticleNumber(query)) {
+    return true;
+  }
 
   return legalTermsRegex.test(q);
 }
@@ -5352,6 +5521,7 @@ function searchRelevantPalestinianLaws(
   prioritizedContext: string;
   topChunks: LegalChunk[];
   fullCatalog: string;
+  exactArticleChunk?: LegalChunk;
 } {
   if (!laws || laws.length === 0) {
     return {
@@ -5362,17 +5532,14 @@ function searchRelevantPalestinianLaws(
     };
   }
 
+  const requestedArticleNumber = extractRequestedArticleNumber(query);
   const normQuery = normalizeArabic(query);
   const rawWords = normQuery
     .split(/\s+/)
-    .filter((w) => w.length >= 3 && !ARABIC_STOPWORDS.has(w));
-
-  // Extract explicit article numbers if asked (e.g., "المادة 5", "مادة 14", "مادة (8)")
-  const articleNumberMatch = query.match(/(?:المادة|مادة|البند)\s*[\(\[]?(\d+)[\)\]]?/i);
-  const requestedArticleNumber = articleNumberMatch ? articleNumberMatch[1] : null;
+    .filter((w) => w.length >= 2 && !ARABIC_STOPWORDS.has(w));
 
   // Check if query is looking for an uploaded file directly
-  const asksForUploadedFile = /(ملف|ملفات|مستند|وثيقة|مرفوع|رفعت)/i.test(query);
+  const asksForUploadedFile = /(ملف|ملفات|مستند|وثيقة|مرفوع|رفعت|الملف|المستند|المرفوعة)/i.test(query);
 
   // Retrieve or compute indexed chunks
   let baseChunks: LegalChunk[];
@@ -5391,6 +5558,8 @@ function searchRelevantPalestinianLaws(
 
   // Score individual chunks across all laws
   const scoredChunks: LegalChunk[] = [];
+  let exactArticleMatches: LegalChunk[] = [];
+
   for (const chunk of baseChunks) {
     const normTitle = normalizeArabic(chunk.lawTitle);
     const normCategory = normalizeArabic(chunk.category);
@@ -5400,61 +5569,68 @@ function searchRelevantPalestinianLaws(
 
     let score = 0;
 
-    // Exact article number bonus
+    // 1. Exact article number matching with top-priority weighting
     if (requestedArticleNumber) {
-      const articleRegex = new RegExp(`(?:المادة|مادة|البند)\\s*[\(\[]?${requestedArticleNumber}[\)\]]?`, 'i');
-      if (articleRegex.test(chunk.sectionHeader)) {
-        score += 25;
-      } else if (articleRegex.test(chunk.text)) {
-        score += 15;
+      const isHeaderMatch = chunk.articleNumber === requestedArticleNumber ||
+        new RegExp(`(?:المادة|مادة|الماده|البند|بند|الفقرة|فقرة)\\s*(?:رقم)?\\s*[\\(\\[]?${requestedArticleNumber}[\\)\\]\\:\\.\\s]`, 'i').test(chunk.sectionHeader);
+      
+      const isTextMatch = new RegExp(`(?:المادة|مادة|الماده|البند|بند|الفقرة|فقرة)\\s*(?:رقم)?\\s*[\\(\\[]?${requestedArticleNumber}[\\)\\]\\:\\.\\s]`, 'i').test(chunk.text.substring(0, 300));
+
+      if (isHeaderMatch) {
+        score += 80;
+        exactArticleMatches.push(chunk);
+      } else if (isTextMatch) {
+        score += 50;
+        exactArticleMatches.push(chunk);
       }
     }
 
-    // Direct file name matching
-    if (normFileName && rawWords.some((w) => normFileName.includes(w))) {
+    // 2. Direct file name matching
+    if (normFileName && rawWords.some((w) => w.length >= 3 && normFileName.includes(w))) {
+      score += 25;
+    }
+
+    // 3. Direct law title matching
+    if (rawWords.some((w) => w.length >= 3 && normTitle.includes(w))) {
       score += 15;
     }
 
-    // Direct law title matching
-    if (rawWords.some((w) => normTitle.includes(w))) {
-      score += 10;
-    }
-
-    // Keyword matching
+    // 4. Keyword matching with section header & content boost
     for (const word of rawWords) {
+      if (word.length < 2) continue;
       if (normHeader.includes(word)) {
-        score += 8;
+        score += 10;
       }
       if (normTitle.includes(word)) {
-        score += 6;
+        score += 8;
       }
       if (normCategory.includes(word)) {
-        score += 4;
+        score += 5;
       }
       if (normText.includes(word)) {
-        score += 2;
+        score += 3;
       }
     }
 
-    // Topic bonus phrases
+    // 5. Subject and domain specific boosts
     if (normQuery.includes('دخل') && (normCategory.includes('دخل') || normTitle.includes('دخل'))) {
-      score += 4;
+      score += 6;
     }
     if (normQuery.includes('جمرك') && (normCategory.includes('جمرك') || normTitle.includes('جمرك'))) {
-      score += 4;
+      score += 6;
     }
     if ((normQuery.includes('قيمه مضافه') || normQuery.includes('مضافه')) && (normCategory.includes('مضافه') || normTitle.includes('مضافه'))) {
-      score += 4;
+      score += 6;
     }
     if (normQuery.includes('اعفاء') && (normHeader.includes('اعفاء') || normText.includes('اعفاء') || normText.includes('يعفى') || normText.includes('تستثنى'))) {
-      score += 5;
+      score += 8;
     }
-    if (normQuery.includes('غرامه') && (normHeader.includes('غرامه') || normText.includes('غرامه') || normText.includes('عقوبه') || normText.includes('مخالفه'))) {
-      score += 5;
+    if (normQuery.includes('غرامه') && (normHeader.includes('غرامه') || normText.includes('غرامه') || normText.includes('عقوبه') || normText.includes('مخالفه') || normText.includes('حبس'))) {
+      score += 8;
     }
 
     if (asksForUploadedFile && chunk.sourceFileName) {
-      score += 5;
+      score += 8;
     }
 
     if (score >= 2) {
@@ -5463,35 +5639,75 @@ function searchRelevantPalestinianLaws(
   }
 
   scoredChunks.sort((a, b) => (b.score || 0) - (a.score || 0));
-  // Take up to 8 top chunks for thorough detail coverage
-  const topChunks = scoredChunks.slice(0, 8);
+  
+  // Combine exact article matches first, then top scored chunks
+  const combinedSet = new Set<string>();
+  const topChunks: LegalChunk[] = [];
 
+  for (const m of exactArticleMatches) {
+    const key = `${m.lawTitle}_${m.sectionHeader}_${m.text.substring(0, 40)}`;
+    if (!combinedSet.has(key)) {
+      combinedSet.add(key);
+      topChunks.push(m);
+    }
+  }
+
+  for (const sc of scoredChunks) {
+    const key = `${sc.lawTitle}_${sc.sectionHeader}_${sc.text.substring(0, 40)}`;
+    if (!combinedSet.has(key)) {
+      combinedSet.add(key);
+      topChunks.push(sc);
+    }
+    if (topChunks.length >= 6) break;
+  }
+
+  // If no chunks scored high enough but laws exist and user asks for uploaded files or general law question, include top chunks from first laws
+  if (topChunks.length === 0 && laws.length > 0) {
+    for (const law of laws.slice(0, 2)) {
+      const lawChunks = chunkLawContent(law);
+      for (const lc of lawChunks.slice(0, 2)) {
+        topChunks.push(lc);
+      }
+    }
+  }
+
+  // Build the rich, structured context string for Gemini
   let prioritizedContext = '';
+
+  if (exactArticleMatches.length > 0 && requestedArticleNumber) {
+    prioritizedContext += `\n=== [النص الكامل المباشر للمادة رقم (${requestedArticleNumber}) من التشريعات والملفات المرفوعة] ===\n`;
+    for (const em of exactArticleMatches.slice(0, 4)) {
+      const timing = extractLawTiming(em.lawTitle, em.text);
+      const sourceInfo = em.sourceFileName ? ` [الملف المصدر: ${em.sourceFileName}]` : '';
+      prioritizedContext += `• اسم التشريع / الملف: ${em.lawTitle}${sourceInfo} (${timing})\n• الموضع / المادة: ${em.sectionHeader}\n• نص المادة المعتمد بالكامل:\n"""\n${em.text}\n"""\n\n`;
+    }
+  }
+
   if (topChunks.length > 0) {
-    prioritizedContext = `[المواد والبنود والملفات القانونية المعتمدة المسترجعة من قاعدة المعرفة (مرجع إلزامي وشامل ومباشر)]:\n` +
+    prioritizedContext += `[المواد والبنود والملفات القانونية المسترجعة من قاعدة المعرفة (مرجع إلزامي وشامل)]:\n` +
       topChunks
-        .map(
-          (c, idx) => {
-            const timing = extractLawTiming(c.lawTitle, c.text);
-            const sourceInfo = c.sourceFileName ? ` [الملف المصدر: ${c.sourceFileName}]` : '';
-            return `--- المرجع التشريعي (${idx + 1}) ---\nالتشريع / الملف: ${c.lawTitle}${sourceInfo} [التصنيف: ${c.category}] (${timing})\nالموضع / المادة: ${c.sectionHeader}\nالنص الكامل المعتمد:\n${c.text}`;
-          }
-        )
+        .slice(0, 6)
+        .map((c, idx) => {
+          const timing = extractLawTiming(c.lawTitle, c.text);
+          const sourceInfo = c.sourceFileName ? ` [الملف المصدر: ${c.sourceFileName}]` : '';
+          return `--- المرجع التشريعي (${idx + 1}) ---\nالتشريع / الملف: ${c.lawTitle}${sourceInfo} [التصنيف: ${c.category}] (${timing})\nالموضع / المادة: ${c.sectionHeader}\nالنص الكامل المعتمد:\n${c.text}`;
+        })
         .join('\n\n');
   }
 
   // Compact catalog of available Palestinian laws and files
   const fullCatalog = `[فهرس التشريعات والملفات المتاحة في قاعدة المعرفة (${laws.length} تشريع/ملف)]:\n` +
     laws
-      .slice(0, 30)
+      .slice(0, 40)
       .map((l, index) => `${index + 1}. ${l.title} (${l.category})${l.sourceFileName ? ` [ملف: ${l.sourceFileName}]` : ''}`)
       .join('\n');
 
   return {
-    hasMatches: topChunks.length > 0,
+    hasMatches: topChunks.length > 0 || laws.length > 0,
     prioritizedContext,
     topChunks,
     fullCatalog,
+    exactArticleChunk: exactArticleMatches[0] || topChunks[0],
   };
 }
 
@@ -5561,15 +5777,15 @@ function generateKnowledgeFallback(query: string, laws: StoredLaw[]): string {
     return `أهلاً بك! بصفتي شخصيتك الافتراضية ومساعدك الذكي «سَنَد»، يسعدني جداً الإجابة على أي سؤال أو استفسار عام في أي مجال (علوم، تاريخ، ثقافة، رياضة، لغات، أو نقاش يومي).\n\nتفضل بطرح سؤالك بمزيد من التفصيل وسأجيبك فوراً بكل وضوح وسلاسة دون أي تعقيد.`;
   }
 
-  // 6. LEGAL / TAX / CUSTOMS QUERY: Search Knowledge Base
+  // 6. LEGAL / TAX / CUSTOMS / UPLOADED FILES QUERY: Search Knowledge Base
   const searchResult = searchRelevantPalestinianLaws(query, laws);
 
-  if (searchResult.hasMatches && searchResult.topChunks.length > 0) {
-    const topChunk = searchResult.topChunks[0];
+  if (searchResult.exactArticleChunk || (searchResult.hasMatches && searchResult.topChunks.length > 0)) {
+    const topChunk = searchResult.exactArticleChunk || searchResult.topChunks[0];
     const timing = extractLawTiming(topChunk.lawTitle, topChunk.text);
 
     let result = `⚖️ **المرجع والأساس التشريعي المعتمد:**\n`;
-    result += `• **التشريع / الملف المصدر:** ${topChunk.lawTitle} (${timing})${topChunk.sourceFileName ? ` [ملف: ${topChunk.sourceFileName}]` : ''}\n`;
+    result += `• **التشريع / الملف المصدر:** ${topChunk.lawTitle} (${timing})${topChunk.sourceFileName ? ` [اسم الملف: ${topChunk.sourceFileName}]` : ''}\n`;
     result += `• **الموضع / المادة المعنية:** ${topChunk.sectionHeader}\n`;
     result += `• **التصنيف:** ${topChunk.category}\n\n`;
 
@@ -5577,12 +5793,12 @@ function generateKnowledgeFallback(query: string, laws: StoredLaw[]): string {
     result += `${topChunk.text}\n\n`;
 
     result += `📋 **الضوابط والشروط والنسب المقررة:**\n`;
-    result += `• **سنة المعاملة والتطبيق:** تسري هذه الأحكام وفقاً لآخر التعديلات واللوائح النافذة.\n`;
+    result += `• **سنة المعاملة والتطبيق:** تسري هذه الأحكام والبنود المذكورة وفقاً للوثيقة والملف المعتمد في النظام.\n`;
     result += `• **صفة المكلف:** يرجى التمييز بين المعاملات الخاصة بالأفراد الطبيعيين وتلك الخاصة بالشركات والمؤسسات التجارية.\n`;
-    result += `• **المستندات المطلوبة:** يُشترط إرفاق الوثائق والفواتير أو البيانات الجمركية/الضريبية الرسمية المعتمدة لدى الدائرة المختصة.\n\n`;
+    result += `• **المستندات المطلوبة:** يُشترط استيفاء الفواتير أو البيانات الجمركية/الضريبية الرسمية المعتمدة لدى الدائرة المختصة.\n\n`;
 
     result += `📌 **التوجيهات والإرشادات للمكلف:**\n`;
-    result += `تم استرجاع هذا النص بدقة وأمانة كاملة من الملفات وقاعدة المعرفة التشريعية المسجلة في النظام.`;
+    result += `تم استخراج هذا النص بدقة وأمانة تشريعية كاملة من الملفات وقاعدة المعرفة المرفوعة في النظام.`;
 
     return result;
   }

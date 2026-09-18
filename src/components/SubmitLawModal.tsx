@@ -495,7 +495,7 @@ export const SubmitLawModal: React.FC<SubmitLawModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
       <div className="bg-white rounded-2xl sm:rounded-3xl border border-gray-200 max-w-2xl w-full shadow-2xl flex flex-col max-h-[92vh] overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="bg-gradient-to-r from-[#12281e] via-[#1a382b] to-[#12281e] px-5 py-4 text-white flex items-center justify-between border-b border-[#275940]">

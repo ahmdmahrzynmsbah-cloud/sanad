@@ -22,13 +22,14 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import Markdown from 'react-markdown';
-import { User, ChatMessage, Conversation, SystemBranding, Law } from '../types';
+import { User, ChatMessage, Conversation, SystemBranding, Law, CitationSource } from '../types';
 import { ChatSidebar } from './ChatSidebar';
 import { SanadServicesSidebar } from './SanadServicesSidebar';
 import { UserUploadQuotaBadge } from './UserUploadQuotaBadge';
+import { SourceCitationBox } from './SourceCitationBox';
 import { useSync } from '../utils/sync';
 import { directFetchLawsFromFirestore } from '../services/clientFirestore';
-import { generateClientKnowledgeFallback, isLegalTaxCustomsQuery } from '../utils/localLegalSearch';
+import { generateClientKnowledgeFallback, isLegalTaxCustomsQuery, findCitationsForQuery, parseCitationsFromResponseText } from '../utils/localLegalSearch';
 
 interface ChatPortalProps {
   currentUser: User;
@@ -175,15 +176,52 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTo({
+        top: messagesContainerRef.current.scrollHeight,
+        behavior,
+      });
+    }
+    messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' });
   };
 
   useEffect(() => {
-    scrollToBottom();
+    scrollToBottom('smooth');
+    const timer = setTimeout(() => scrollToBottom('auto'), 120);
+    return () => clearTimeout(timer);
   }, [messages, loading]);
+
+  // Laws list for live client-side citation enrichment and fallback
+  const [lawsList, setLawsList] = useState<Law[]>([]);
+
+  const fetchLawsDatabase = async () => {
+    try {
+      const direct = await directFetchLawsFromFirestore();
+      if (direct && direct.length > 0) {
+        setLawsList(direct);
+        return;
+      }
+      const res = await fetch('/api/laws');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) setLawsList(data);
+      }
+    } catch (e) {
+      console.warn('Could not load laws for citations:', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchLawsDatabase();
+  }, []);
+
+  useSync(['laws', 'all'], () => {
+    fetchLawsDatabase();
+  });
 
   // Sync conversations from backend API upon mounting
   const fetchCloudConversations = async () => {
@@ -369,12 +407,27 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
       createdAt: nowIso,
       updatedAt: nowIso,
     };
-    persistConversation(inProgressConv);
+    // Update local state and localStorage for immediate responsiveness without spamming backend sync
+    setConversations((prev) => {
+      const existingIdx = prev.findIndex((c) => c.id === inProgressConv.id);
+      let updated: Conversation[];
+      if (existingIdx !== -1) {
+        updated = [...prev];
+        updated[existingIdx] = inProgressConv;
+      } else {
+        updated = [inProgressConv, ...prev];
+      }
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
 
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(18000),
         body: JSON.stringify({
           message: query,
           conversationHistory: updatedMessagesWithUser.slice(-10),
@@ -394,6 +447,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
             'شحنة أو طرد بريدي شخصي',
           ]
         : undefined;
+      let botCitations: CitationSource[] | undefined = undefined;
 
       if (res.ok) {
         const data = await res.json();
@@ -401,6 +455,9 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
         if (typeof data.isLegal === 'boolean') isQueryLegal = data.isLegal;
         if (data.queryType) resQueryType = data.queryType;
         if (Array.isArray(data.suggestedDetails)) resSuggestedDetails = data.suggestedDetails;
+        if (Array.isArray(data.citations) && data.citations.length > 0) {
+          botCitations = data.citations;
+        }
       } else {
         // Parse error response if provided by backend
         let serverError = '';
@@ -426,12 +483,29 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
           // Fallback: If server returned an error or Vercel function timed out
           console.warn('[Chat] Backend returned status:', res.status, 'Attempting direct client knowledge fallback...');
           try {
-            const directLaws = await directFetchLawsFromFirestore();
+            const directLaws = lawsList.length > 0 ? lawsList : await directFetchLawsFromFirestore();
             botResponseText = generateClientKnowledgeFallback(query, directLaws || []);
+            if (isQueryLegal) {
+              botCitations = findCitationsForQuery(query, directLaws || []);
+            }
           } catch {
             botResponseText = generateClientKnowledgeFallback(query, []);
           }
         }
+      }
+
+      // If legal query and citations not received from backend, extract directly
+      if (!botCitations && isQueryLegal) {
+        try {
+          const directLaws = lawsList.length > 0 ? lawsList : await directFetchLawsFromFirestore();
+          const found = findCitationsForQuery(query, directLaws || []);
+          if (found && found.length > 0) {
+            botCitations = found;
+          } else {
+            const parsed = parseCitationsFromResponseText(botResponseText, directLaws || []);
+            if (parsed && parsed.length > 0) botCitations = parsed;
+          }
+        } catch {}
       }
 
       const botMessage: ChatMessage = {
@@ -442,6 +516,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
         isLegal: isQueryLegal,
         queryType: resQueryType,
         suggestedDetails: resSuggestedDetails,
+        citations: botCitations,
       };
 
       const finalMessages = [...updatedMessagesWithUser, botMessage];
@@ -459,9 +534,15 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
     } catch (err: any) {
       console.warn('[Chat] Network error, attempting direct client knowledge fallback...', err);
       let fallbackText = '';
+      const isQueryLegal = isLegalTaxCustomsQuery(query);
+      let errCitations: CitationSource[] | undefined = undefined;
+
       try {
-        const directLaws = await directFetchLawsFromFirestore();
+        const directLaws = lawsList.length > 0 ? lawsList : await directFetchLawsFromFirestore();
         fallbackText = generateClientKnowledgeFallback(query, directLaws || []);
+        if (isQueryLegal) {
+          errCitations = findCitationsForQuery(query, directLaws || []);
+        }
       } catch {
         fallbackText = generateClientKnowledgeFallback(query, []);
       }
@@ -470,7 +551,6 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
         fallbackText = '⚠️ تعذر الاتصال بالخادم حالياً. يرجى التحقق من اتصالك بالإنترنت والمحاولة مجدداً.';
       }
 
-      const isQueryLegal = isLegalTaxCustomsQuery(query);
       const errorMessage: ChatMessage = {
         id: 'err-' + Date.now(),
         sender: 'bot',
@@ -486,6 +566,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
               'شحنة أو طرد بريدي شخصي',
             ]
           : undefined,
+        citations: errCitations,
       };
       const finalMessages = [...updatedMessagesWithUser, errorMessage];
       setMessages(finalMessages);
@@ -603,31 +684,32 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
         </div>
 
         {/* Messages Scroll Area */}
-        <div className="flex-1 bg-white rounded-2xl border border-zinc-950 shadow-2xs overflow-y-auto p-3 sm:p-6 space-y-4 sm:space-y-5 touch-scroll">
-          {messages.map((msg) => (
+        <div
+          ref={messagesContainerRef}
+          className="flex-1 bg-white rounded-2xl border border-zinc-950 shadow-2xs overflow-y-auto p-3 sm:p-6 space-y-4 sm:space-y-5 touch-scroll"
+        >
+          {messages.map((msg, messageIndex) => (
             <div
               key={msg.id}
-              className={`flex items-start gap-2.5 sm:gap-3 ${
-                msg.sender === 'user' ? 'flex-row-reverse' : 'flex-row'
+              className={`flex items-start gap-2.5 sm:gap-3 w-full ${
+                msg.sender === 'user' ? 'justify-end' : 'justify-start'
               }`}
             >
-              {/* Avatar */}
-              <div
-                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 shadow-2xs border overflow-hidden ${
-                  msg.sender === 'bot'
-                    ? 'bg-[#0f241d] text-[#d4af37] border-[#1d473a]'
-                    : 'bg-zinc-100 text-zinc-700 border-zinc-200'
-                }`}
-              >
-                {msg.sender === 'bot' ? renderBotIcon() : <UserIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-zinc-600" />}
-              </div>
+              {/* Bot Avatar on start edge (right in RTL) */}
+              {msg.sender === 'bot' && (
+                <div
+                  className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 shadow-2xs border overflow-hidden bg-[#0f241d] text-[#d4af37] border-[#1d473a]"
+                >
+                  {renderBotIcon()}
+                </div>
+              )}
 
               {/* Bubble Container */}
               <div
-                className={`max-w-[92%] sm:max-w-[80%] rounded-2xl p-3 sm:p-4 text-xs sm:text-sm leading-relaxed shadow-xs relative group ${
+                className={`rounded-2xl leading-relaxed shadow-xs relative group ${
                   msg.sender === 'user'
-                    ? 'bg-emerald-50/90 text-emerald-950 border border-emerald-100/50 rounded-tr-xs'
-                    : 'bg-white text-zinc-800 border border-zinc-200/60 rounded-tl-xs'
+                    ? 'bg-[#103025] text-white p-3.5 sm:p-4 rounded-2xl rounded-tl-xs max-w-[88%] sm:max-w-[78%] border border-emerald-900/60 shadow-sm'
+                    : 'bg-white text-zinc-800 p-3.5 sm:p-5 rounded-2xl rounded-tr-xs max-w-[95%] sm:max-w-[85%] border border-zinc-200/80 shadow-2xs'
                 }`}
               >
                 {/* Header inside bot message */}
@@ -670,7 +752,14 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
 
                 {/* Message Content */}
                 {msg.sender === 'user' ? (
-                  <p className="whitespace-pre-wrap font-medium text-emerald-950">{msg.text}</p>
+                  <div>
+                    <p className="whitespace-pre-wrap font-medium text-emerald-50 text-right text-xs sm:text-sm leading-relaxed">
+                      {msg.text}
+                    </p>
+                    <div className="text-[10px] text-emerald-300/80 text-left mt-1.5 font-mono">
+                      {msg.timestamp}
+                    </div>
+                  </div>
                 ) : (
                   <div className="markdown-body space-y-2 text-zinc-700">
                     <Markdown
@@ -719,8 +808,24 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
                       {msg.text}
                     </Markdown>
 
-                    {/* Interactive Suggested Details Action Chips for Legal Inquiries */}
-                    {msg.sender === 'bot' && msg.suggestedDetails && msg.suggestedDetails.length > 0 && (
+                    {/* Source Citation Box: رقم المادة والقانون في صندوق صغير بجانب الإجابة يوضح النص الأصلي المقتبس منه لتعزيز الثقة والموثوقية */}
+                    {msg.sender === 'bot' && (() => {
+                      const effectiveCitations = (msg.citations && msg.citations.length > 0)
+                        ? msg.citations
+                        : (msg.isLegal || msg.queryType === 'legal')
+                          ? (parseCitationsFromResponseText(msg.text, lawsList).length > 0
+                              ? parseCitationsFromResponseText(msg.text, lawsList)
+                              : findCitationsForQuery(msg.text, lawsList))
+                          : undefined;
+
+                      if (effectiveCitations && effectiveCitations.length > 0) {
+                        return <SourceCitationBox citations={effectiveCitations} isLegal={msg.isLegal} />;
+                      }
+                      return null;
+                    })()}
+
+                    {/* Interactive Suggested Details Action Chips - only show on the most recent bot message */}
+                    {msg.sender === 'bot' && msg.suggestedDetails && msg.suggestedDetails.length > 0 && messageIndex === messages.length - 1 && (
                       <div className="mt-3 pt-2.5 border-t border-zinc-100 flex flex-col gap-1.5">
                         <span className="text-[11px] font-bold text-amber-900 flex items-center gap-1">
                           <HelpCircle className="w-3.5 h-3.5 text-amber-600" />
@@ -743,13 +848,14 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
                     )}
                   </div>
                 )}
-
-                {msg.sender === 'user' && (
-                  <div className="text-[10px] text-emerald-700/70 text-left mt-1 font-mono">
-                    {msg.timestamp}
-                  </div>
-                )}
               </div>
+
+              {/* User Avatar on end edge (left in RTL) */}
+              {msg.sender === 'user' && (
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 shadow-2xs border border-emerald-800/80 bg-[#164032] text-emerald-200">
+                  <UserIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-200" />
+                </div>
+              )}
             </div>
           ))}
 

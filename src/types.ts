@@ -92,12 +92,26 @@ export interface LawRequest {
   reviewedBy?: string;
 }
 
+export interface CitationSource {
+  id?: string;
+  lawId?: string;
+  lawTitle: string;
+  articleNumber?: string;
+  sectionHeader?: string;
+  sourceFileName?: string;
+  category?: string;
+  originalText: string;
+  snippet?: string;
+  matchScore?: number;
+}
+
 export interface ChatMessage {
   id: string;
   sender: 'user' | 'bot';
   text: string;
   timestamp: string;
   sources?: string[];
+  citations?: CitationSource[];
   isLegal?: boolean;
   queryType?: 'legal' | 'general';
   suggestedDetails?: string[];

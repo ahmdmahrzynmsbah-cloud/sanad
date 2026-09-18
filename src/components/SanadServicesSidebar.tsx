@@ -137,7 +137,7 @@ export const SanadServicesSidebar: React.FC<SanadServicesSidebarProps> = ({
         <div
           id="sanad-services-mobile-backdrop"
           onClick={onCloseMobile}
-          className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 lg:hidden transition-opacity"
+          className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-40 lg:hidden transition-opacity"
         />
       )}
 
@@ -147,7 +147,7 @@ export const SanadServicesSidebar: React.FC<SanadServicesSidebarProps> = ({
         aria-label="منظومة خدمات سند الذكية"
         className={`
           fixed lg:relative top-2 lg:top-0 bottom-2 lg:bottom-0 left-2 lg:left-0
-          h-[calc(100%-16px)] lg:h-full z-50
+          h-[calc(100%-16px)] lg:h-full z-40 lg:z-10
           bg-[#0d211a] text-slate-100
           border border-[#17382d]
           rounded-2xl sm:rounded-[22px]
