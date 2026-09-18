@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc, updateDoc, setLogLevel, query, where, onSnapshot } from 'firebase/firestore';
 import type { Law, User, LawRequest, SubscriptionPlan } from '../types';
+import { normalizeAuthIdentifier, isMatchingUser } from '../utils/authUtils';
 
 try {
   setLogLevel('error');
@@ -44,9 +45,9 @@ export function handleClientFirestoreError(context: string, err: any) {
   }
 }
 
-export function getClientDb() {
+export function getClientDb(forceBypassQuota = false) {
   if (typeof window === 'undefined') return null;
-  if (isClientQuotaExceeded()) return null;
+  if (!forceBypassQuota && isClientQuotaExceeded()) return null;
   try {
     const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
     if (!dbInstance) {
@@ -356,27 +357,111 @@ export async function directLoginUser(
   identifier: string,
   password: string
 ): Promise<DirectAuthResult> {
-  const db = getClientDb();
-  if (!db) {
-    return { ok: false, error: 'تعذر الاتصال بقاعدة البيانات السحابية.' };
+  const rawId = String(identifier || '').trim();
+  const rawPass = String(password || '').trim();
+
+  // 1. Local Cache check first (instant offline & quota-proof access)
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const cachedActive = localStorage.getItem('pal_tax_user');
+      if (cachedActive) {
+        const u = JSON.parse(cachedActive);
+        if (isMatchingUser(u, rawId) && String(u.password || '').trim() === rawPass) {
+          console.log('[Client Firestore] Logged in via cached user session');
+          return {
+            ok: true,
+            message: 'تم تسجيل الدخول بنجاح',
+            user: u,
+          };
+        }
+      }
+
+      const cachedList = localStorage.getItem('sanad_cached_users');
+      if (cachedList) {
+        const list = JSON.parse(cachedList);
+        if (Array.isArray(list)) {
+          const matched = list.find(
+            (u: any) => u && isMatchingUser(u, rawId) && String(u.password || '').trim() === rawPass
+          );
+          if (matched) {
+            console.log('[Client Firestore] Logged in via cached users directory');
+            return {
+              ok: true,
+              message: 'تم تسجيل الدخول بنجاح',
+              user: matched,
+            };
+          }
+        }
+      }
+    }
+  } catch (cacheErr) {
+    console.warn('[Client Firestore] Local cache login check notice:', cacheErr);
   }
 
-  const trimmed = identifier.trim().toLowerCase();
+  // 2. Query Firestore Cloud Database (bypass quota lock for critical login flow)
+  const db = getClientDb(true);
+  if (!db) {
+    return { ok: false, error: 'تعذر الاتصال بقاعدة البيانات، يرجى المحاولة لاحقاً.' };
+  }
+
+  const { cleanUsername, normalizedPhone, raw } = normalizeAuthIdentifier(rawId);
 
   try {
     const usersCol = collection(db, 'users');
-    const snapshot = await getDocs(usersCol);
-
     let matchedUser: any = null;
 
-    snapshot.forEach((docSnap) => {
-      const u = docSnap.data();
-      const uName = String(u.username || '').trim().toLowerCase();
-      const uPhone = String(u.phone || '').trim().toLowerCase();
-      if ((uName === trimmed || (uPhone && uPhone === trimmed)) && String(u.password) === String(password)) {
-        matchedUser = { id: docSnap.id, ...u };
-      }
-    });
+    // Targeted query 1: Clean Username (e.g. ahmed_7)
+    if (cleanUsername) {
+      try {
+        const q = query(usersCol, where('username', '==', cleanUsername));
+        const snap = await getDocs(q);
+        snap.forEach((docSnap) => {
+          const u = docSnap.data();
+          if (String(u.password || '').trim() === rawPass) {
+            matchedUser = { id: docSnap.id, ...u };
+          }
+        });
+      } catch {}
+    }
+
+    // Targeted query 2: Raw Username (if different)
+    if (!matchedUser && raw && raw !== cleanUsername) {
+      try {
+        const q = query(usersCol, where('username', '==', raw));
+        const snap = await getDocs(q);
+        snap.forEach((docSnap) => {
+          const u = docSnap.data();
+          if (String(u.password || '').trim() === rawPass) {
+            matchedUser = { id: docSnap.id, ...u };
+          }
+        });
+      } catch {}
+    }
+
+    // Targeted query 3: Phone
+    if (!matchedUser && normalizedPhone) {
+      try {
+        const q = query(usersCol, where('phone', '==', normalizedPhone));
+        const snap = await getDocs(q);
+        snap.forEach((docSnap) => {
+          const u = docSnap.data();
+          if (String(u.password || '').trim() === rawPass) {
+            matchedUser = { id: docSnap.id, ...u };
+          }
+        });
+      } catch {}
+    }
+
+    // Full scan fallback if targeted queries did not hit (e.g., case variations or formatting differences)
+    if (!matchedUser) {
+      const snapshot = await getDocs(usersCol);
+      snapshot.forEach((docSnap) => {
+        const u = docSnap.data();
+        if (isMatchingUser(u, rawId) && String(u.password || '').trim() === rawPass) {
+          matchedUser = { id: docSnap.id, ...u };
+        }
+      });
+    }
 
     if (!matchedUser) {
       return { ok: false, error: 'بيانات الدخول أو كلمة المرور غير صحيحة.' };
@@ -496,13 +581,13 @@ export async function directResetPassword(
   recoveryCode: string,
   newPassword: string
 ): Promise<DirectAuthResult> {
-  const db = getClientDb();
+  const db = getClientDb(true);
   if (!db) {
     return { ok: false, error: 'تعذر الاتصال بقاعدة البيانات السحابية.' };
   }
 
-  const trimmedId = identifier.trim().toLowerCase();
-  const trimmedCode = recoveryCode.trim().toLowerCase();
+  const rawId = String(identifier || '').trim();
+  const trimmedCode = String(recoveryCode || '').trim().toLowerCase();
 
   try {
     const usersCol = collection(db, 'users');
@@ -513,9 +598,7 @@ export async function directResetPassword(
 
     snapshot.forEach((docSnap) => {
       const u = docSnap.data();
-      const uName = String(u.username || '').trim().toLowerCase();
-      const uPhone = String(u.phone || '').trim().toLowerCase();
-      if (uName === trimmedId || (uPhone && uPhone === trimmedId)) {
+      if (isMatchingUser(u, rawId)) {
         targetDocId = docSnap.id;
         targetUser = u;
       }

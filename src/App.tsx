@@ -108,14 +108,16 @@ export default function App() {
       console.warn('Failed to load laws count from API:', err);
     }
 
-    try {
-      const { directFetchLawsFromFirestore } = await import('./services/clientFirestore');
-      const firestoreLaws = await directFetchLawsFromFirestore();
-      if (firestoreLaws && firestoreLaws.length > loadedCount) {
-        loadedCount = firestoreLaws.length;
+    if (loadedCount === 0) {
+      try {
+        const { directFetchLawsFromFirestore } = await import('./services/clientFirestore');
+        const firestoreLaws = await directFetchLawsFromFirestore();
+        if (firestoreLaws && firestoreLaws.length > 0) {
+          loadedCount = firestoreLaws.length;
+        }
+      } catch (fsErr) {
+        console.warn('Direct Firestore laws count notice:', fsErr);
       }
-    } catch (fsErr) {
-      console.warn('Direct Firestore laws count notice:', fsErr);
     }
 
     setLawsCount(loadedCount);

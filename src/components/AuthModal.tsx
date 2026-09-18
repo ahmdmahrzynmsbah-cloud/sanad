@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { User, SystemBranding } from '../types';
 import { safeFetchJson } from '../utils/safeApi';
+import { normalizeAuthIdentifier } from '../utils/authUtils';
 import {
   directLoginUser,
   directRegisterUser,
@@ -90,8 +91,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     e.preventDefault();
     resetStates();
 
-    if (!username.trim() || !password) {
+    const { cleanUsername, raw } = normalizeAuthIdentifier(username);
+    const pass = password.trim();
+
+    if (!cleanUsername && !raw) {
       setError('يرجى إدخال اسم المستخدم أو رقم الجوال، وكلمة المرور.');
+      return;
+    }
+
+    if (!pass) {
+      setError('يرجى إدخال كلمة المرور.');
       return;
     }
 
@@ -100,39 +109,61 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       let isFallbackNeeded = false;
       let serverErrorMsg = '';
 
+      const targetIdentifier = cleanUsername || raw;
+
       try {
-        const res = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: username.trim(), password }),
-        });
-
-        const parsed = await safeFetchJson<any>(res);
-        if (parsed.ok && parsed.data?.user) {
-          onLoginSuccess(parsed.data.user);
-          return;
+        let res: Response | null = null;
+        try {
+          res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ username: targetIdentifier, password: pass }),
+          });
+        } catch (netErr) {
+          // Retry once after a brief pause for high latency mobile connections
+          await new Promise((r) => setTimeout(r, 600));
+          res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ username: targetIdentifier, password: pass }),
+          });
         }
 
-        // Business logic rejection from server (e.g. wrong credentials or pending/frozen)
-        if (res.status === 401) {
-          setError(parsed.error || 'بيانات الدخول أو كلمة المرور غير صحيحة');
-          return;
-        }
-
-        if (res.status === 403 && parsed.data) {
-          if (parsed.data.status === 'pending') {
-            setPendingStatusUser({ username: parsed.data.username || username });
-          } else if (parsed.data.status === 'rejected') {
-            setRejectedUser(parsed.data.username || username);
-          } else {
-            setError(parsed.error || parsed.data.error || 'الحساب غير متاح حالياً');
+        if (res) {
+          const parsed = await safeFetchJson<any>(res);
+          if (parsed.ok && parsed.data?.user) {
+            try {
+              localStorage.setItem('pal_tax_user', JSON.stringify(parsed.data.user));
+            } catch {}
+            onLoginSuccess(parsed.data.user);
+            return;
           }
-          return;
-        }
 
-        // Status is 500, HTML error page, or serverless invocation failure
-        isFallbackNeeded = true;
-        serverErrorMsg = parsed.error || `خطأ في الخادم (${res.status})`;
+          // Business logic rejection from server (e.g. wrong credentials or pending/frozen)
+          if (res.status === 401) {
+            setError(parsed.error || 'بيانات الدخول أو كلمة المرور غير صحيحة');
+            return;
+          }
+
+          if (res.status === 403 && parsed.data) {
+            if (parsed.data.status === 'pending') {
+              setPendingStatusUser({ username: parsed.data.username || targetIdentifier });
+            } else if (parsed.data.status === 'rejected') {
+              setRejectedUser(parsed.data.username || targetIdentifier);
+            } else {
+              setError(parsed.error || parsed.data.error || 'الحساب غير متاح حالياً');
+            }
+            return;
+          }
+
+          // Status is 500, HTML error page, or serverless invocation failure
+          isFallbackNeeded = true;
+          serverErrorMsg = parsed.error || `خطأ في الخادم (${res.status})`;
+        } else {
+          isFallbackNeeded = true;
+        }
       } catch (fetchErr: any) {
         console.warn('[Auth] API /api/auth/login fetch error, falling back to direct cloud Firestore:', fetchErr);
         isFallbackNeeded = true;
@@ -140,19 +171,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       if (isFallbackNeeded) {
         console.log('[Auth] Attempting direct Cloud Firestore login fallback...');
-        const direct = await directLoginUser(username.trim(), password);
+        const direct = await directLoginUser(targetIdentifier, pass);
         if (direct.ok && direct.user) {
+          try {
+            localStorage.setItem('pal_tax_user', JSON.stringify(direct.user));
+          } catch {}
           onLoginSuccess(direct.user);
           return;
         }
 
         if (direct.status === 'pending') {
-          setPendingStatusUser({ username: direct.user?.username || username });
+          setPendingStatusUser({ username: direct.user?.username || targetIdentifier });
           return;
         }
 
         if (direct.status === 'rejected') {
-          setRejectedUser(direct.user?.username || username);
+          setRejectedUser(direct.user?.username || targetIdentifier);
           return;
         }
 
@@ -175,22 +209,28 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     e.preventDefault();
     resetStates();
 
-    if (!fullName.trim()) {
+    const { cleanUsername, raw: rawUser } = normalizeAuthIdentifier(username);
+    const targetUsername = cleanUsername || rawUser;
+    const cleanPhone = phone.replace(/[\u200B-\u200D\uFEFF\u200E\u200F\u202A-\u202E\u00A0]/g, '').trim();
+    const cleanFullName = fullName.replace(/[\u200B-\u200D\uFEFF\u200E\u200F\u202A-\u202E\u00A0]/g, '').trim();
+    const cleanRecovery = recoveryCode.trim();
+
+    if (!cleanFullName) {
       setError('يرجى إدخال الاسم الكامل الثلاثي أو الرباعي.');
       return;
     }
 
-    if (!phone.trim()) {
+    if (!cleanPhone) {
       setError('يرجى إدخال رقم الجوال.');
       return;
     }
 
-    if (!username.trim()) {
+    if (!targetUsername) {
       setError('يرجى تحديد اسم مستخدم لتسجيل الدخول.');
       return;
     }
 
-    if (username.trim().length < 3) {
+    if (targetUsername.length < 3) {
       setError('يجب أن يتكون اسم المستخدم من 3 أحرف على الأقل.');
       return;
     }
@@ -200,7 +240,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    if (!recoveryCode.trim()) {
+    if (!cleanRecovery) {
       setError('يرجى كتابة رمز سري لتعيين واستعادة كلمة المرور في حال نسيانها.');
       return;
     }
@@ -214,12 +254,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         const res = await fetch('/api/auth/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({
-            fullName: fullName.trim(),
-            phone: phone.trim(),
-            username: username.trim(),
+            fullName: cleanFullName,
+            phone: cleanPhone,
+            username: targetUsername,
             password,
-            recoveryCode: recoveryCode.trim(),
+            recoveryCode: cleanRecovery,
             role: requestedRole,
           }),
         });
@@ -231,6 +272,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             setSuccessMessage(
               'تم إنشاء الحساب واعتماده تلقائياً بنجاح! تم حفظ وتأكيد بياناتك، يمكنك الآن تسجيل الدخول مباشرة.'
             );
+            setUsername(targetUsername);
             setPassword('');
             setTimeout(() => {
               setMode('login');
@@ -239,7 +281,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             setSuccessMessage(
               'تم تقديم طلب التسجيل بنجاح! تم حفظ بياناتك ورمز الأمان. حسابك حالياً في حالة "قيد المراجعة الإدارية".'
             );
-            setPendingStatusUser({ username: username.trim() });
+            setPendingStatusUser({ username: targetUsername });
             setPassword('');
           }
           return;
@@ -262,11 +304,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       if (isFallbackNeeded) {
         console.log('[Auth] Attempting direct Cloud Firestore registration fallback...');
         const direct = await directRegisterUser({
-          fullName: fullName.trim(),
-          phone: phone.trim(),
-          username: username.trim(),
+          fullName: cleanFullName,
+          phone: cleanPhone,
+          username: targetUsername,
           password,
-          recoveryCode: recoveryCode.trim(),
+          recoveryCode: cleanRecovery,
           role: requestedRole,
         });
 
@@ -274,6 +316,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           setSuccessMessage(
             direct.message || 'تم إنشاء الحساب بنجاح في قاعدة البيانات السحابية! يمكنك الآن تسجيل الدخول مباشرة.'
           );
+          setUsername(targetUsername);
           setPassword('');
           setTimeout(() => {
             setMode('login');
@@ -295,12 +338,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     e.preventDefault();
     resetStates();
 
-    if (!resetIdentifier.trim()) {
+    const { cleanUsername, raw: rawId } = normalizeAuthIdentifier(resetIdentifier);
+    const targetResetId = cleanUsername || rawId;
+    const cleanRecoveryCode = resetRecoveryCode.trim();
+
+    if (!targetResetId) {
       setError('يرجى إدخال اسم المستخدم أو رقم الجوال المسجل.');
       return;
     }
 
-    if (!resetRecoveryCode.trim()) {
+    if (!cleanRecoveryCode) {
       setError('يرجى إدخال رمز الأمان واستعادة كلمة المرور الذي حددته عند التسجيل.');
       return;
     }
@@ -324,9 +371,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         const res = await fetch('/api/auth/reset-password', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({
-            identifier: resetIdentifier.trim(),
-            recoveryCode: resetRecoveryCode.trim(),
+            identifier: targetResetId,
+            recoveryCode: cleanRecoveryCode,
             newPassword: resetNewPassword,
           }),
         });
@@ -334,7 +382,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         const parsed = await safeFetchJson<any>(res);
         if (parsed.ok && res.status === 200) {
           setSuccessMessage('تم تعيين كلمة المرور بنجاح! يمكنك الآن تسجيل الدخول بها.');
-          setUsername(resetIdentifier.trim());
+          setUsername(targetResetId);
           setPassword('');
           setResetNewPassword('');
           setResetConfirmPassword('');
@@ -358,14 +406,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       if (isFallbackNeeded) {
         console.log('[Auth] Attempting direct Cloud Firestore password reset fallback...');
         const direct = await directResetPassword(
-          resetIdentifier.trim(),
-          resetRecoveryCode.trim(),
+          targetResetId,
+          cleanRecoveryCode,
           resetNewPassword
         );
 
         if (direct.ok) {
           setSuccessMessage('تم تعيين كلمة المرور بنجاح في السحابة! يمكنك الآن تسجيل الدخول بها.');
-          setUsername(resetIdentifier.trim());
+          setUsername(targetResetId);
           setPassword('');
           setResetNewPassword('');
           setResetConfirmPassword('');

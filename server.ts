@@ -92,6 +92,7 @@ import type {
   StoredConversation,
   StoredLawRequest,
 } from './server/firestore.ts';
+import { normalizeAuthIdentifier, isMatchingUser } from './src/utils/authUtils.ts';
 
 dotenv.config();
 
@@ -1706,27 +1707,46 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'يرجى إدخال اسم المستخدم أو رقم الجوال وكلمة المرور' });
     }
 
-    const trimmed = String(username).trim();
+    const rawUsername = String(username || '').trim();
+    const rawPassword = String(password || '').trim();
+
+    // 1. Fast lookup in memory using robust normalization (handles @username, spaces, arabic digits, phone formats)
     let user = db.users.find(
-      (u) =>
-        u &&
-        ((u.username && u.username.toLowerCase() === trimmed.toLowerCase()) ||
-          (u.phone && u.phone.trim() === trimmed)) &&
-        u.password === String(password)
+      (u) => u && isMatchingUser(u, rawUsername) && String(u.password).trim() === rawPassword
     );
 
-    // If not found in memory, query Firestore directly (essential for Vercel serverless cold starts)
+    // 2. If not found in memory, query local disk data/db.json (safe from Firestore quota exhaustion and serverless memory resets)
     if (!user) {
+      try {
+        const diskPath = path.join(process.cwd(), 'data', 'db.json');
+        if (fs.existsSync(diskPath)) {
+          const diskData = JSON.parse(fs.readFileSync(diskPath, 'utf-8'));
+          if (Array.isArray(diskData?.users)) {
+            const diskUser = diskData.users.find(
+              (u: any) => u && isMatchingUser(u, rawUsername) && String(u.password).trim() === rawPassword
+            );
+            if (diskUser) {
+              user = diskUser;
+              // Synchronize back into active memory if missing
+              if (!db.users.some((u: any) => u.id === diskUser.id)) {
+                db.users.push(diskUser);
+              }
+            }
+          }
+        }
+      } catch (diskErr) {
+        console.warn('Disk DB user check notice:', diskErr);
+      }
+    }
+
+    // 3. If still not found, check Firestore Cloud Database (if quota is available)
+    if (!user && !isQuotaExceeded()) {
       try {
         const cloudUsers = await fetchUsersFromFirestore();
         if (cloudUsers && Array.isArray(cloudUsers)) {
           db.users = cloudUsers;
           user = db.users.find(
-            (u) =>
-              u &&
-              ((u.username && u.username.toLowerCase() === trimmed.toLowerCase()) ||
-                (u.phone && u.phone.trim() === trimmed)) &&
-              u.password === String(password)
+            (u) => u && isMatchingUser(u, rawUsername) && String(u.password).trim() === rawPassword
           );
         }
       } catch (fErr) {
@@ -1802,28 +1822,40 @@ app.post('/api/auth/reset-password', async (req, res) => {
       return res.status(400).json({ error: 'يجب ألا تقل كلمة المرور الجديدة عن 4 خانات' });
     }
 
-    const trimmedId = String(identifier).trim().toLowerCase();
-    const trimmedCode = String(recoveryCode).trim().toLowerCase();
+    const rawId = String(identifier || '').trim();
+    const trimmedCode = String(recoveryCode || '').trim().toLowerCase();
 
-    let user = db.users.find(
-      (u) =>
-        u &&
-        ((u.username && u.username.toLowerCase() === trimmedId) ||
-          (u.phone && u.phone.trim().toLowerCase() === trimmedId))
-    );
+    // 1. Memory check with normalization
+    let user = db.users.find((u) => u && isMatchingUser(u, rawId));
 
-    // If not found in memory, query Firestore directly
+    // 2. Disk check
     if (!user) {
+      try {
+        const diskPath = path.join(process.cwd(), 'data', 'db.json');
+        if (fs.existsSync(diskPath)) {
+          const diskData = JSON.parse(fs.readFileSync(diskPath, 'utf-8'));
+          if (Array.isArray(diskData?.users)) {
+            const diskUser = diskData.users.find((u: any) => u && isMatchingUser(u, rawId));
+            if (diskUser) {
+              user = diskUser;
+              if (!db.users.some((u: any) => u.id === diskUser.id)) {
+                db.users.push(diskUser);
+              }
+            }
+          }
+        }
+      } catch (diskErr) {
+        console.warn('Disk DB user check notice on reset:', diskErr);
+      }
+    }
+
+    // 3. Firestore cloud check
+    if (!user && !isQuotaExceeded()) {
       try {
         const cloudUsers = await fetchUsersFromFirestore();
         if (cloudUsers && Array.isArray(cloudUsers)) {
           db.users = cloudUsers;
-          user = db.users.find(
-            (u) =>
-              u &&
-              ((u.username && u.username.toLowerCase() === trimmedId) ||
-                (u.phone && u.phone.trim().toLowerCase() === trimmedId))
-          );
+          user = db.users.find((u) => u && isMatchingUser(u, rawId));
         }
       } catch (fErr) {
         console.warn('Firestore fallback check on reset-password:', fErr);
@@ -3344,7 +3376,7 @@ app.get('/api/admin/users', async (req, res) => {
 // Get a single user by username (for real-time sync of current user status)
 app.get('/api/users/by-username/:username', (req, res) => {
   const username = req.params.username;
-  const user = db.users.find(u => u.username === username);
+  const user = db.users.find(u => u && isMatchingUser(u, username));
   if (!user) {
     return res.status(404).json({ error: 'المستخدم غير موجود' });
   }
