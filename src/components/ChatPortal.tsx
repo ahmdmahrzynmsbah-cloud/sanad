@@ -427,7 +427,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(18000),
+        signal: AbortSignal.timeout(30000),
         body: JSON.stringify({
           message: query,
           conversationHistory: updatedMessagesWithUser.slice(-10),
@@ -695,7 +695,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
                 msg.sender === 'user' ? 'justify-end' : 'justify-start'
               }`}
             >
-              {/* Bot Avatar on start edge (right in RTL) */}
+              {/* Bot Avatar on start edge */}
               {msg.sender === 'bot' && (
                 <div
                   className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 shadow-2xs border overflow-hidden bg-[#0f241d] text-[#d4af37] border-[#1d473a]"
@@ -706,10 +706,10 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
 
               {/* Bubble Container */}
               <div
-                className={`rounded-2xl leading-relaxed shadow-xs relative group ${
+                className={`max-w-[92%] sm:max-w-[80%] rounded-2xl p-3 sm:p-4 text-xs sm:text-sm leading-relaxed shadow-xs relative group ${
                   msg.sender === 'user'
-                    ? 'bg-[#103025] text-white p-3.5 sm:p-4 rounded-2xl rounded-tl-xs max-w-[88%] sm:max-w-[78%] border border-emerald-900/60 shadow-sm'
-                    : 'bg-white text-zinc-800 p-3.5 sm:p-5 rounded-2xl rounded-tr-xs max-w-[95%] sm:max-w-[85%] border border-zinc-200/80 shadow-2xs'
+                    ? 'bg-emerald-50/90 text-emerald-950 border border-emerald-100/50 rounded-tr-xs'
+                    : 'bg-white text-zinc-800 border border-zinc-200/60 rounded-tl-xs'
                 }`}
               >
                 {/* Header inside bot message */}
@@ -753,10 +753,8 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
                 {/* Message Content */}
                 {msg.sender === 'user' ? (
                   <div>
-                    <p className="whitespace-pre-wrap font-medium text-emerald-50 text-right text-xs sm:text-sm leading-relaxed">
-                      {msg.text}
-                    </p>
-                    <div className="text-[10px] text-emerald-300/80 text-left mt-1.5 font-mono">
+                    <p className="whitespace-pre-wrap font-medium text-emerald-950">{msg.text}</p>
+                    <div className="text-[10px] text-emerald-700/70 text-left mt-1 font-mono">
                       {msg.timestamp}
                     </div>
                   </div>
@@ -850,10 +848,10 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
                 )}
               </div>
 
-              {/* User Avatar on end edge (left in RTL) */}
+              {/* User Avatar */}
               {msg.sender === 'user' && (
-                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 shadow-2xs border border-emerald-800/80 bg-[#164032] text-emerald-200">
-                  <UserIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-200" />
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center shrink-0 shadow-2xs border bg-zinc-100 text-zinc-700 border-zinc-200">
+                  <UserIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-zinc-600" />
                 </div>
               )}
             </div>

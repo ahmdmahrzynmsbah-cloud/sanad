@@ -3729,9 +3729,9 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
 4. ملخص موجز (summary): نبذة موجزة وشاملة توضح الغرض ونطاق تطبيق هذا القانون أو القرار.`;
 
     const modelsToTry = [
-      'gemini-flash-latest',
-      'gemini-2.5-flash',
       'gemini-3.1-flash-lite',
+      'gemini-2.5-flash',
+      'gemini-flash-latest',
       'gemini-3.8-flash',
     ];
 
@@ -4019,9 +4019,9 @@ ${sampleText}
 """`;
 
       const modelsToTry = [
-        'gemini-flash-latest',
-        'gemini-2.5-flash',
         'gemini-3.1-flash-lite',
+        'gemini-2.5-flash',
+        'gemini-flash-latest',
         'gemini-3.8-flash',
       ];
 
@@ -4871,14 +4871,23 @@ ${fullCatalog ? `\n[فهرس التشريعات والملفات الفلسطي�
 
   try {
     const ai = getGemini();
-    // Valid candidate models in optimal priority: super-fast gemini-2.5-flash first, then gemini-3.8-flash, then gemini-3.1-flash-lite
+    // Valid candidate models in optimal priority: super-fast and highly available gemini-3.1-flash-lite first, then gemini-2.5-flash, then gemini-3.8-flash
     const candidateConfigs = [
+      {
+        model: 'gemini-3.1-flash-lite',
+        config: {
+          systemInstruction,
+          temperature: 0.6,
+        },
+        timeoutMs: 14000,
+      },
       {
         model: 'gemini-2.5-flash',
         config: {
           systemInstruction,
           temperature: 0.6,
         },
+        timeoutMs: 14000,
       },
       {
         model: 'gemini-3.8-flash',
@@ -4886,13 +4895,7 @@ ${fullCatalog ? `\n[فهرس التشريعات والملفات الفلسطي�
           systemInstruction,
           temperature: 0.6,
         },
-      },
-      {
-        model: 'gemini-3.1-flash-lite',
-        config: {
-          systemInstruction,
-          temperature: 0.6,
-        },
+        timeoutMs: 10000,
       },
     ];
     let response: any = null;
@@ -4942,7 +4945,7 @@ ${fullCatalog ? `\n[فهرس التشريعات والملفات الفلسطي�
 
     for (const candidate of candidateConfigs) {
       try {
-        // Enforce 9-second timeout promise race so no model ever hangs the client
+        const timeoutMs = candidate.timeoutMs || 12000;
         const generatePromise = ai.models.generateContent({
           model: candidate.model,
           contents: contentsToSend,
@@ -4950,7 +4953,7 @@ ${fullCatalog ? `\n[فهرس التشريعات والملفات الفلسطي�
         });
 
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error(`Model ${candidate.model} timed out after 9000ms`)), 9000)
+          setTimeout(() => reject(new Error(`Model ${candidate.model} timed out after ${timeoutMs}ms`)), timeoutMs)
         );
 
         response = await Promise.race([generatePromise, timeoutPromise]);
@@ -4959,7 +4962,7 @@ ${fullCatalog ? `\n[فهرس التشريعات والملفات الفلسطي�
         }
       } catch (e: any) {
         lastErr = e;
-        console.warn(`[AI Model] ${candidate.model} error: ${e?.message || e}, trying next candidate...`);
+        console.warn(`[AI Model] ${candidate.model} note: ${e?.message || e}, trying next candidate...`);
       }
     }
 
