@@ -1616,17 +1616,32 @@ app.post('/api/auth/register', async (req, res) => {
 
     // Check memory first
     let existingUser = db.users.find(
-      (u) => u && u.username && u.username.toLowerCase() === trimmedUsername.toLowerCase()
+      (u) => u && isMatchingUser(u, trimmedUsername)
     );
 
-    // If not found in memory, double check Firestore cloud
+    // If not found in memory, check local disk data/db.json
     if (!existingUser) {
+      try {
+        const diskPath = path.join(process.cwd(), 'data', 'db.json');
+        if (fs.existsSync(diskPath)) {
+          const diskData = JSON.parse(fs.readFileSync(diskPath, 'utf-8'));
+          if (Array.isArray(diskData?.users)) {
+            existingUser = diskData.users.find((u: any) => u && isMatchingUser(u, trimmedUsername));
+          }
+        }
+      } catch (diskErr) {
+        console.warn('Disk user lookup notice:', diskErr);
+      }
+    }
+
+    // Only query Firestore cloud if quota is NOT exceeded
+    if (!existingUser && !isQuotaExceeded()) {
       try {
         const cloudUsers = await fetchUsersFromFirestore();
         if (cloudUsers && Array.isArray(cloudUsers)) {
           db.users = cloudUsers;
           existingUser = db.users.find(
-            (u) => u && u.username && u.username.toLowerCase() === trimmedUsername.toLowerCase()
+            (u) => u && isMatchingUser(u, trimmedUsername)
           );
         }
       } catch (fErr) {
@@ -1640,7 +1655,7 @@ app.post('/api/auth/register', async (req, res) => {
 
     // Check if phone number is already registered
     if (trimmedPhone) {
-      const existingPhone = db.users.find((u) => u && u.phone && u.phone.trim() === trimmedPhone);
+      const existingPhone = db.users.find((u) => u && isMatchingUser(u, trimmedPhone));
       if (existingPhone) {
         return res.status(400).json({ error: 'رقم الجوال هذا مسجل مسبقاً بحساب آخر' });
       }

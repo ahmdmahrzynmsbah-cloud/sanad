@@ -83,8 +83,8 @@
       "status": "approved",
       "freezeReason": "",
       "username": "abed",
-      "remainingTrialDays": 20,
-      "remainingTrialHours": 3
+      "remainingTrialDays": 19,
+      "remainingTrialHours": 18
     },
     {
       "id": "user-1788886428842",
@@ -106,8 +106,8 @@
       "username": "mqb99",
       "subscribedAt": "",
       "recoveryCode": "9988",
-      "remainingTrialDays": 20,
-      "remainingTrialHours": 6
+      "remainingTrialDays": 19,
+      "remainingTrialHours": 20
     },
     {
       "id": "user-1789300631180",
@@ -129,8 +129,8 @@
       "subscriptionStatus": "trial",
       "phone": "0509998877",
       "trialEndsAt": "2026-10-30T11:57:11.180Z",
-      "remainingTrialDays": 42,
-      "remainingTrialHours": 1
+      "remainingTrialDays": 41,
+      "remainingTrialHours": 15
     },
     {
       "id": "user-1789332628388",
@@ -149,7 +149,7 @@
       "password": "1234",
       "trialStartedAt": "2026-09-13T20:50:28.388Z",
       "remainingTrialDays": 2,
-      "remainingTrialHours": 10
+      "remainingTrialHours": 0
     },
     {
       "id": "user-1789336669393",
@@ -172,7 +172,7 @@
       "fullName": "انس عبده",
       "trialDays": 47,
       "remainingTrialDays": 42,
-      "remainingTrialHours": 11
+      "remainingTrialHours": 1
     },
     {
       "id": "user-1789390667275",
@@ -190,8 +190,8 @@
       "fullName": "احمد ماهر",
       "recoveryCode": "1111",
       "reviewedAt": "2026-09-14T12:57:47.275Z",
-      "remainingTrialDays": 3,
-      "remainingTrialHours": 2
+      "remainingTrialDays": 2,
+      "remainingTrialHours": 16
     },
     {
       "id": "user-1789396673929",
@@ -209,8 +209,8 @@
       "isSubscribed": false,
       "subscriptionStatus": "trial",
       "trialDays": 7,
-      "remainingTrialDays": 3,
-      "remainingTrialHours": 3
+      "remainingTrialDays": 2,
+      "remainingTrialHours": 18
     },
     {
       "id": "user-1789397979649",
@@ -228,8 +228,8 @@
       "isSubscribed": false,
       "subscriptionStatus": "trial",
       "trialEndsAt": "2026-09-21T14:59:39.649Z",
-      "remainingTrialDays": 3,
-      "remainingTrialHours": 4
+      "remainingTrialDays": 2,
+      "remainingTrialHours": 18
     },
     {
       "id": "user-1789398047631",
@@ -250,8 +250,8 @@
       "recoveryCode": "1111",
       "trialStartedAt": "2026-09-14T15:00:47.631Z",
       "trialEndsAt": "2026-09-21T15:00:47.631Z",
-      "remainingTrialDays": 3,
-      "remainingTrialHours": 4
+      "remainingTrialDays": 2,
+      "remainingTrialHours": 19
     },
     {
       "id": "user-1789426489363",
@@ -270,7 +270,7 @@
       "recoveryCode": "11111",
       "reviewedAt": "2026-09-14T22:54:49.363Z",
       "remainingTrialDays": 3,
-      "remainingTrialHours": 12
+      "remainingTrialHours": 2
     },
     {
       "id": "user-1789486119922",
@@ -288,8 +288,25 @@
       "fullName": "عطيه",
       "trialStartedAt": "2026-09-15T15:28:39.922Z",
       "recoveryCode": "1111111",
-      "remainingTrialDays": 4,
-      "remainingTrialHours": 4
+      "remainingTrialDays": 3,
+      "remainingTrialHours": 19
+    },
+    {
+      "id": "user-1789761617425",
+      "username": "@test_mobile_user",
+      "fullName": "محمد أحمد تجربة",
+      "phone": "0599123456",
+      "recoveryCode": "1234",
+      "password": "password123",
+      "role": "user",
+      "status": "approved",
+      "createdAt": "2026-09-18T20:00:17.425Z",
+      "reviewedAt": "2026-09-18T20:00:17.425Z",
+      "subscriptionStatus": "trial",
+      "trialDays": 30,
+      "trialStartedAt": "2026-09-18T20:00:17.425Z",
+      "trialEndsAt": "2026-10-18T20:00:17.425Z",
+      "isSubscribed": false
     }
   ],
   "laws": [
@@ -2422,18 +2439,6 @@
       "description": "تعاون مهني ومعرفي لاعتماد المنظومة كمرجع ذكي موثوق لمدققي الحسابات والمحاسبين القانونيين في فلسطين في تدقيق الضرائب والبيانات المالية."
     },
     {
-      "id": "partner-1789070032495-7gzr",
-      "order": 7,
-      "createdAt": "2026-09-10T19:53:52.495Z",
-      "partnershipType": "شريك تقني وبحثي",
-      "category": "دليل مكاتب المحاسبة والتدقيق",
-      "websiteUrl": "",
-      "name": "مكتب العابد للتدقيق والمحاسبة",
-      "logoUrl": "",
-      "isActive": true,
-      "description": ""
-    },
-    {
       "id": "partner-2",
       "order": 2,
       "category": "اتحادات وقطاع خاص",
@@ -2492,6 +2497,18 @@
       "createdAt": "2026-01-01T00:00:00.000Z",
       "category": "اتحادات وقطاع خاص",
       "order": 6
+    },
+    {
+      "id": "partner-1789070032495-7gzr",
+      "order": 7,
+      "createdAt": "2026-09-10T19:53:52.495Z",
+      "partnershipType": "شريك تقني وبحثي",
+      "category": "دليل مكاتب المحاسبة والتدقيق",
+      "websiteUrl": "",
+      "name": "مكتب العابد للتدقيق والمحاسبة",
+      "logoUrl": "",
+      "isActive": true,
+      "description": ""
     }
   ],
   "relatedSiteCategories": [

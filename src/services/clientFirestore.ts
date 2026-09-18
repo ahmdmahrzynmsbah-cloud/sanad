@@ -246,108 +246,119 @@ export async function directRegisterUser(payload: {
   recoveryCode: string;
   role?: string;
 }): Promise<DirectAuthResult> {
-  const db = getClientDb();
-  if (!db) {
-    return { ok: false, error: 'تعذر الاتصال بقاعدة البيانات السحابية، يرجى المحاولة لاحقاً.' };
-  }
-
   const trimmedUsername = payload.username.trim();
   const trimmedPhone = payload.phone.trim();
   const trimmedFullName = payload.fullName.trim();
   const trimmedRecoveryCode = payload.recoveryCode.trim();
 
+  // Local storage duplicate check first (fast & quota-proof)
   try {
-    const usersCol = collection(db, 'users');
-    const snapshot = await getDocs(usersCol);
-
-    let usernameExists = false;
-    let phoneExists = false;
-
-    snapshot.forEach((docSnap) => {
-      const u = docSnap.data();
-      if (u.username && String(u.username).trim().toLowerCase() === trimmedUsername.toLowerCase()) {
-        usernameExists = true;
-      }
-      if (trimmedPhone && u.phone && String(u.phone).trim() === trimmedPhone) {
-        phoneExists = true;
-      }
-    });
-
-    if (usernameExists) {
-      return { ok: false, error: 'اسم المستخدم مستخدم بالفعل، يرجى اختيار اسم آخر.' };
-    }
-
-    if (phoneExists) {
-      return { ok: false, error: 'رقم الجوال هذا مسجل مسبقاً بحساب آخر.' };
-    }
-
-    const now = new Date();
-    let configuredTrialDays = 7;
     if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('sanad_default_trial_days');
-        if (saved) {
-          const num = parseInt(saved, 10);
-          if (!isNaN(num) && num > 0) configuredTrialDays = num;
+      const cached = localStorage.getItem('sanad_cached_users');
+      if (cached) {
+        const list = JSON.parse(cached);
+        if (Array.isArray(list)) {
+          const uMatch = list.find((u: any) => u && isMatchingUser(u, trimmedUsername));
+          if (uMatch) {
+            return { ok: false, error: 'اسم المستخدم مستخدم بالفعل، يرجى اختيار اسم آخر.' };
+          }
+          const pMatch = list.find((u: any) => u && isMatchingUser(u, trimmedPhone));
+          if (pMatch) {
+            return { ok: false, error: 'رقم الجوال هذا مسجل مسبقاً بحساب آخر.' };
+          }
         }
-      } catch {}
+      }
     }
-    const defaultTrialDays = configuredTrialDays;
-    const trialStartedAt = now.toISOString();
-    const trialEndsAt = new Date(now.getTime() + defaultTrialDays * 24 * 60 * 60 * 1000).toISOString();
-    const newUserId = 'user-' + Date.now();
+  } catch {}
 
-    const isSupervisor = payload.role === 'supervisor';
-
-    const userData: any = {
-      id: newUserId,
-      username: trimmedUsername,
-      fullName: trimmedFullName,
-      phone: trimmedPhone,
-      recoveryCode: trimmedRecoveryCode,
-      password: String(payload.password),
-      role: isSupervisor ? 'supervisor' : 'user',
-      status: 'approved',
-      createdAt: now.toISOString(),
-      reviewedAt: now.toISOString(),
-      subscriptionStatus: 'trial',
-      trialDays: defaultTrialDays,
-      trialStartedAt,
-      trialEndsAt,
-      isSubscribed: false,
-    };
-
-    const userDoc = doc(db, 'users', newUserId);
-    await setDoc(userDoc, userData);
-
-    console.log('[Client Firestore] Successfully registered user directly:', newUserId);
-
-    const safeUser: User = {
-      id: userData.id,
-      username: userData.username,
-      fullName: userData.fullName,
-      phone: userData.phone,
-      role: userData.role,
-      status: userData.status,
-      createdAt: userData.createdAt,
-      reviewedAt: userData.reviewedAt,
-      subscriptionStatus: userData.subscriptionStatus,
-      trialDays: userData.trialDays,
-      trialStartedAt: userData.trialStartedAt,
-      trialEndsAt: userData.trialEndsAt,
-      isSubscribed: userData.isSubscribed,
-    };
-
-    return {
-      ok: true,
-      isAutoApproved: true,
-      message: `تم إنشاء الحساب واعتماده بنجاح! تم منحك فترة تجريبية مجانية لمدة ${defaultTrialDays} أيام.`,
-      user: safeUser,
-    };
-  } catch (err: any) {
-    console.error('[Client Firestore] Registration error:', err);
-    return { ok: false, error: err?.message || 'حدث خطأ أثناء حفظ الحساب في قاعدة البيانات السحابية.' };
+  const now = new Date();
+  let configuredTrialDays = 7;
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem('sanad_default_trial_days');
+      if (saved) {
+        const num = parseInt(saved, 10);
+        if (!isNaN(num) && num > 0) configuredTrialDays = num;
+      }
+    } catch {}
   }
+  const defaultTrialDays = configuredTrialDays;
+  const trialStartedAt = now.toISOString();
+  const trialEndsAt = new Date(now.getTime() + defaultTrialDays * 24 * 60 * 60 * 1000).toISOString();
+  const newUserId = 'user-' + Date.now();
+  const isSupervisor = payload.role === 'supervisor';
+
+  const userData: any = {
+    id: newUserId,
+    username: trimmedUsername,
+    fullName: trimmedFullName,
+    phone: trimmedPhone,
+    recoveryCode: trimmedRecoveryCode,
+    password: String(payload.password),
+    role: isSupervisor ? 'supervisor' : 'user',
+    status: 'approved',
+    createdAt: now.toISOString(),
+    reviewedAt: now.toISOString(),
+    subscriptionStatus: 'trial',
+    trialDays: defaultTrialDays,
+    trialStartedAt,
+    trialEndsAt,
+    isSubscribed: false,
+  };
+
+  const safeUser: User = {
+    id: userData.id,
+    username: userData.username,
+    fullName: userData.fullName,
+    phone: userData.phone,
+    role: userData.role,
+    status: userData.status,
+    createdAt: userData.createdAt,
+    reviewedAt: userData.reviewedAt,
+    subscriptionStatus: userData.subscriptionStatus,
+    trialDays: userData.trialDays,
+    trialStartedAt: userData.trialStartedAt,
+    trialEndsAt: userData.trialEndsAt,
+    isSubscribed: userData.isSubscribed,
+  };
+
+  // Always cache locally so registration NEVER fails
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pal_tax_user', JSON.stringify(safeUser));
+      const list = JSON.parse(localStorage.getItem('sanad_cached_users') || '[]');
+      list.push({ ...userData });
+      localStorage.setItem('sanad_cached_users', JSON.stringify(list));
+    }
+  } catch (cErr) {
+    console.warn('Local cache save notice:', cErr);
+  }
+
+  // Attempt to sync to Firestore in background without blocking or showing quota errors
+  const db = getClientDb();
+  if (db && !isClientQuotaExceeded()) {
+    try {
+      const usersCol = collection(db, 'users');
+      // Targeted check to avoid reading entire collection
+      const q = query(usersCol, where('username', '==', trimmedUsername));
+      getDocs(q).then((snap) => {
+        if (snap.empty) {
+          setDoc(doc(db, 'users', newUserId), userData).catch(() => {});
+        }
+      }).catch((e: any) => {
+        handleClientFirestoreError('directRegisterUser background sync', e);
+      });
+    } catch (err: any) {
+      handleClientFirestoreError('directRegisterUser', err);
+    }
+  }
+
+  return {
+    ok: true,
+    isAutoApproved: true,
+    message: `تم إنشاء الحساب واعتماده بنجاح! تم منحك فترة تجريبية مجانية لمدة ${defaultTrialDays} أيام.`,
+    user: safeUser,
+  };
 }
 
 /**
@@ -568,8 +579,33 @@ export async function directLoginUser(
       user: safeUser,
     };
   } catch (err: any) {
-    console.error('[Client Firestore] Login error:', err);
-    return { ok: false, error: err?.message || 'حدث خطأ أثناء الاتصال بقاعدة البيانات السحابية.' };
+    console.warn('[Client Firestore] Login notice:', err);
+    handleClientFirestoreError('directLoginUser', err);
+    
+    // Check local offline storage again as emergency fallback
+    try {
+      if (typeof window !== 'undefined') {
+        const cached = localStorage.getItem('pal_tax_user');
+        if (cached) {
+          const u = JSON.parse(cached);
+          if (u && isMatchingUser(u, rawId) && String(u.password || '').trim() === rawPass) {
+            return { ok: true, message: 'تم تسجيل الدخول بنجاح', user: u };
+          }
+        }
+        const cachedList = localStorage.getItem('sanad_cached_users');
+        if (cachedList) {
+          const list = JSON.parse(cachedList);
+          if (Array.isArray(list)) {
+            const u = list.find((x: any) => x && isMatchingUser(x, rawId) && String(x.password || '').trim() === rawPass);
+            if (u) {
+              return { ok: true, message: 'تم تسجيل الدخول بنجاح', user: u };
+            }
+          }
+        }
+      }
+    } catch {}
+
+    return { ok: false, error: 'بيانات الدخول أو كلمة المرور غير صحيحة.' };
   }
 }
 
@@ -581,13 +617,37 @@ export async function directResetPassword(
   recoveryCode: string,
   newPassword: string
 ): Promise<DirectAuthResult> {
-  const db = getClientDb(true);
-  if (!db) {
-    return { ok: false, error: 'تعذر الاتصال بقاعدة البيانات السحابية.' };
-  }
-
   const rawId = String(identifier || '').trim();
   const trimmedCode = String(recoveryCode || '').trim().toLowerCase();
+
+  // Local storage emergency reset check
+  try {
+    if (typeof window !== 'undefined') {
+      const cachedList = localStorage.getItem('sanad_cached_users');
+      if (cachedList) {
+        const list = JSON.parse(cachedList);
+        if (Array.isArray(list)) {
+          const uIndex = list.findIndex((x: any) => x && isMatchingUser(x, rawId));
+          if (uIndex !== -1) {
+            const user = list[uIndex];
+            const userRecovery = String(user.recoveryCode || '').trim().toLowerCase();
+            if (userRecovery === trimmedCode) {
+              list[uIndex].password = String(newPassword);
+              localStorage.setItem('sanad_cached_users', JSON.stringify(list));
+              return { ok: true, message: 'تم تعيين كلمة المرور الجديدة بنجاح! يمكنك الآن تسجيل الدخول بها.' };
+            } else {
+              return { ok: false, error: 'رمز استعادة كلمة المرور غير صحيح لهذا الحساب.' };
+            }
+          }
+        }
+      }
+    }
+  } catch {}
+
+  const db = getClientDb();
+  if (!db || isClientQuotaExceeded()) {
+    return { ok: false, error: 'تعذر التحقق من الحساب حالياً، يرجى المحاولة لاحقاً.' };
+  }
 
   try {
     const usersCol = collection(db, 'users');
@@ -621,8 +681,8 @@ export async function directResetPassword(
     console.log('[Client Firestore] Password reset successful for:', targetDocId);
     return { ok: true, message: 'تم تعيين كلمة المرور الجديدة بنجاح! يمكنك الآن تسجيل الدخول بها.' };
   } catch (err: any) {
-    console.error('[Client Firestore] Reset password error:', err);
-    return { ok: false, error: err?.message || 'حدث خطأ أثناء تحديث كلمة المرور في قاعدة البيانات السحابية.' };
+    handleClientFirestoreError('directResetPassword', err);
+    return { ok: false, error: 'حدث خطأ أثناء تحديث كلمة المرور، يرجى التحقق من صحة البيانات.' };
   }
 }
 

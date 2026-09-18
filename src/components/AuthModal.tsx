@@ -80,8 +80,28 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [rejectedUser, setRejectedUser] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const setCleanError = (rawMsg: string | null) => {
+    if (!rawMsg) {
+      setError(null);
+      return;
+    }
+    const msg = String(rawMsg);
+    if (
+      msg.includes('Quota') ||
+      msg.includes('quota') ||
+      msg.includes('RESOURCE_EXHAUSTED') ||
+      msg.includes('Free daily read units') ||
+      msg.includes('firestore.googleapis.com') ||
+      msg.includes('resource-exhausted')
+    ) {
+      setError('تعذر استكمال المزامنة السحابية مؤقتاً، يرجى إعادة المحاولة.');
+      return;
+    }
+    setError(msg);
+  };
+
   const resetStates = () => {
-    setError(null);
+    setCleanError(null);
     setSuccessMessage(null);
     setPendingStatusUser(null);
     setRejectedUser(null);
@@ -95,12 +115,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     const pass = password.trim();
 
     if (!cleanUsername && !raw) {
-      setError('يرجى إدخال اسم المستخدم أو رقم الجوال، وكلمة المرور.');
+      setCleanError('يرجى إدخال اسم المستخدم أو رقم الجوال، وكلمة المرور.');
       return;
     }
 
     if (!pass) {
-      setError('يرجى إدخال كلمة المرور.');
+      setCleanError('يرجى إدخال كلمة المرور.');
       return;
     }
 
@@ -143,7 +163,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
           // Business logic rejection from server (e.g. wrong credentials or pending/frozen)
           if (res.status === 401) {
-            setError(parsed.error || 'بيانات الدخول أو كلمة المرور غير صحيحة');
+            setCleanError(parsed.error || 'بيانات الدخول أو كلمة المرور غير صحيحة');
             return;
           }
 
@@ -153,7 +173,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             } else if (parsed.data.status === 'rejected') {
               setRejectedUser(parsed.data.username || targetIdentifier);
             } else {
-              setError(parsed.error || parsed.data.error || 'الحساب غير متاح حالياً');
+              setCleanError(parsed.error || parsed.data.error || 'الحساب غير متاح حالياً');
             }
             return;
           }
@@ -191,15 +211,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         }
 
         if (direct.status === 'frozen') {
-          setError(direct.error || 'تم تجميد حسابك لانتهاء الفترة التجريبية المحددة.');
+          setCleanError(direct.error || 'تم تجميد حسابك لانتهاء الفترة التجريبية المحددة.');
           return;
         }
 
-        setError(direct.error || serverErrorMsg || 'بيانات الدخول أو كلمة المرور غير صحيحة.');
+        setCleanError(direct.error || serverErrorMsg || 'بيانات الدخول أو كلمة المرور غير صحيحة.');
       }
     } catch (err: any) {
       console.error('Login error:', err);
-      setError(err?.message || 'تعذر تسجيل الدخول، يرجى التحقق من الاتصال بالإنترنت.');
+      setCleanError(err?.message || 'تعذر تسجيل الدخول، يرجى التحقق من الاتصال بالإنترنت.');
     } finally {
       setLoading(false);
     }
@@ -216,32 +236,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     const cleanRecovery = recoveryCode.trim();
 
     if (!cleanFullName) {
-      setError('يرجى إدخال الاسم الكامل الثلاثي أو الرباعي.');
+      setCleanError('يرجى إدخال الاسم الكامل الثلاثي أو الرباعي.');
       return;
     }
 
     if (!cleanPhone) {
-      setError('يرجى إدخال رقم الجوال.');
+      setCleanError('يرجى إدخال رقم الجوال.');
       return;
     }
 
     if (!targetUsername) {
-      setError('يرجى تحديد اسم مستخدم لتسجيل الدخول.');
+      setCleanError('يرجى تحديد اسم مستخدم لتسجيل الدخول.');
       return;
     }
 
     if (targetUsername.length < 3) {
-      setError('يجب أن يتكون اسم المستخدم من 3 أحرف على الأقل.');
+      setCleanError('يجب أن يتكون اسم المستخدم من 3 أحرف على الأقل.');
       return;
     }
 
     if (!password || password.length < 4) {
-      setError('يجب ألا تقل كلمة المرور عن 4 خانات.');
+      setCleanError('يجب ألا تقل كلمة المرور عن 4 خانات.');
       return;
     }
 
     if (!cleanRecovery) {
-      setError('يرجى كتابة رمز سري لتعيين واستعادة كلمة المرور في حال نسيانها.');
+      setCleanError('يرجى كتابة رمز سري لتعيين واستعادة كلمة المرور في حال نسيانها.');
       return;
     }
 
@@ -289,7 +309,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         // Explicit validation error (400)
         if (res.status === 400) {
-          setError(parsed.error || 'البيانات المدخلة غير صحيحة أو مستخدمة مسبقاً.');
+          setCleanError(parsed.error || 'البيانات المدخلة غير صحيحة أو مستخدمة مسبقاً.');
           return;
         }
 
@@ -324,11 +344,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           return;
         }
 
-        setError(direct.error || serverErrorMsg || 'تعذر إنشاء الحساب، يرجى المحاولة مرة أخرى.');
+        setCleanError(direct.error || serverErrorMsg || 'تعذر إنشاء الحساب، يرجى المحاولة مرة أخرى.');
       }
     } catch (err: any) {
       console.error('Register error:', err);
-      setError(err?.message || 'تعذر الاتصال بالخادم أثناء التسجيل.');
+      setCleanError(err?.message || 'تعذر الاتصال بالخادم أثناء التسجيل.');
     } finally {
       setLoading(false);
     }
@@ -343,22 +363,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     const cleanRecoveryCode = resetRecoveryCode.trim();
 
     if (!targetResetId) {
-      setError('يرجى إدخال اسم المستخدم أو رقم الجوال المسجل.');
+      setCleanError('يرجى إدخال اسم المستخدم أو رقم الجوال المسجل.');
       return;
     }
 
     if (!cleanRecoveryCode) {
-      setError('يرجى إدخال رمز الأمان واستعادة كلمة المرور الذي حددته عند التسجيل.');
+      setCleanError('يرجى إدخال رمز الأمان واستعادة كلمة المرور الذي حددته عند التسجيل.');
       return;
     }
 
     if (!resetNewPassword || resetNewPassword.length < 4) {
-      setError('يجب ألا تقل كلمة المرور الجديدة عن 4 خانات.');
+      setCleanError('يجب ألا تقل كلمة المرور الجديدة عن 4 خانات.');
       return;
     }
 
     if (resetNewPassword !== resetConfirmPassword) {
-      setError('كلمتا المرور غير متطابقتين، يرجى التحقق.');
+      setCleanError('كلمتا المرور غير متطابقتين، يرجى التحقق.');
       return;
     }
 
@@ -392,7 +412,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         }
 
         if (res.status === 400 || res.status === 404) {
-          setError(parsed.error || 'رمز الاستعادة غير صحيح أو الحساب غير موجود.');
+          setCleanError(parsed.error || 'رمز الاستعادة غير صحيح أو الحساب غير موجود.');
           return;
         }
 
@@ -422,11 +442,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           return;
         }
 
-        setError(direct.error || serverErrorMsg || 'فشلت عملية تعيين كلمة المرور، يرجى التأكد من صحة رمز الأمان.');
+        setCleanError(direct.error || serverErrorMsg || 'فشلت عملية تعيين كلمة المرور، يرجى التأكد من صحة رمز الأمان.');
       }
     } catch (err: any) {
       console.error('Reset password error:', err);
-      setError(err?.message || 'تعذر الاتصال بالخادم.');
+      setCleanError(err?.message || 'تعذر الاتصال بالخادم.');
     } finally {
       setLoading(false);
     }
