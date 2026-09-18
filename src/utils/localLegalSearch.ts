@@ -9,103 +9,24 @@ export interface LegalChunk {
   score?: number;
 }
 
-// Normalize Arabic text for robust search and matching
-export function normalizeArabic(text: string): string {
-  if (!text) return '';
-  return text
-    .replace(/[\u064B-\u065F\u0670]/g, '') // Remove tashkeel/harakat
-    .replace(/[أإآء]/g, 'ا')
-    .replace(/ة/g, 'ه')
-    .replace(/ى/g, 'ي')
-    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-    .toLowerCase()
-    .trim();
-}
-
-const ARABIC_STOPWORDS = new Set([
-  'هل', 'ما', 'ماذا', 'من', 'في', 'علي', 'على', 'الي', 'الى', 'عن', 'مع', 'هذا', 'هذه', 'ذلك', 'تلك',
-  'هو', 'هي', 'هم', 'نحن', 'انت', 'أنت', 'انا', 'أنا', 'كان', 'كانت', 'يكون', 'تكون', 'ليس',
-  'لن', 'لم', 'ان', 'أن', 'لو', 'اذا', 'إذا', 'كيف', 'اين', 'أين', 'متى', 'كم', 'لماذا', 'ليه',
-  'شو', 'ايش', 'اي', 'أي', 'بعض', 'كل', 'غير', 'سوى', 'فقط', 'حتى', 'حيث', 'حين', 'قبل', 'بعد',
-  'عند', 'لدى', 'مثل', 'نحو', 'ضد', 'حول', 'دون', 'قد', 'تم', 'يتم', 'قام', 'قامت', 'قال', 'قالت',
-  'ذكر', 'عرف', 'تعرف', 'اود', 'أود', 'اريد', 'أريد', 'استفسار', 'سؤال', 'تخبرني', 'تقول', 'اعرف', 'أعرف',
-  'بدي', 'عايز', 'انسان', 'إنسان', 'شخص', 'بشر', 'شيء', 'حاجة', 'ممكن', 'مرحبا', 'شكرا'
-]);
-
-// Extract meaningful search tokens and stemming prefixes
-export function extractSearchTokens(text: string): string[] {
-  const norm = normalizeArabic(text);
-  const words = norm.split(/\s+/).filter((w) => w.length >= 2);
-  const tokens = new Set<string>();
-
-  for (const w of words) {
-    if (ARABIC_STOPWORDS.has(w)) continue;
-    tokens.add(w);
-
-    // Strip prefix 'ال'
-    if (w.startsWith('ال') && w.length >= 4) {
-      tokens.add(w.slice(2));
-    }
-    // Strip prefixes 'ل', 'و', 'ف', 'ب', 'ك'
-    if ((w.startsWith('ل') || w.startsWith('و') || w.startsWith('ف') || w.startsWith('ب') || w.startsWith('ك')) && w.length >= 4) {
-      tokens.add(w.slice(1));
-      if (w.slice(1).startsWith('ال') && w.length >= 6) {
-        tokens.add(w.slice(3));
-      }
-    }
-
-    // Common legal root and keyword expansions
-    if (w.includes('ممول') || w.includes('تمويل')) {
-      tokens.add('ممول');
-      tokens.add('تمويل');
-      tokens.add('ارهاب');
-    }
-    if (w.includes('ارهاب')) {
-      tokens.add('ارهاب');
-      tokens.add('تمويل');
-    }
-    if (w.includes('غسل')) {
-      tokens.add('غسل');
-      tokens.add('اموال');
-    }
-    if (w.includes('شيك')) {
-      tokens.add('شيك');
-      tokens.add('شيكات');
-      tokens.add('رصيد');
-    }
-  }
-  return Array.from(tokens);
-}
-
 /**
- * Check if a query is truly about laws, taxes, or customs (or a conversational follow-up / objection)
+ * Check if a query is truly about laws, taxes, or customs
  */
-export function isLegalTaxCustomsQuery(query: string, rawHistory?: any[]): boolean {
+export function isLegalTaxCustomsQuery(query: string): boolean {
   if (!query || typeof query !== 'string') return false;
   const q = query.trim().toLowerCase();
   const cleaned = q.replace(/[!؟?.,،:\-\s]+/g, ' ');
 
-  // 1. Explicit conversational objections, review requests, and follow-ups:
-  // e.g. "عندك يباشا ف قاعدة المعرفه راجع نفسك", "موجودة عندك", "راجع نفسك", "دور كويس"
-  const isObjectionOrReview = /(عندك|يباشا|يا باشا|ف قاعدة المعرفة|في قاعدة المعرفة|قاعدة المعرفة|قاعدة المعرفه|راجع نفسك|راجع|دور كويس|تأكد|موجود|موجودة|مش موجود|ازاي|ليه مش موجود|ليه مفيش|مفيش|طب و|وماذا عن|والعقوبة|والسجن|والغرامة|والشركاء|والشركات|طب بالنسبة|يعني ايه)/i.test(
-    cleaned
-  );
-
-  if (isObjectionOrReview) {
-    return true;
-  }
-
-  // 2. Explicit conversational greetings when occurring alone
+  // 1. Explicit conversational greetings, personal inquiries, and identity questions
   if (
     /^(عامل ايه|عامل اي|عامل إيه|عامل إي|ازيك|إزيك|كيفك|كيف حالك|شخبارك|أخبارك|شو أخبارك|شو اخبارك|طمني عنك|طمنا عنك|كيف الأمور|صباح الخير|مساء الخير|سلام|السلام عليكم|سلام عليكم|مرحبا|مرحباً|أهلا|اهلا|هاي|hello|hi)\b/i.test(
       cleaned
-    ) &&
-    !isObjectionOrReview
+    )
   ) {
     return false;
   }
 
-  // 3. Identity & bot nature questions
+  // 2. Identity & bot nature questions
   if (
     /(انت انسان|أنت إنسان|هل انت انسان|هل أنت إنسان|هل انت بشر|هل أنت بشر|هل انت روبوت|هل أنت روبوت|هل انت شخص|انت شخص|هل انت ai|هل انت ذكاء اصطناعي|من انت|مين انت|من أنت|ما اسمك|شو اسمك|عرفني بنفسك|عرف عن نفسك|ما وظيفتك|شو وظيفتك|مين طورك|مين برمجك)/i.test(
       cleaned
@@ -114,7 +35,7 @@ export function isLegalTaxCustomsQuery(query: string, rawHistory?: any[]): boole
     return false;
   }
 
-  // 4. Clear non-legal general knowledge topics
+  // 3. Clear non-legal general knowledge topics (religion, personalities, sports, science, culture, history, geography)
   if (
     /(محمد صلاح|ميسي|رونالدو|كرة القدم|الرياضة|الدين الإسلامي|دين الاسلام|الإسلام|الاسلام|القرآن|الحديث|الصلاة|الصيام|الحج|الزكاة|النبي|الرسول|الصحابة|الفيزياء|الكيمياء|الطب|الفلك|الفضاء|الطقس|التاريخ|الجغرافيا|الفلسفة|البرمجة|الرياضيات|معنى كلمة|قصة|نكتة|شعر|طبخ|عاصمة|من هو|من هي|ما هو|ما هي|ماذا تعرف عن)/i.test(
       cleaned
@@ -126,21 +47,8 @@ export function isLegalTaxCustomsQuery(query: string, rawHistory?: any[]): boole
     return false;
   }
 
-  // 5. Check if recent conversation history was about legal topics
-  if (Array.isArray(rawHistory) && rawHistory.length > 0) {
-    const recentUserMsgs = rawHistory
-      .filter((m) => m && (m.sender === 'user' || m.role === 'user'))
-      .slice(-3);
-    for (const m of recentUserMsgs) {
-      const text = typeof m.text === 'string' ? m.text : '';
-      if (/(قانون|تشريع|مرسوم|قرار|مادة|ضريبة|ضرائب|جمارك|جمرك|إرهاب|ارهاب|غسل|اموال|أموال|ممول|تمويل|عقوبة|سجن|حبس|غرامة|شيك|شركة|شركات)/i.test(text)) {
-        return true;
-      }
-    }
-  }
-
-  // 6. Strict legal, tax, and customs keywords
-  const legalTermsRegex = /(قانون|قوانين|تشريع|تشريعات|مرسوم|قرار بقانون|مادة|مواد|لائحة|لوائح|ضريبة|ضرائب|ضريبي|ضريبية|جمارك|جمرك|جمركي|جمركية|بيان جمركي|رسوم جمركية|تعرفة جمركية|طرد بريدي|إعفاء ضريبي|إعفاءات|دخل كلي|ضريبة دخل|قيمة مضافة|مكوس|غرامة تأخير|عقوبة|عقوبات|سجن|حبس|مصادرة|محكمة الصلح|وزارة المالية|دائرة الجمارك|مكافحة غسل الأموال|غسل الأموال|تمويل الإرهاب|تمويل الارهاب|ممول|فحص ضريبي|تهرب ضريبي|سجل تجاري|فاتورة ضريبية|مقاصة|شيك بدون رصيد)/i;
+  // 4. Strict legal & tax keywords
+  const legalTermsRegex = /(قانون|قوانين|تشريع|تشريعات|مرسوم|قرار بقانون|مادة|مواد|لائحة|لوائح|ضريبة|ضرائب|ضريبي|ضريبية|جمارك|جمرك|جمركي|جمركية|بيان جمركي|رسوم جمركية|تعرفة جمركية|طرد بريدي|إعفاء ضريبي|إعفاءات|دخل كلي|ضريبة دخل|قيمة مضافة|مكوس|غرامة تأخير|عقوبة|محكمة الصلح|وزارة المالية|دائرة الجمارك|مكافحة غسل الأموال|فحص ضريبي|تهرب ضريبي|سجل تجاري|فاتورة ضريبية|مقاصة)/i;
 
   return legalTermsRegex.test(q);
 }
@@ -149,6 +57,7 @@ export function isLegalTaxCustomsQuery(query: string, rawHistory?: any[]): boole
  * Helper to extract law issuance year / date from title or text
  */
 function extractLawTiming(title: string, text: string): string {
+  // Check for "لسنة 2022م" or "لسنة 2011"
   const matchYear = title.match(/(?:لسنة|عام)\s*(\d{4})[م|هـ]?/i) || text.match(/(?:لسنة|عام)\s*(\d{4})[م|هـ]?/i);
   if (matchYear && matchYear[1]) {
     return `لسنة ${matchYear[1]}م`;
@@ -174,12 +83,13 @@ function extractConciseSummary(text: string): string {
     .filter((l) => Boolean(l) && !l.startsWith('مادة (') && !l.startsWith('المادة ('));
 
   if (lines.length === 0) {
-    return text.substring(0, 300).trim() + (text.length > 300 ? '...' : '');
+    return text.substring(0, 180).trim() + (text.length > 180 ? '...' : '');
   }
 
-  const keyLines = lines.slice(0, 4).join(' ');
-  if (keyLines.length > 400) {
-    return keyLines.substring(0, 390).trim() + '...';
+  // Take the first 2-3 essential lines
+  const keyLines = lines.slice(0, 3).join(' ');
+  if (keyLines.length > 250) {
+    return keyLines.substring(0, 240).trim() + '...';
   }
   return keyLines;
 }
@@ -188,48 +98,67 @@ function extractConciseSummary(text: string): string {
  * Splits law text into logical sections / articles for precise matching
  */
 export function chunkLawContent(law: Law): LegalChunk[] {
-  const content = law.content || '';
+  const text = law.content || '';
   const chunks: LegalChunk[] = [];
 
-  const regex = /(?:^|\s+|[\.\:\-\n])((?:المادة|مادة|البند|الفصل|الفرع|القسم)\s*(?:\(\s*\d+\s*\)|\d+[\s:.\-]|[IVXLCDM]+))/gi;
-  let match: RegExpExecArray | null;
-  let lastIndex = 0;
-  let currentHeader = 'مقدمة / أحكام عامة';
+  const rawSections = text.split(/(?=(?:المادة|مادة|الباب|الفصل|أولاً|ثانياً|ثالثاً|رابعاً|خامساً)\s*[\d\(\)]+)/i);
 
-  while ((match = regex.exec(content)) !== null) {
-    const startOfMatch = match.index;
-    const chunkText = content.substring(lastIndex, startOfMatch).trim();
-    if (chunkText.length > 25) {
+  for (const rawSec of rawSections) {
+    const trimmed = rawSec.trim();
+    if (!trimmed) continue;
+
+    const firstLineEnd = trimmed.indexOf('\n');
+    let header = firstLineEnd !== -1 ? trimmed.substring(0, firstLineEnd).trim() : trimmed.substring(0, 50).trim();
+    if (header.length > 60) header = header.substring(0, 60) + '...';
+
+    if (trimmed.length > 2500) {
+      const paragraphs = trimmed.split(/\n\s*\n/);
+      let currentSub = '';
+      let partIdx = 1;
+      for (const p of paragraphs) {
+        if ((currentSub + '\n' + p).length > 2000) {
+          if (currentSub.trim()) {
+            chunks.push({
+              lawId: law.id,
+              lawTitle: law.title,
+              category: law.category || 'جمارك',
+              sectionHeader: `${header} (جزء ${partIdx})`,
+              text: currentSub.trim(),
+            });
+            partIdx++;
+          }
+          currentSub = p;
+        } else {
+          currentSub += (currentSub ? '\n' : '') + p;
+        }
+      }
+      if (currentSub.trim()) {
+        chunks.push({
+          lawId: law.id,
+          lawTitle: law.title,
+          category: law.category || 'جمارك',
+          sectionHeader: `${header} (جزء ${partIdx})`,
+          text: currentSub.trim(),
+        });
+      }
+    } else {
       chunks.push({
         lawId: law.id,
         lawTitle: law.title,
-        category: law.category || 'عام',
-        sectionHeader: currentHeader,
-        text: chunkText,
+        category: law.category || 'جمارك',
+        sectionHeader: header,
+        text: trimmed,
       });
     }
-    currentHeader = match[1].trim();
-    lastIndex = startOfMatch + match[0].length;
   }
 
-  const remaining = content.substring(lastIndex).trim();
-  if (remaining.length > 25) {
+  if (chunks.length === 0 && text.trim()) {
     chunks.push({
       lawId: law.id,
       lawTitle: law.title,
-      category: law.category || 'عام',
-      sectionHeader: currentHeader,
-      text: remaining,
-    });
-  }
-
-  if (chunks.length === 0 && content.trim()) {
-    chunks.push({
-      lawId: law.id,
-      lawTitle: law.title,
-      category: law.category || 'عام',
-      sectionHeader: 'كامل النص المعتمد',
-      text: content.trim().substring(0, 6000),
+      category: law.category || 'جمارك',
+      sectionHeader: 'كامل النص',
+      text: text.trim().substring(0, 3000),
     });
   }
 
@@ -240,7 +169,7 @@ export function chunkLawContent(law: Law): LegalChunk[] {
  * Intelligent comprehensive assistant response engine
  * Handles BOTH general world knowledge/chat AND precise simplified legal citations
  */
-export function generateClientKnowledgeFallback(query: string, laws: Law[], rawHistory?: any[]): string {
+export function generateClientKnowledgeFallback(query: string, laws: Law[]): string {
   const trimmed = query.trim().toLowerCase();
   const cleaned = trimmed.replace(/[!؟?.,،:\-\s]+/g, ' ');
 
@@ -289,85 +218,66 @@ export function generateClientKnowledgeFallback(query: string, laws: Law[], rawH
   }
 
   // 5. If NOT a legal/tax/customs query: answer as a smart, clear virtual assistant persona
-  const isLegal = isLegalTaxCustomsQuery(query, rawHistory);
-  if (!isLegal) {
+  if (!isLegalTaxCustomsQuery(query)) {
     return `أهلاً بك! بصفتي شخصيتك الافتراضية ومساعدك الذكي «سَنَد»، يسعدني جداً الإجابة على أي سؤال أو استفسار عام في أي مجال (العلوم، الثقافة، الرياضة، التقنية، اللغات، أو الحوار اليومي).\n\nتفضل بطرح سؤالك بمزيد من التفصيل وسأجيبك فوراً بكل وضوح وسلاسة.`;
   }
 
   // 6. LEGAL / TAX / CUSTOMS QUERY
-  let searchContext = query;
-  if (Array.isArray(rawHistory) && rawHistory.length > 0) {
-    const recentUserTexts = rawHistory
-      .filter((m) => m && (m.sender === 'user' || m.role === 'user'))
-      .slice(-3)
-      .map((m) => (typeof m.text === 'string' ? m.text : ''))
-      .join(' ');
-    searchContext = `${recentUserTexts} ${query}`.trim();
+  const normalizedQuery = query.toLowerCase();
+  const keywords = normalizedQuery
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length >= 3 && !['قانون', 'مرسوم', 'سنة', 'قرار', 'مادة'].includes(w));
+
+  if (keywords.length === 0) {
+    return `📋 **يرجى تزويدي بالتفاصيل الإضافية التالية قبل العرض:**\n1. سنة المعاملة المالية أو الضريبية.\n2. صفة المكلف (فرد طبيعي أم شركة).\n3. نوع السلعة أو الخدمة موضوع الاستفسار.\n\nتفضل بتحديد هذه التفاصيل وسأصوغ لك الحكم القانوني بدقة مع ذكر المادة والقانون المصدر.`;
   }
 
-  const tokens = extractSearchTokens(searchContext);
-
-  // Check if query was an objection / correction / discussion
-  const isObjection = /(عندك|يباشا|يا باشا|ف قاعدة المعرفة|في قاعدة المعرفة|قاعدة المعرفة|قاعدة المعرفه|راجع نفسك|راجع|دور كويس|تأكد|موجود|موجودة|مش موجود|ازاي|ليه مفيش)/i.test(cleaned);
-
-  // Score individual chunks across all laws
+  // Score chunks across available laws
   const allChunks: LegalChunk[] = [];
   for (const law of laws) {
     const lawChunks = chunkLawContent(law);
     for (const chunk of lawChunks) {
-      const normText = normalizeArabic(chunk.text);
-      const normHeader = normalizeArabic(chunk.sectionHeader);
-      const normTitle = normalizeArabic(chunk.lawTitle);
-      const fullNorm = `${normTitle} ${normHeader} ${normText}`;
-
+      const fullText = (chunk.lawTitle + ' ' + chunk.category + ' ' + chunk.sectionHeader + ' ' + chunk.text).toLowerCase();
       let score = 0;
-      for (const token of tokens) {
-        if (fullNorm.includes(token)) {
-          score += 2;
-          if (normHeader.includes(token)) score += 4;
-          if (normTitle.includes(token)) score += 3;
+      for (const word of keywords) {
+        if (fullText.includes(word)) {
+          score += 1;
+          if (chunk.sectionHeader.toLowerCase().includes(word) || chunk.lawTitle.toLowerCase().includes(word)) {
+            score += 2;
+          }
         }
       }
-
-      if (tokens.some((t) => ['ارهاب', 'ممول', 'تمويل'].includes(t))) {
-        if (normText.includes('تمويل الارهاب') || normText.includes('ممول الارهاب')) score += 15;
-        if (normText.includes('عقوبه جريمه تمويل الارهاب') || normHeader.includes('57')) score += 25;
-        if (normTitle.includes('39') || normTitle.includes('غسل الاموال')) score += 10;
-      }
-
-      if (score >= 4) {
-        allChunks.push({ ...chunk, score });
-      }
+      chunk.score = score;
+      if (score >= 2) allChunks.push(chunk);
     }
   }
 
   allChunks.sort((a, b) => (b.score || 0) - (a.score || 0));
   const topChunk = allChunks[0];
 
-  if (topChunk && (topChunk.score || 0) >= 4) {
+  if (topChunk && (topChunk.score || 0) >= 2) {
     const timing = extractLawTiming(topChunk.lawTitle, topChunk.text);
     const summary = extractConciseSummary(topChunk.text);
 
-    let result = '';
-    if (isObjection) {
-      result += `أعتذر منك تماماً يا فندم، معك كل الحق! بالتدقيق والمراجعة الشاملة لقاعدة المعرفة والتشريعات المعتمدة لدينا:\n\n`;
-    }
-
+    let result = `📋 **لتحديد الحكم الدقيق لحالتك الخاصة، يرجى تزويدي بالتفاصيل الإضافية التالية أولاً:**\n`;
+    result += `• **سنة المعاملة:** (لتحديد النظام المالي أو جدول الشرائح الساري في تلك السنة).\n`;
+    result += `• **صفة المكلف:** (هل أنت فرد طبيعي/موظف أم شركة تجارية/مساهمة؟).\n`;
+    result += `• **طبيعة النشاط أو السلعة:** (لتطبيق الإعفاءات أو النسب الخاصة بالنشاط).\n\n`;
+    result += `---\n\n`;
     result += `⚖️ **السند القانوني والمادة المحددة:**\n`;
-    result += `• **التشريع المصدر:** ${topChunk.lawTitle} (${timing})\n`;
-    result += `• **المادة المعتمدة:** ${topChunk.sectionHeader}\n\n`;
-    result += `📋 **الحكم القانوني والعقوبات المقررة بالتفصيل:**\n`;
+    result += `• **القانون المصدر:** ${topChunk.lawTitle} (${timing})\n`;
+    result += `• **المادة المحددة:** ${topChunk.sectionHeader}\n\n`;
+    result += `💡 **خلاصة الحكم القانوني باختصار:**\n`;
     result += `${summary}\n\n`;
-    result += `💡 **توضيح وتفاصيل إضافية:**\n`;
-    result += `• تم استخراج هذا النص بدقة من التشريعات المعتمدة في قاعدة المعرفة. إذا كنت ترغب في معرفة عقوبات الشركاء، أو الشخص الاعتباري، أو تدابير المصادرة، يسعدني تفصيلها لك فوراً.`;
+    result += `*(تم استخراج السند والمادة باختصار وبشكل مرتب دون الحاجة لسرد مجلدات القانون كاملة)*`;
     return result;
   }
 
-  let promptForDetails = `أهلاً بك يا فندم. بالتدقيق في نصوص وتشريعات قاعدة المعرفة المعتمدة، يسعدني مناقشة هذا الموضوع معك بالتفصيل والصياغة القانونية السليمة.\n\n`;
-  promptForDetails += `📋 **لتحديد النص والمادة القانونية الدقيقة المنطبقة على استفسارك، يرجى تزويدي بأحد التفاصيل التالية:**\n`;
+  let promptForDetails = `📋 **لتحديد الحكم الدقيق لحالتك الخاصة، يرجى تزويدي بالتفاصيل الإضافية التالية:**\n`;
   promptForDetails += `• سنة المعاملة المالية أو التصريح.\n`;
-  promptForDetails += `• صفة المكلف (فرد طبيعي أم شركة تجارية).\n`;
-  promptForDetails += `• رقم المادة أو موضوع الواقعة بالتحديد.\n\n`;
-  promptForDetails += `وسأصوغ لك الحكم مرتباً ومقتضباً مع سنده القانوني وتاريخ نفاذه مباشرة.`;
+  promptForDetails += `• صفة المكلف (فرد طبيعي أم شركة).\n`;
+  promptForDetails += `• رقم المادة أو المعاملة الجمركية/الضريبية المستهدفة.\n\n`;
+  promptForDetails += `⚖️ **إفادة استشارية أولية:** لم يتم العثور على مادة مطابقة تماماً بهذا اللفظ في قاعدة التشريعات المسجلة حالياً. بمجرد تزويدنا بالتفاصيل أعلاه سنصيغ لك الحكم مرتباً ومقتضباً مع سنده القانوني مباشرة.`;
   return promptForDetails;
 }

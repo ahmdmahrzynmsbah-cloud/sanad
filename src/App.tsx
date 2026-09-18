@@ -15,7 +15,6 @@ import { SubmitLawModal } from './components/SubmitLawModal';
 import { User, SystemBranding, PlatformAboutData, ContactInfo } from './types';
 import { Scale, ShieldAlert, Clock, LogOut, ArrowRight, BookOpen } from 'lucide-react';
 import { initGlobalSync, useSync } from './utils/sync';
-import { SEED_LAWS } from './data/seedLaws';
 import {
   directFetchBrandingFromFirestore,
   directFetchPlatformAboutFromFirestore,
@@ -76,7 +75,7 @@ export default function App() {
     activeViewRef.current = activeView;
   }, [activeView]);
 
-  const [lawsCount, setLawsCount] = useState<number>(() => SEED_LAWS.length);
+  const [lawsCount, setLawsCount] = useState<number>(3);
   const [showWelcomeModal, setShowWelcomeModal] = useState<boolean>(() => {
     return localStorage.getItem('sanad_welcome_seen') !== 'true';
   });
@@ -102,7 +101,7 @@ export default function App() {
     try {
       const res = await fetch(`/api/laws?_t=${Date.now()}`, { cache: 'no-store' });
       const data = await res.json();
-      if (res.ok && data.laws && Array.isArray(data.laws) && data.laws.length > 0) {
+      if (res.ok && data.laws) {
         loadedCount = data.laws.length;
       }
     } catch (err) {
@@ -119,11 +118,7 @@ export default function App() {
       console.warn('Direct Firestore laws count notice:', fsErr);
     }
 
-    if (loadedCount > 0) {
-      setLawsCount(loadedCount);
-    } else {
-      setLawsCount(SEED_LAWS.length);
-    }
+    setLawsCount(loadedCount);
   }, []);
 
   // Fetch System Branding

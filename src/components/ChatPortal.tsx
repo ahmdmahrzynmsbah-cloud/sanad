@@ -384,7 +384,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
       });
 
       let botResponseText = '';
-      let isQueryLegal = isLegalTaxCustomsQuery(query, updatedMessagesWithUser);
+      let isQueryLegal = isLegalTaxCustomsQuery(query);
       let resQueryType: 'legal' | 'general' = isQueryLegal ? 'legal' : 'general';
       let resSuggestedDetails: string[] | undefined = isQueryLegal
         ? [
@@ -427,9 +427,9 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
           console.warn('[Chat] Backend returned status:', res.status, 'Attempting direct client knowledge fallback...');
           try {
             const directLaws = await directFetchLawsFromFirestore();
-            botResponseText = generateClientKnowledgeFallback(query, directLaws || [], updatedMessagesWithUser);
+            botResponseText = generateClientKnowledgeFallback(query, directLaws || []);
           } catch {
-            botResponseText = generateClientKnowledgeFallback(query, [], updatedMessagesWithUser);
+            botResponseText = generateClientKnowledgeFallback(query, []);
           }
         }
       }
@@ -461,16 +461,16 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
       let fallbackText = '';
       try {
         const directLaws = await directFetchLawsFromFirestore();
-        fallbackText = generateClientKnowledgeFallback(query, directLaws || [], updatedMessagesWithUser);
+        fallbackText = generateClientKnowledgeFallback(query, directLaws || []);
       } catch {
-        fallbackText = generateClientKnowledgeFallback(query, [], updatedMessagesWithUser);
+        fallbackText = generateClientKnowledgeFallback(query, []);
       }
 
       if (!fallbackText) {
         fallbackText = '⚠️ تعذر الاتصال بالخادم حالياً. يرجى التحقق من اتصالك بالإنترنت والمحاولة مجدداً.';
       }
 
-      const isQueryLegal = isLegalTaxCustomsQuery(query, updatedMessagesWithUser);
+      const isQueryLegal = isLegalTaxCustomsQuery(query);
       const errorMessage: ChatMessage = {
         id: 'err-' + Date.now(),
         sender: 'bot',

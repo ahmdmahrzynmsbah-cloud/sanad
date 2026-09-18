@@ -83,8 +83,8 @@
       "phone": "0599999999",
       "role": "user",
       "frozenAt": "",
-      "remainingTrialDays": 20,
-      "remainingTrialHours": 13
+      "remainingTrialDays": 21,
+      "remainingTrialHours": 21
     },
     {
       "id": "user-1788886428842",
@@ -106,8 +106,8 @@
       "role": "user",
       "reviewedAt": "2026-09-08T16:53:48.842Z",
       "password": "Qwezxc*-/-",
-      "remainingTrialDays": 20,
-      "remainingTrialHours": 15
+      "remainingTrialDays": 22,
+      "remainingTrialHours": 0
     },
     {
       "id": "user-1789300631180",
@@ -129,8 +129,8 @@
       "password": "password123",
       "recoveryCode": "1234",
       "reviewedAt": "2026-09-13T11:57:11.180Z",
-      "remainingTrialDays": 42,
-      "remainingTrialHours": 10
+      "remainingTrialDays": 43,
+      "remainingTrialHours": 19
     },
     {
       "id": "user-1789332628388",
@@ -148,8 +148,8 @@
       "isSubscribed": false,
       "role": "user",
       "subscriptionStatus": "trial",
-      "remainingTrialDays": 2,
-      "remainingTrialHours": 19
+      "remainingTrialDays": 4,
+      "remainingTrialHours": 4
     },
     {
       "id": "user-1789336669393",
@@ -171,8 +171,8 @@
       "subscribedAt": "",
       "trialStartedAt": "2026-09-13T21:57:49.393Z",
       "freezeReason": "",
-      "remainingTrialDays": 42,
-      "remainingTrialHours": 20
+      "remainingTrialDays": 44,
+      "remainingTrialHours": 5
     },
     {
       "id": "user-1789390667275",
@@ -190,8 +190,8 @@
       "createdAt": "2026-09-14T12:57:47.275Z",
       "trialDays": 7,
       "phone": "01011668899",
-      "remainingTrialDays": 3,
-      "remainingTrialHours": 11
+      "remainingTrialDays": 4,
+      "remainingTrialHours": 20
     },
     {
       "id": "user-1789396673929",
@@ -209,8 +209,8 @@
       "fullName": "انس",
       "status": "approved",
       "username": "sup_4fg3@sanadtax.com",
-      "remainingTrialDays": 3,
-      "remainingTrialHours": 13
+      "remainingTrialDays": 4,
+      "remainingTrialHours": 21
     },
     {
       "id": "user-1789397979649",
@@ -228,8 +228,8 @@
       "username": "anas-42",
       "fullName": "بثثب0987",
       "trialEndsAt": "2026-09-21T14:59:39.649Z",
-      "remainingTrialDays": 3,
-      "remainingTrialHours": 13
+      "remainingTrialDays": 4,
+      "remainingTrialHours": 22
     },
     {
       "id": "user-1789398047631",
@@ -250,8 +250,8 @@
       "freezeReason": "",
       "createdAt": "2026-09-14T15:00:47.631Z",
       "trialDays": 7,
-      "remainingTrialDays": 3,
-      "remainingTrialHours": 13
+      "remainingTrialDays": 4,
+      "remainingTrialHours": 22
     },
     {
       "id": "user-1789421615022",
@@ -269,8 +269,8 @@
       "trialEndsAt": "2026-09-21T21:33:35.022Z",
       "recoveryCode": "1111",
       "phone": "01283367595",
-      "remainingTrialDays": 3,
-      "remainingTrialHours": 20
+      "remainingTrialDays": 5,
+      "remainingTrialHours": 4
     },
     {
       "id": "user-1789426489363",
@@ -288,8 +288,8 @@
       "isSubscribed": false,
       "reviewedAt": "2026-09-14T22:54:49.363Z",
       "trialEndsAt": "2026-09-21T22:54:49.363Z",
-      "remainingTrialDays": 3,
-      "remainingTrialHours": 21
+      "remainingTrialDays": 5,
+      "remainingTrialHours": 6
     },
     {
       "id": "user-1789486119922",
@@ -307,27 +307,8 @@
       "role": "user",
       "username": "ahmed_7",
       "trialStartedAt": "2026-09-15T15:28:39.922Z",
-      "remainingTrialDays": 4,
-      "remainingTrialHours": 14
-    },
-    {
-      "id": "user-1789694064698",
-      "username": "testclient99",
-      "fullName": "مستخدم تجريبي",
-      "phone": "0599123456",
-      "recoveryCode": "1234",
-      "password": "newpassword99",
-      "role": "user",
-      "status": "approved",
-      "createdAt": "2026-09-18T01:14:24.698Z",
-      "reviewedAt": "2026-09-18T01:14:24.698Z",
-      "subscriptionStatus": "trial",
-      "trialDays": 14,
-      "trialStartedAt": "2026-09-18T01:14:24.698Z",
-      "trialEndsAt": "2026-10-02T01:14:24.698Z",
-      "isSubscribed": false,
-      "remainingTrialDays": 13,
-      "remainingTrialHours": 23
+      "remainingTrialDays": 5,
+      "remainingTrialHours": 22
     }
   ],
   "laws": [
