@@ -1161,14 +1161,14 @@ export async function deleteSubscriptionPlanFromFirestore(planId: string): Promi
 
   try {
     const docRef = doc(db, 'subscription_plans', planId);
-    await firebaseDeleteDoc(docRef);
+    await deleteDoc(docRef);
 
     try {
       const col = collection(db, 'subscription_plans');
       const q = query(col, where('id', '==', planId));
       const snap = await getDocs(q);
       if (!snap.empty) {
-        const promises = snap.docs.map((d) => firebaseDeleteDoc(d.ref));
+        const promises = snap.docs.map((d) => deleteDoc(d.ref as any));
         await Promise.all(promises);
       }
     } catch {

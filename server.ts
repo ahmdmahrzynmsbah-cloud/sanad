@@ -28,10 +28,9 @@ if (typeof (globalThis as any).Path2D === 'undefined') {
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-// Vite is dynamically imported in local dev mode
-import { fetchVideosFromFirestore } from './server/firestore';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
+// Vite is dynamically imported in local dev mode
 import {
   initFirestore,
   fetchUsersFromFirestore,
@@ -76,6 +75,9 @@ import {
   saveLawRequestToFirestore,
   updateLawRequestInFirestore,
   deleteLawRequestFromFirestore,
+  fetchVideosFromFirestore,
+  saveVideoToFirestore,
+  deleteVideoFromFirestore,
   onDatabaseChange,
   isQuotaExceeded,
 } from './server/firestore.ts';
@@ -214,8 +216,24 @@ async function ensureDbSynced() {
   ]);
 }
 
-// 5. Lightweight middleware (skip eager Firestore queries on every GET to conserve daily read quota)
+// 5. Ensure DB is synchronized from Cloud Firestore for API queries
 app.use(async (req, res, next) => {
+  const p = req.path || '';
+  if (
+    req.method === 'GET' &&
+    p.startsWith('/api/') &&
+    !p.startsWith('/api/auth/') &&
+    p !== '/api/admin/login' &&
+    p !== '/api/health' &&
+    p !== '/api/sync' &&
+    p !== '/api/sync/version'
+  ) {
+    try {
+      await ensureDbSynced();
+    } catch (err) {
+      console.warn('ensureDbSynced non-blocking notice:', err);
+    }
+  }
   next();
 });
 
@@ -1309,6 +1327,16 @@ async function syncWithFirestore() {
     if (!db.partners || db.partners.length === 0) {
       db.partners = [...DEFAULT_PARTNERS];
     }
+
+    // Seed default records if Cloud Firestore is freshly initialized
+    await seedFirestoreIfEmpty(
+      db.users || [],
+      db.laws || [],
+      db.categories || DEFAULT_CATEGORIES,
+      db.supervisors || DEFAULT_SUPERVISORS,
+      db.relatedSites || DEFAULT_RELATED_SITES,
+      db.partners || DEFAULT_PARTNERS
+    ).catch((e) => console.warn('Seeding notice:', e));
 
     // Attempt critical settings & users fetch first
     const [cloudSettings, cloudUsers] = await Promise.all([
@@ -4788,38 +4816,45 @@ app.post('/api/chat', async (req, res) => {
     }
   }
 
-  // 1. Organize knowledge base with smart RAG chunking ONLY if query is genuinely about laws/taxes/customs
-  const laws = db.laws;
+  // 1. Organize knowledge base with smart RAG search: ALWAYS search Palestinian knowledge base & uploaded law files FIRST for legal queries
+  const laws = db.laws || [];
   const { prioritizedContext, fullCatalog } = isLegal
     ? buildStructuredLegalContext(message, laws)
     : { prioritizedContext: '', fullCatalog: '' };
 
-  // 2. Focused, intelligent system instruction supporting both broad world knowledge/general conversation and highly organized legal citation
-  const systemInstruction = `أنت "سَنَد"، شخصية افتراضية ومساعد ذكاء اصطناعي شامل ومتطور (وخبير متخصص في القوانين والضرائب والجمارك في دولة فلسطين).
+  // 2. Focused, authoritative system instruction enforcing comprehensive Palestinian legal grounding and detailed structured formatting
+  const systemInstruction = `أنت "سَنَد"، المستشار القانوني والتشريعي الذكي والشخصية الافتراضية المتطورة (خبير متخصص ومعتمد في القوانين والضرائب والجمارك في دولة فلسطين وكافة الوثائق والملفات والتشريعات المرفوعة في النظام).
 
-تعليمات الإجابة وقواعد السلوك الصارمة:
-1. **الأسئلة العامة والمعرفة العامة والدردشة (أي شيء خارج القوانين والضرائب والجمارك):**
+قواعد الاستجابة والسلوك المهني الصارم:
+1. **الاستفسارات القانونية والضريبية والجمركية والأسئلة حول الملفات والوثائق المرفوعة:**
+   - **الالتزام الإلزامي بالمرجعية المرفقة:** استند أولاً وبشكل دقيق إلى نصوص المواد والتشريعات الفلسطينية والملفات المرفوعة المرفقة أدناه والمستخرجة من قاعدة المعرفة.
+   - **الشمولية والدقة التامة وعدم الاختصار المخل (هام جداً):**
+     * يمنع منعاً باتاً اختصار أو إغفال أي بنود أو شروط أو استثناءات أو نسب مئوية أو شرائح أو غرامات أو مواعيد أو إجراءات واردة في الملفات المرفوعة ونصوص القوانين.
+     * قدم الإجابة كاملة، مفصلة، دقيقة، مرتبة، وشاملة لجميع أبعاد وتفاصيل السؤال وفق ما ورد في الوثائق والملفات المرفوعة.
+   - **الهيكلية والتنسيق الاستشاري الاحترافي المعتمد (إلزامي):**
+     نظم إجابتك دوماً وفق الأقسام التالية بالترتيب والرموز التعبيرية الرسمية:
+
+     ⚖️ **المرجع والأساس التشريعي المعتمد:**
+     * اسم القانون أو القرار بقانون أو اسم الملف المرفوع الرسمي وسنة صدوره ونفاذه.
+     * رقم المادة أو البند أو الفقرة المحددة المنطبقة تماماً في الوثيقة بدقة بالغة.
+
+     💡 **الحكم والتكييف القانوني المفصل:**
+     * صياغة قانونية واضحة، محكمة، ومفصلة تبين الحكم والإجراء النظامي المترتب بشكل دقيق يشرح كل جوانب استفسار المكلف.
+
+     📋 **الشروط والبنود والضوابط المحددة:**
+     * سرد تفصيلي وشامل لكافة الشروط، النسب المئوية، الشرائح الضريبية، الفئات المعفاة، الاستثناءات، الرسوم الجمركية، الغرامات، أو المستندات المطلوبة على شكل نقاط واضحة ومنظمة.
+
+     📌 **التوجيهات والإرشادات العملية للمكلف:**
+     * توضيح الفوارق العملية بحسب صفة المكلف (فرد طبيعي أم شركة) أو سنة الاستحقاق، مع بيان الخطوات الإجرائية الرسمية لدى الدائرة المختصة (دائرة الجمارك والمكوس وضريبة القيمة المضافة / دائرة ضريبة الدخل).
+
+2. **الأسئلة العامة والمعرفة والدردشة (خارج نطاق القوانين والضرائب والملفات المرفوعة):**
    - أجب بوضوح تام كـ «شخصية افتراضية» ومساعد رقمي ذكي (لست بشراً).
-   - أجب على أي سؤال أو موضوع عام يسألك عنه المستخدم في أي مجال (مثل: الدين الإسلامي وتفاصيله، الشخصيات مثل محمد صلاح ومسيرته، كرة القدم، الرياضة، العلوم، التاريخ، التكنولوجيا، الثقافة، الرياضيات، اللغات، أو التحية والدردشة اليومية).
-   - إذا سألك المستخدم "هل أنت إنسان؟" أو "أنت إنسان؟": أجب بنفي صريح وواضح: "لا، أنا لست إنساناً، بل أنا «سَنَد»؛ شخصية افتراضية ومساعد ذكاء اصطناعي ذكي مصمم لمساعدتك...".
-   - **ممنوع بتاتاً ومطلقاً** إدراج أو ذكر أو حشر أي نصوص أو مواد أو مراسيم قانونية في الإجابات العامة غير القانونية! يجب أن تكون إجابتك ذكية، مباشرة، وشاملة.
+   - أجب على أي سؤال أو موضوع عام يسألك عنه المستخدم في شتى المجالات (مثل: الدين الإسلامي وتفاصيله، الرياضة ونجومها كـ محمد صلاح، العلوم، التاريخ، التكنولوجيا، الثقافة، الرياضيات، اللغات، أو التحية والدردشة اليومية).
+   - إذا سألك المستخدم "هل أنت إنسان؟": أجب بنفي صريح وواضح: "لا، أنا لست إنساناً، بل أنا «سَنَد»؛ شخصية افتراضية ومساعد رقمي ذكي تم تطويري لتقديم الدعم الشامل والإجابة على استفساراتك بكل دقة وسهولة...".
+   - **ممنوع بتاتاً** إدراج أي مواد أو نصوص أو مراسيم قانونية في الإجابات العامة غير القانونية!
 
-2. **الاستفسارات والأسئلة عن القوانين والضرائب والجمارك (فلسطين):**
-   عندما يسألك المستخدم عن أي قانون أو ضريبة أو جمرك:
-   - **طلب التفاصيل الإضافية أولاً قبل العرض:**
-     إذا كان سؤال المستخدم عاماً أو تنقصه معطيات محددة، اطلب بلطف وتنسيق واضح تزويدك بالتفاصيل الإضافية (مثل: سنة المعاملة، صفة المكلف: فرد طبيعي أم شركة، طبيعة النشاط أو نوع السلعة).
-   - **التبسيط أولاً وعدم التعقيد:**
-     اشرح الحكم والمفهوم المطلوب بلغة عربية مبسطة وعملية جداً ومباشرة وسهلة الفهم دون تعقيد أو حشو مصطلحات مبهمة.
-   - **تحديد المادة والقانون والتوقيت بدقة وبشكل مختصر ومرتب:**
-     اذكر بدقة:
-     * القانون المصدر الرسمي.
-     * توقيت وسنة الصدور والنفاذ (مثال: لسنة 2022م).
-     * رقم المادة والفقرة المحددة فقط المعنية بالاستفسار.
-     * مضمون المادة باختصار شديد وبشكل موجز ومرتب.
-     * **ممنوع نهائياً سرد أو نسخ نص القانون كاملاً أو إغراق المستخدم بمواد طويلة غير مطلوبة.**
-
-${prioritizedContext ? `\nالمواد التشريعية المرجعية المعتمدة ذات الصلة:\n${prioritizedContext}\n` : ''}
-${fullCatalog ? `\nقائمة التشريعات المتاحة:\n${fullCatalog}` : ''}`;
+${prioritizedContext ? `\n[قاعدة المعرفة والملفات القانونية الفلسطينية المعتمدة - المرجعية التشريعية الإلزامية]:\n${prioritizedContext}\n` : ''}
+${fullCatalog ? `\n[فهرس التشريعات والملفات الفلسطينية المعتمدة]:\n${fullCatalog}` : ''}`;
 
   try {
     const ai = getGemini();
@@ -5152,6 +5187,19 @@ app.delete('/api/conversations', async (req, res) => {
   res.json({ success: true, message: 'تم مسح سجل المحادثات بنجاح' });
 });
 
+// Helper to normalize Arabic text for precise search matching
+function normalizeArabic(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/[\u064B-\u0652\u0670\u0640]/g, '') // remove diacritics / tatweel
+    .replace(/[أإآا]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/[^\u0621-\u064A0-9a-zA-Z\s]/g, ' ')
+    .toLowerCase()
+    .trim();
+}
+
 // Helper to chunk legal texts into articles, clauses, and sections
 interface LegalChunk {
   lawTitle: string;
@@ -5165,9 +5213,9 @@ interface LegalChunk {
 let cachedIndexedChunks: { lawsCount: number; chunks: LegalChunk[] } | null = null;
 
 function chunkLawContent(law: StoredLaw): LegalChunk[] {
-  const lines = law.content.split('\n');
+  const lines = (law.content || '').split('\n');
   const chunks: LegalChunk[] = [];
-  let currentHeader = 'مقدمة / أحكام عامة';
+  let currentHeader = 'أحكام تمهيدية وعامة';
   let currentLines: string[] = [];
 
   for (const line of lines) {
@@ -5175,8 +5223,10 @@ function chunkLawContent(law: StoredLaw): LegalChunk[] {
     // Check if line represents an article or section boundary
     const isNewArticle =
       /^المادة\s*[\(0-9\:]/i.test(trimmed) ||
+      /^مادة\s*[\(0-9\:]/i.test(trimmed) ||
       /^البند\s*[\(0-9\:]/i.test(trimmed) ||
       /^الفصل\s*[\(0-9\:]/i.test(trimmed) ||
+      /^الباب\s*[\(0-9\:]/i.test(trimmed) ||
       /^---\s*\[صفحة\s*[0-9]+\]/i.test(trimmed);
 
     if (isNewArticle && currentLines.length > 0) {
@@ -5188,7 +5238,7 @@ function chunkLawContent(law: StoredLaw): LegalChunk[] {
         sourceFileName: law.sourceFileName,
       });
       currentLines = [];
-      currentHeader = trimmed.slice(0, 100);
+      currentHeader = trimmed.slice(0, 120);
     }
     currentLines.push(line);
   }
@@ -5220,7 +5270,7 @@ function extractLawTiming(title: string, text: string): string {
   if (matchDate && matchDate[1]) {
     return `بتاريخ ${matchDate[1]}`;
   }
-  return 'وفقاً لآخر تعديل معتمد ونافذ';
+  return 'وفقاً لآخر تعديل معتمد ونافذ في دولة فلسطين';
 }
 
 // Extracts a concise summary snippet of the article without dumping the whole content
@@ -5231,17 +5281,17 @@ function extractConciseSummary(text: string): string {
     .filter((l) => Boolean(l) && !l.startsWith('مادة (') && !l.startsWith('المادة ('));
 
   if (lines.length === 0) {
-    return text.substring(0, 180).trim() + (text.length > 180 ? '...' : '');
+    return text.substring(0, 220).trim() + (text.length > 220 ? '...' : '');
   }
 
-  const keyLines = lines.slice(0, 3).join(' ');
-  if (keyLines.length > 250) {
-    return keyLines.substring(0, 240).trim() + '...';
+  const keyLines = lines.slice(0, 4).join(' ');
+  if (keyLines.length > 300) {
+    return keyLines.substring(0, 290).trim() + '...';
   }
   return keyLines;
 }
 
-// Check if a query has genuine legal, tax, or customs intent
+// Check if a query has genuine legal, tax, customs, or uploaded document intent
 function isLegalTaxCustomsQuery(query: string): boolean {
   if (!query || typeof query !== 'string') return false;
   const q = query.trim().toLowerCase();
@@ -5270,15 +5320,15 @@ function isLegalTaxCustomsQuery(query: string): boolean {
     /(محمد صلاح|ميسي|رونالدو|كرة القدم|الرياضة|الدين الإسلامي|دين الاسلام|الإسلام|الاسلام|القرآن|الحديث|الصلاة|الصيام|الحج|الزكاة|النبي|الرسول|الصحابة|الفيزياء|الكيمياء|الطب|الفلك|الفضاء|الطقس|التاريخ|الجغرافيا|الفلسفة|البرمجة|الرياضيات|معنى كلمة|قصة|نكتة|شعر|طبخ|عاصمة|من هو|من هي|ما هو|ما هي|ماذا تعرف عن)/i.test(
       cleaned
     ) &&
-    !/(قانون|قوانين|تشريع|تشريعات|مرسوم|قرار بقانون|مادة|مواد|لائحة|لوائح|ضريبة|ضرائب|ضريبي|ضريبية|جمارك|جمرك|جمركي|جمركية|رسم جمركي|رسوم جمركية|تعرفة جمركية|طرد بريدي|سجل تجاري|مقاصة|إعفاء ضريبي|فاتورة ضريبية)/i.test(
+    !/(قانون|قوانين|تشريع|تشريعات|مرسوم|مراسيم|قرار بقانون|قرار|مادة|مواد|لائحة|لوائح|نظام|أنظمة|بند|بنود|ملف|ملفات|الملف|الملفات|مستند|مستندات|المستند|وثيقة|وثائق|رفعت|رفعته|المرفوع|المرفوعة|ضريبة|ضرائب|ضريبي|ضريبية|جمارك|جمرك|جمركي|جمركية|رسم جمركي|رسوم جمركية|تعرفة جمركية|طرد بريدي|سجل تجاري|مقاصة|إعفاء ضريبي|فاتورة ضريبية)/i.test(
       cleaned
     )
   ) {
     return false;
   }
 
-  // 4. Strict legal & tax keywords
-  const legalTermsRegex = /(قانون|قوانين|تشريع|تشريعات|مرسوم|قرار بقانون|مادة|مواد|لائحة|لوائح|ضريبة|ضرائب|ضريبي|ضريبية|جمارك|جمرك|جمركي|جمركية|بيان جمركي|رسوم جمركية|تعرفة جمركية|طرد بريدي|إعفاء ضريبي|إعفاءات|دخل كلي|ضريبة دخل|قيمة مضافة|مكوس|غرامة تأخير|عقوبة|محكمة الصلح|وزارة المالية|دائرة الجمارك|مكافحة غسل الأموال|فحص ضريبي|تهرب ضريبي|سجل تجاري|فاتورة ضريبية|مقاصة)/i;
+  // 4. Strict legal, tax, customs, and uploaded document keywords
+  const legalTermsRegex = /(قانون|قوانين|تشريع|تشريعات|مرسوم|مراسيم|قرار بقانون|قرار|قرارات|مادة|مواد|لائحة|لوائح|نظام|أنظمة|بند|بنود|فقرة|فقرات|ملف|ملفات|الملف|الملفات|مستند|مستندات|المستند|المستندات|وثيقة|وثائق|الوثيقة|رفعت|رفعته|المرفوع|المرفوعة|مرفق|مرفقات|ضريبة|ضرائب|ضريبي|ضريبية|جمارك|جمرك|جمركي|جمركية|بيان جمركي|رسوم جمركية|تعرفة جمركية|طرد بريدي|إعفاء ضريبي|إعفاء|إعفاءات|دخل كلي|ضريبة دخل|قيمة مضافة|مكوس|غرامة تأخير|غرامة|غرامات|عقوبة|عقوبات|محكمة الصلح|وزارة المالية|دائرة الجمارك|مكافحة غسل الأموال|فحص ضريبي|تهرب ضريبي|سجل تجاري|فاتورة ضريبية|مقاصة|استيراد|تصدير|معبر|ضريبة أملاك|شريحة ضريبية|شرائح|الخصم من المنبع|رد ضريبي)/i;
 
   return legalTermsRegex.test(q);
 }
@@ -5293,30 +5343,36 @@ const ARABIC_STOPWORDS = new Set([
   'بدي', 'عايز', 'انسان', 'إنسان', 'شخص', 'بشر', 'صلاح', 'محمد', 'شيء', 'حاجة', 'ممكن', 'مرحبا', 'شكرا'
 ]);
 
-// Build structured legal context with high-priority chunks highlighted at the top
-function buildStructuredLegalContext(
+// Search and retrieve relevant Palestinian legal texts and uploaded files as a mandatory reference
+function searchRelevantPalestinianLaws(
   query: string,
   laws: StoredLaw[]
-): { prioritizedContext: string; fullCatalog: string } {
-  if (!isLegalTaxCustomsQuery(query) || laws.length === 0) {
+): {
+  hasMatches: boolean;
+  prioritizedContext: string;
+  topChunks: LegalChunk[];
+  fullCatalog: string;
+} {
+  if (!laws || laws.length === 0) {
     return {
+      hasMatches: false,
       prioritizedContext: '',
+      topChunks: [],
       fullCatalog: '',
     };
   }
 
-  const normalizedQuery = query.toLowerCase();
-  const rawWords = normalizedQuery
-    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+  const normQuery = normalizeArabic(query);
+  const rawWords = normQuery
     .split(/\s+/)
     .filter((w) => w.length >= 3 && !ARABIC_STOPWORDS.has(w));
 
-  if (rawWords.length === 0) {
-    return {
-      prioritizedContext: '',
-      fullCatalog: '',
-    };
-  }
+  // Extract explicit article numbers if asked (e.g., "المادة 5", "مادة 14", "مادة (8)")
+  const articleNumberMatch = query.match(/(?:المادة|مادة|البند)\s*[\(\[]?(\d+)[\)\]]?/i);
+  const requestedArticleNumber = articleNumberMatch ? articleNumberMatch[1] : null;
+
+  // Check if query is looking for an uploaded file directly
+  const asksForUploadedFile = /(ملف|ملفات|مستند|وثيقة|مرفوع|رفعت)/i.test(query);
 
   // Retrieve or compute indexed chunks
   let baseChunks: LegalChunk[];
@@ -5336,46 +5392,119 @@ function buildStructuredLegalContext(
   // Score individual chunks across all laws
   const scoredChunks: LegalChunk[] = [];
   for (const chunk of baseChunks) {
-    const fullText = (chunk.lawTitle + ' ' + chunk.category + ' ' + chunk.sectionHeader + ' ' + chunk.text).toLowerCase();
+    const normTitle = normalizeArabic(chunk.lawTitle);
+    const normCategory = normalizeArabic(chunk.category);
+    const normHeader = normalizeArabic(chunk.sectionHeader);
+    const normText = normalizeArabic(chunk.text);
+    const normFileName = normalizeArabic(chunk.sourceFileName || '');
+
     let score = 0;
-    for (const word of rawWords) {
-      if (fullText.includes(word)) {
-        score += 1;
-        // Extra weight if keyword is in the header or title
-        if (chunk.sectionHeader.toLowerCase().includes(word) || chunk.lawTitle.toLowerCase().includes(word)) {
-          score += 2;
-        }
+
+    // Exact article number bonus
+    if (requestedArticleNumber) {
+      const articleRegex = new RegExp(`(?:المادة|مادة|البند)\\s*[\(\[]?${requestedArticleNumber}[\)\]]?`, 'i');
+      if (articleRegex.test(chunk.sectionHeader)) {
+        score += 25;
+      } else if (articleRegex.test(chunk.text)) {
+        score += 15;
       }
     }
+
+    // Direct file name matching
+    if (normFileName && rawWords.some((w) => normFileName.includes(w))) {
+      score += 15;
+    }
+
+    // Direct law title matching
+    if (rawWords.some((w) => normTitle.includes(w))) {
+      score += 10;
+    }
+
+    // Keyword matching
+    for (const word of rawWords) {
+      if (normHeader.includes(word)) {
+        score += 8;
+      }
+      if (normTitle.includes(word)) {
+        score += 6;
+      }
+      if (normCategory.includes(word)) {
+        score += 4;
+      }
+      if (normText.includes(word)) {
+        score += 2;
+      }
+    }
+
+    // Topic bonus phrases
+    if (normQuery.includes('دخل') && (normCategory.includes('دخل') || normTitle.includes('دخل'))) {
+      score += 4;
+    }
+    if (normQuery.includes('جمرك') && (normCategory.includes('جمرك') || normTitle.includes('جمرك'))) {
+      score += 4;
+    }
+    if ((normQuery.includes('قيمه مضافه') || normQuery.includes('مضافه')) && (normCategory.includes('مضافه') || normTitle.includes('مضافه'))) {
+      score += 4;
+    }
+    if (normQuery.includes('اعفاء') && (normHeader.includes('اعفاء') || normText.includes('اعفاء') || normText.includes('يعفى') || normText.includes('تستثنى'))) {
+      score += 5;
+    }
+    if (normQuery.includes('غرامه') && (normHeader.includes('غرامه') || normText.includes('غرامه') || normText.includes('عقوبه') || normText.includes('مخالفه'))) {
+      score += 5;
+    }
+
+    if (asksForUploadedFile && chunk.sourceFileName) {
+      score += 5;
+    }
+
     if (score >= 2) {
       scoredChunks.push({ ...chunk, score });
     }
   }
 
   scoredChunks.sort((a, b) => (b.score || 0) - (a.score || 0));
-  const topChunks = scoredChunks.slice(0, 4);
+  // Take up to 8 top chunks for thorough detail coverage
+  const topChunks = scoredChunks.slice(0, 8);
 
   let prioritizedContext = '';
   if (topChunks.length > 0) {
-    prioritizedContext = `[المواد والبنود القانونية المعتمدة المسترجعة ذات الصلة الوثيقة باستفسار المستخدم (اعتمد عليها واذكر رقم المادة وتوقيتها باختصار وتبسيط)]:\n` +
+    prioritizedContext = `[المواد والبنود والملفات القانونية المعتمدة المسترجعة من قاعدة المعرفة (مرجع إلزامي وشامل ومباشر)]:\n` +
       topChunks
         .map(
-          (c, idx) =>
-            `--- مادة/بند ذو أولوية (${idx + 1}) ---\nالتشريع: ${c.lawTitle} [${c.category}]\nالموضع/البند: ${c.sectionHeader}\n${c.text}`
+          (c, idx) => {
+            const timing = extractLawTiming(c.lawTitle, c.text);
+            const sourceInfo = c.sourceFileName ? ` [الملف المصدر: ${c.sourceFileName}]` : '';
+            return `--- المرجع التشريعي (${idx + 1}) ---\nالتشريع / الملف: ${c.lawTitle}${sourceInfo} [التصنيف: ${c.category}] (${timing})\nالموضع / المادة: ${c.sectionHeader}\nالنص الكامل المعتمد:\n${c.text}`;
+          }
         )
         .join('\n\n');
   }
 
-  // Provide a compact index of available laws
-  const fullCatalog = `[قائمة التشريعات والقوانين المعتمدة في قاعدة المعرفة (${laws.length} تشريع)]:\n` +
+  // Compact catalog of available Palestinian laws and files
+  const fullCatalog = `[فهرس التشريعات والملفات المتاحة في قاعدة المعرفة (${laws.length} تشريع/ملف)]:\n` +
     laws
-      .slice(0, 15)
-      .map((l, index) => {
-        return `${index + 1}. ${l.title} (${l.category})`;
-      })
+      .slice(0, 30)
+      .map((l, index) => `${index + 1}. ${l.title} (${l.category})${l.sourceFileName ? ` [ملف: ${l.sourceFileName}]` : ''}`)
       .join('\n');
 
-  return { prioritizedContext, fullCatalog };
+  return {
+    hasMatches: topChunks.length > 0,
+    prioritizedContext,
+    topChunks,
+    fullCatalog,
+  };
+}
+
+// Build structured legal context with high-priority chunks highlighted at the top
+function buildStructuredLegalContext(
+  query: string,
+  laws: StoredLaw[]
+): { prioritizedContext: string; fullCatalog: string } {
+  const result = searchRelevantPalestinianLaws(query, laws);
+  return {
+    prioritizedContext: result.prioritizedContext,
+    fullCatalog: result.fullCatalog,
+  };
 }
 
 // Helper for local knowledge retrieval when API quota is constrained
@@ -5383,7 +5512,7 @@ function generateKnowledgeFallback(query: string, laws: StoredLaw[]): string {
   const trimmed = query.trim().toLowerCase();
   const cleaned = trimmed.replace(/[!؟?.,،:\-\s]+/g, ' ');
 
-  // 1. Casual Greetings & Check-ins ("عامل اي", "عامل ايه", "ازيك", etc.)
+  // 1. Casual Greetings & Check-ins
   if (
     /^(عامل ايه|عامل اي|عامل إيه|عامل إي|ازيك|إزيك|كيفك|كيف حالك|شخبارك|أخبارك|شو أخبارك|شو اخبارك|طمني عنك|طمنا عنك|كيف الأمور|كيفك اليوم)/i.test(
       cleaned
@@ -5432,57 +5561,37 @@ function generateKnowledgeFallback(query: string, laws: StoredLaw[]): string {
     return `أهلاً بك! بصفتي شخصيتك الافتراضية ومساعدك الذكي «سَنَد»، يسعدني جداً الإجابة على أي سؤال أو استفسار عام في أي مجال (علوم، تاريخ، ثقافة، رياضة، لغات، أو نقاش يومي).\n\nتفضل بطرح سؤالك بمزيد من التفصيل وسأجيبك فوراً بكل وضوح وسلاسة دون أي تعقيد.`;
   }
 
-  // 6. LEGAL / TAX / CUSTOMS QUERY
-  const rawWords = query.toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-    .split(/\s+/)
-    .filter((w) => w.length >= 3 && !ARABIC_STOPWORDS.has(w));
+  // 6. LEGAL / TAX / CUSTOMS QUERY: Search Knowledge Base
+  const searchResult = searchRelevantPalestinianLaws(query, laws);
 
-  if (rawWords.length === 0) {
-    return `📋 **يرجى تزويدي بالتفاصيل الإضافية التالية قبل العرض:**\n1. سنة المعاملة المالية أو الضريبية.\n2. صفة المكلف (فرد طبيعي أم شركة).\n3. نوع السلعة أو الخدمة موضوع الاستفسار.\n\nتفضل بتحديد هذه التفاصيل وسأصوغ لك الحكم القانوني بدقة مع ذكر المادة والقانون المصدر.`;
-  }
-
-  // Score individual chunks across all laws to find specific articles
-  const allChunks: LegalChunk[] = [];
-  for (const law of laws) {
-    const lawChunks = chunkLawContent(law);
-    for (const chunk of lawChunks) {
-      const fullText = (chunk.lawTitle + ' ' + chunk.category + ' ' + chunk.sectionHeader + ' ' + chunk.text).toLowerCase();
-      let score = 0;
-      for (const word of rawWords) {
-        if (fullText.includes(word)) score += 1;
-      }
-      chunk.score = score;
-      if (score >= 2) allChunks.push(chunk);
-    }
-  }
-
-  allChunks.sort((a, b) => (b.score || 0) - (a.score || 0));
-  const topChunk = allChunks[0];
-
-  if (topChunk && (topChunk.score || 0) >= 2) {
+  if (searchResult.hasMatches && searchResult.topChunks.length > 0) {
+    const topChunk = searchResult.topChunks[0];
     const timing = extractLawTiming(topChunk.lawTitle, topChunk.text);
-    const summary = extractConciseSummary(topChunk.text);
 
-    let result = `📋 **لتحديد الحكم الدقيق لحالتك الخاصة، يرجى تزويدي بالتفاصيل الإضافية التالية أولاً:**\n`;
-    result += `• **سنة المعاملة:** (لتحديد النظام المالي أو جدول الشرائح الساري في تلك السنة).\n`;
-    result += `• **صفة المكلف:** (هل أنت فرد طبيعي/موظف أم شركة تجارية/مساهمة؟).\n`;
-    result += `• **طبيعة النشاط أو السلعة:** (لتطبيق الإعفاءات أو النسب الخاصة بالنشاط).\n\n`;
-    result += `---\n\n`;
-    result += `⚖️ **السند القانوني والمادة المحددة:**\n`;
-    result += `• **القانون المصدر:** ${topChunk.lawTitle} (${timing})\n`;
-    result += `• **المادة المحددة:** ${topChunk.sectionHeader}\n\n`;
-    result += `💡 **خلاصة الحكم القانوني باختصار:**\n`;
-    result += `${summary}\n\n`;
-    result += `*(تم استخراج السند والمادة باختصار وبشكل مرتب دون الحاجة لسرد مجلدات القانون كاملة)*`;
+    let result = `⚖️ **المرجع والأساس التشريعي المعتمد:**\n`;
+    result += `• **التشريع / الملف المصدر:** ${topChunk.lawTitle} (${timing})${topChunk.sourceFileName ? ` [ملف: ${topChunk.sourceFileName}]` : ''}\n`;
+    result += `• **الموضع / المادة المعنية:** ${topChunk.sectionHeader}\n`;
+    result += `• **التصنيف:** ${topChunk.category}\n\n`;
+
+    result += `💡 **الحكم والتكييف القانوني المفصل:**\n`;
+    result += `${topChunk.text}\n\n`;
+
+    result += `📋 **الضوابط والشروط والنسب المقررة:**\n`;
+    result += `• **سنة المعاملة والتطبيق:** تسري هذه الأحكام وفقاً لآخر التعديلات واللوائح النافذة.\n`;
+    result += `• **صفة المكلف:** يرجى التمييز بين المعاملات الخاصة بالأفراد الطبيعيين وتلك الخاصة بالشركات والمؤسسات التجارية.\n`;
+    result += `• **المستندات المطلوبة:** يُشترط إرفاق الوثائق والفواتير أو البيانات الجمركية/الضريبية الرسمية المعتمدة لدى الدائرة المختصة.\n\n`;
+
+    result += `📌 **التوجيهات والإرشادات للمكلف:**\n`;
+    result += `تم استرجاع هذا النص بدقة وأمانة كاملة من الملفات وقاعدة المعرفة التشريعية المسجلة في النظام.`;
+
     return result;
   }
 
-  let promptForDetails = `📋 **لتحديد الحكم الدقيق لحالتك الخاصة، يرجى تزويدي بالتفاصيل الإضافية التالية:**\n`;
-  promptForDetails += `• سنة المعاملة المالية أو التصريح.\n`;
-  promptForDetails += `• صفة المكلف (فرد طبيعي أم شركة).\n`;
-  promptForDetails += `• رقم المادة أو المعاملة الجمركية/الضريبية المستهدفة.\n\n`;
-  promptForDetails += `⚖️ **إفادة استشارية أولية:** لم يتم العثور على مادة مطابقة تماماً بهذا اللفظ في قاعدة التشريعات المسجلة حالياً. بمجرد تزويدنا بالتفاصيل أعلاه سنصيغ لك الحكم مرتباً ومقتضباً مع سنده القانوني مباشرة.`;
+  let promptForDetails = `📋 **لتحديد الحكم الدقيق والشامل وفق الملفات والقوانين المسجلة، يرجى تزويدي بالتفاصيل التالية:**\n`;
+  promptForDetails += `• **سنة المعاملة المالية أو التصريح:** (لتحديد القانون والتعديل الساري).\n`;
+  promptForDetails += `• **صفة المكلف:** (فرد طبيعي/موظف أم شركة تجارية/مساهمة).\n`;
+  promptForDetails += `• **المعاملة المستهدفة:** (استيراد/تصدير، ضريبة دخل، ضريبة قيمة مضافة، طرد بريدي، عقوبة/غرامة، أو اسم الملف المحدد).\n\n`;
+  promptForDetails += `⚖️ **إفادة استشارية أولية:** لم يتم العثور على مادة مطابقة تماماً بهذا اللفظ في قاعدة التشريعات والملفات المسجلة حالياً (${laws.length} تشريع/ملف). تفضل بتحديد المعطيات أعلاه أو مراجعة تبويب القوانين للتأكد من رفع الملف.`;
   return promptForDetails;
 }
 
@@ -5578,8 +5687,6 @@ if (!isServerless && isMainEntry) {
   });
 }
 
-export default app;
-
 // Videos endpoints
 app.get('/api/videos', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -5593,9 +5700,9 @@ app.post('/api/admin/videos', async (req, res) => {
   db.videos.push(newVideo);
   saveDB('videos');
   try {
-    const { saveVideoToFirestore } = await import('./server/firestore.js');
     await saveVideoToFirestore(newVideo);
   } catch {}
+  broadcastSync('videos');
   res.status(201).json({ message: 'Video added', video: newVideo });
 });
 
@@ -5607,9 +5714,9 @@ app.put('/api/admin/videos/:id', async (req, res) => {
     db.videos[index] = { ...db.videos[index], ...req.body };
     saveDB('videos');
     try {
-      const { saveVideoToFirestore } = await import('./server/firestore.js');
       await saveVideoToFirestore(db.videos[index]);
     } catch {}
+    broadcastSync('videos');
     res.json({ message: 'Video updated', video: db.videos[index] });
   } else {
     res.status(404).json({ error: 'Not found' });
@@ -5622,8 +5729,10 @@ app.delete('/api/admin/videos/:id', async (req, res) => {
   db.videos = db.videos.filter(v => v.id !== id);
   saveDB('videos');
   try {
-    const { deleteVideoFromFirestore } = await import('./server/firestore.js');
     await deleteVideoFromFirestore(id);
   } catch {}
+  broadcastSync('videos');
   res.json({ message: 'Video deleted' });
 });
+
+export default app;

@@ -166,6 +166,21 @@ export function chunkLawContent(law: Law): LegalChunk[] {
 }
 
 /**
+ * Helper to normalize Arabic text for precise search matching
+ */
+export function normalizeArabic(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/[\u064B-\u0652\u0670\u0640]/g, '') // remove diacritics / tatweel
+    .replace(/[أإآا]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/[^\u0621-\u064A0-9a-zA-Z\s]/g, ' ')
+    .toLowerCase()
+    .trim();
+}
+
+/**
  * Intelligent comprehensive assistant response engine
  * Handles BOTH general world knowledge/chat AND precise simplified legal citations
  */
@@ -223,13 +238,16 @@ export function generateClientKnowledgeFallback(query: string, laws: Law[]): str
   }
 
   // 6. LEGAL / TAX / CUSTOMS QUERY
-  const normalizedQuery = query.toLowerCase();
-  const keywords = normalizedQuery
-    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+  const normQuery = normalizeArabic(query);
+  const keywords = normQuery
     .split(/\s+/)
-    .filter((w) => w.length >= 3 && !['قانون', 'مرسوم', 'سنة', 'قرار', 'مادة'].includes(w));
+    .filter((w) => w.length >= 3 && !['قانون', 'مرسوم', 'سنة', 'قرار', 'مادة', 'نظام'].includes(w));
 
-  if (keywords.length === 0) {
+  // Extract explicit article numbers if asked (e.g., "المادة 5", "مادة 14")
+  const articleNumberMatch = query.match(/(?:المادة|مادة|البند)\s*[\(\[]?(\d+)[\)\]]?/i);
+  const requestedArticleNumber = articleNumberMatch ? articleNumberMatch[1] : null;
+
+  if (keywords.length === 0 && !requestedArticleNumber) {
     return `📋 **يرجى تزويدي بالتفاصيل الإضافية التالية قبل العرض:**\n1. سنة المعاملة المالية أو الضريبية.\n2. صفة المكلف (فرد طبيعي أم شركة).\n3. نوع السلعة أو الخدمة موضوع الاستفسار.\n\nتفضل بتحديد هذه التفاصيل وسأصوغ لك الحكم القانوني بدقة مع ذكر المادة والقانون المصدر.`;
   }
 
@@ -238,16 +256,45 @@ export function generateClientKnowledgeFallback(query: string, laws: Law[]): str
   for (const law of laws) {
     const lawChunks = chunkLawContent(law);
     for (const chunk of lawChunks) {
-      const fullText = (chunk.lawTitle + ' ' + chunk.category + ' ' + chunk.sectionHeader + ' ' + chunk.text).toLowerCase();
+      const normTitle = normalizeArabic(chunk.lawTitle);
+      const normCategory = normalizeArabic(chunk.category);
+      const normHeader = normalizeArabic(chunk.sectionHeader);
+      const normText = normalizeArabic(chunk.text);
+
+      const normFileName = normalizeArabic((law as any).sourceFileName || '');
+
       let score = 0;
-      for (const word of keywords) {
-        if (fullText.includes(word)) {
-          score += 1;
-          if (chunk.sectionHeader.toLowerCase().includes(word) || chunk.lawTitle.toLowerCase().includes(word)) {
-            score += 2;
-          }
+
+      // Exact article number bonus
+      if (requestedArticleNumber) {
+        const articleRegex = new RegExp(`(?:المادة|مادة|البند)\\s*[\(\[]?${requestedArticleNumber}[\)\]]?`, 'i');
+        if (articleRegex.test(chunk.sectionHeader)) {
+          score += 25;
+        } else if (articleRegex.test(chunk.text)) {
+          score += 15;
         }
       }
+
+      // Direct file name matching
+      if (normFileName && keywords.some((w) => normFileName.includes(w))) {
+        score += 15;
+      }
+
+      for (const word of keywords) {
+        if (normHeader.includes(word)) {
+          score += 8;
+        }
+        if (normTitle.includes(word)) {
+          score += 6;
+        }
+        if (normCategory.includes(word)) {
+          score += 4;
+        }
+        if (normText.includes(word)) {
+          score += 2;
+        }
+      }
+
       chunk.score = score;
       if (score >= 2) allChunks.push(chunk);
     }
@@ -258,26 +305,29 @@ export function generateClientKnowledgeFallback(query: string, laws: Law[]): str
 
   if (topChunk && (topChunk.score || 0) >= 2) {
     const timing = extractLawTiming(topChunk.lawTitle, topChunk.text);
-    const summary = extractConciseSummary(topChunk.text);
 
-    let result = `📋 **لتحديد الحكم الدقيق لحالتك الخاصة، يرجى تزويدي بالتفاصيل الإضافية التالية أولاً:**\n`;
-    result += `• **سنة المعاملة:** (لتحديد النظام المالي أو جدول الشرائح الساري في تلك السنة).\n`;
-    result += `• **صفة المكلف:** (هل أنت فرد طبيعي/موظف أم شركة تجارية/مساهمة؟).\n`;
-    result += `• **طبيعة النشاط أو السلعة:** (لتطبيق الإعفاءات أو النسب الخاصة بالنشاط).\n\n`;
-    result += `---\n\n`;
-    result += `⚖️ **السند القانوني والمادة المحددة:**\n`;
-    result += `• **القانون المصدر:** ${topChunk.lawTitle} (${timing})\n`;
-    result += `• **المادة المحددة:** ${topChunk.sectionHeader}\n\n`;
-    result += `💡 **خلاصة الحكم القانوني باختصار:**\n`;
-    result += `${summary}\n\n`;
-    result += `*(تم استخراج السند والمادة باختصار وبشكل مرتب دون الحاجة لسرد مجلدات القانون كاملة)*`;
+    let result = `⚖️ **المرجع والأساس التشريعي المعتمد:**\n`;
+    result += `• **التشريع / الملف المصدر:** ${topChunk.lawTitle} (${timing})\n`;
+    result += `• **الموضع / المادة المعنية:** ${topChunk.sectionHeader}\n`;
+    result += `• **التصنيف:** ${topChunk.category}\n\n`;
+
+    result += `💡 **الحكم والتكييف القانوني المفصل:**\n`;
+    result += `${topChunk.text}\n\n`;
+
+    result += `📋 **الضوابط والشروط والنسب المقررة:**\n`;
+    result += `• **سنة المعاملة والتطبيق:** تسري هذه الأحكام وفقاً لآخر التعديلات واللوائح النافذة.\n`;
+    result += `• **صفة المكلف:** يرجى التمييز بين المعاملات الخاصة بالأفراد الطبيعيين وتلك الخاصة بالشركات والمؤسسات التجارية.\n`;
+    result += `• **المستندات المطلوبة:** يُشترط إرفاق الوثائق والفواتير أو البيانات الجمركية/الضريبية الرسمية المعتمدة لدى الدائرة المختصة.\n\n`;
+
+    result += `📌 **التوجيهات والإرشادات للمكلف:**\n`;
+    result += `تم استرجاع هذا النص بدقة وأمانة كاملة من الملفات وقاعدة المعرفة التشريعية المسجلة في النظام.`;
     return result;
   }
 
-  let promptForDetails = `📋 **لتحديد الحكم الدقيق لحالتك الخاصة، يرجى تزويدي بالتفاصيل الإضافية التالية:**\n`;
-  promptForDetails += `• سنة المعاملة المالية أو التصريح.\n`;
-  promptForDetails += `• صفة المكلف (فرد طبيعي أم شركة).\n`;
-  promptForDetails += `• رقم المادة أو المعاملة الجمركية/الضريبية المستهدفة.\n\n`;
-  promptForDetails += `⚖️ **إفادة استشارية أولية:** لم يتم العثور على مادة مطابقة تماماً بهذا اللفظ في قاعدة التشريعات المسجلة حالياً. بمجرد تزويدنا بالتفاصيل أعلاه سنصيغ لك الحكم مرتباً ومقتضباً مع سنده القانوني مباشرة.`;
+  let promptForDetails = `📋 **لتحديد الحكم الدقيق والشامل وفق الملفات والقوانين المسجلة، يرجى تزويدي بالتفاصيل التالية:**\n`;
+  promptForDetails += `• **سنة المعاملة المالية أو التصريح:** (لتحديد القانون والتعديل الساري).\n`;
+  promptForDetails += `• **صفة المكلف:** (فرد طبيعي/موظف أم شركة تجارية/مساهمة).\n`;
+  promptForDetails += `• **المعاملة المستهدفة:** (استيراد/تصدير، ضريبة دخل، ضريبة قيمة مضافة، طرد بريدي، عقوبة/غرامة، أو اسم الملف المحدد).\n\n`;
+  promptForDetails += `⚖️ **إفادة استشارية أولية:** لم يتم العثور على مادة مطابقة تماماً بهذا اللفظ في قاعدة التشريعات والملفات المسجلة حالياً (${laws.length} تشريع/ملف). تفضل بتحديد المعطيات أعلاه أو مراجعة تبويب القوانين للتأكد من رفع الملف.`;
   return promptForDetails;
 }

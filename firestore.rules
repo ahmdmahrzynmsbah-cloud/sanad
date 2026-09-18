@@ -1,9 +1,64 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Users collection
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+    
+    // Laws knowledge base
+    match /laws/{lawId} {
+      allow read, write: if true;
+    }
+    
+    // Legal categories
+    match /legal_categories/{categoryId} {
+      allow read, write: if true;
+    }
+    
+    // Supervisors / Advisors
+    match /supervisors/{supervisorId} {
+      allow read, write: if true;
+    }
+    
+    // Related governmental and official sites
+    match /related_sites/{siteId} {
+      allow read, write: if true;
+    }
+    
+    // Partners and academic/professional alliances
+    match /partners/{partnerId} {
+      allow read, write: if true;
+    }
+    
+    // Subscription plans
+    match /subscription_plans/{planId} {
+      allow read, write: if true;
+    }
+    
+    // System settings and platform metadata
+    match /system_settings/{settingId} {
+      allow read, write: if true;
+    }
+    
+    // Law addition requests from users
+    match /law_requests/{requestId} {
+      allow read, write: if true;
+    }
+    
+    // Videos and explainers
+    match /videos/{videoId} {
+      allow read, write: if true;
+    }
+    
+    // Conversations history
+    match /conversations/{conversationId} {
+      allow read, write: if true;
+    }
+    
+    // Default fallback rule
     match /{document=**} {
       allow read, write: if true;
     }
   }
 }
-
