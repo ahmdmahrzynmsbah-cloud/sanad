@@ -29,7 +29,7 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 // Vite is dynamically imported in local dev mode
-import { fetchVideosFromFirestore } from './server/firestore';
+import { fetchVideosFromFirestore } from './server/firestore.ts';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
 import {
@@ -629,59 +629,7 @@ interface DBData {
   conversations?: any[];
 }
 
-const INITIAL_LAWS: StoredLaw[] = [
-  {
-    id: 'law-1',
-    title: 'قرار بقانون رقم (8) لسنة 2011م بشأن ضريبة الدخل وتعديلاته',
-    category: 'ضريبة دخل',
-    content: `المادة (13) - الإعفاءات السنوية للشخص الطبيعي:
-1. يُمنح الشخص الطبيعي المقيم إعفاءً سنوياً أساسياً قدره (36,000) ستة وثلاثون ألف شيكل من دخله الإجمالي الخاضع للضريبة.
-2. يُمنح إعفاء إضافي بمقدار المساهمة الفعلية في صناديق التقاعد أو التأمين الصحي المعتمدة وفقاً للحدود القانونية.
-
-المادة (18) - الشرائح الضريبية السنوية للأفراد (تُطبق على الدخل الصافي بعد خصم الإعفاءات القانونية):
-تُفرض ضريبة الدخل السنوية على دخول الأفراد الخاضعة للضريبة وفق النسب التصاعدية التالية:
-- الشريحة الأولى: من 1 شيكل إلى 75,000 شيكل سنوياً تُفرض بنسبة 5%.
-- الشريحة الثانية: من 75,001 شيكل إلى 150,000 شيكل سنوياً تُفرض بنسبة 10%.
-- الشريحة الثالثة: ما زاد عن 150,000 شيكل سنوياً تُفرض بنسبة 15%.
-
-المادة (21) - ضريبة دخل الشركات:
-تُفرض ضريبة الدخل على صافي الأرباح السنوية للشركات المساهمة والمحدودة الخاضعة للضريبة بنسبة ثابتة قدرها 15%.`,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'law-2',
-    title: 'قانون وتعليمات ضريبة القيمة المضافة النافذة في فلسطين',
-    category: 'ضريبة قيمة مضافة',
-    content: `المادة (4) - النسبة العامة للضريبة:
-تُفرض ضريبة القيمة المضافة في فلسطين بنسبة قانونية موحدة قدرها 16% على استيراد وبيع كافة السلع وتقديم الخدمات في الأراضي الفلسطينية.
-
-المادة (7) - السلع المعفاة والسلع الخاضعة لنسبة الصفر:
-1. تُعفى تماماً من ضريبة القيمة المضافة السلع والمنتجات الزراعية الطازجة غير المصنعة (الخضروات الطازجة، الفواكه، بيض المائدة، والحليب الطازج غير المبستر).
-2. يخضع طحين القمح والخبز التمويني المدعوم لنسبة الصفر بالمائة (0%) لتخفيف الأعباء المعيشية.
-3. الخدمات المالية المصرفية والتأمينات الأساسية معفاة من ضريبة القيمة المضافة مع خضوعها لأحكام الرسوم الخاصة.
-
-المادة (14) - فواتير المقاصة الضريبية:
-يتعين على كل مشتغل مرخص تسجيل جميع صفقاته التجارية مع الطرف الآخر عبر إصدار فواتير ضريبية نظامية وفواتير مقاصة معتمدة خلال المهلة القانونية لاسترداد ضريبة المدخلات.`,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'law-3',
-    title: 'لائحة التعرفة والرسوم الجمركية الفلسطينية للطرود البريدية والمركبات',
-    category: 'جمارك',
-    content: `المادة (2) - الإعفاءات والرسوم على الطرود البريدية الشخصية (التجارة الإلكترونية):
-1. الطرود البريدية الشخصية التي تقل قيمتها الإجمالية سيف (CIF - تشمل ثمن السلعة والشحن والتأمين) عن 75 دولاراً أمريكياً (أو ما يعادلها بالشيكل بسعر الصرف الرسمي) معفاة تماماً من الرسوم الجمركية وضريبة القيمة المضافة، شريطة أن تكون للاستخدام الشخصي غير التجاري.
-2. الطرود البريدية التي تزيد قيمتها عن 75 دولاراً ولا تتجاوز 500 دولار أمريكي، تُعفى من الرسوم الجمركية لكن تخضع لضريبة القيمة المضافة بنسبة 16% مع رسم تخليص بريدي مقطوع.
-3. الطرود والرسائل التي تتجاوز قيمتها 500 دولار أمريكي، تخضع لإجراءات الاستيراد الرسمية وتُفرض عليها الرسوم الجمركية المحددة في جدول التعرفة (بين 5% و15% حسب صنف المادة) بالإضافة لضريبة القيمة المضافة 16%.
-
-المادة (9) - الرسوم والجمارك على استيراد المركبات:
-1. سيارات الركوب العادية التي تعمل بالوقود التقليدي (بنزين أو ديزل) حتى سعة 2000 سي سي: تخضع لرسم جمركي بنسبة 50% وضريبة شراء بنسبة 25%، بالإضافة لضريبة القيمة المضافة 16%.
-2. السيارات الكهربائية بالكامل: تُشجّع التشريعات الفلسطينية الطاقة النظيفة بتخفيض الرسم الجمركي إلى 10% فقط، مع ضريبة شراء 10% وضريبة قيمة مضافة 16%.`,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-];
+import { INITIAL_LAWS } from './server/defaultLaws.ts';
 
 const PERSISTENT_USERS_SEED: StoredUser[] = [
   {
@@ -1016,17 +964,22 @@ function initDB(): DBData {
     // Read-only filesystem in Vercel/Lambda
   }
 
-  const localRepoFile = path.join(process.cwd(), 'data', 'db.json');
-  let targetFile = DB_FILE;
-  if (!fs.existsSync(targetFile) && fs.existsSync(localRepoFile)) {
-    targetFile = localRepoFile;
-  }
+  const candidateFiles = [
+    DB_FILE,
+    path.join(process.cwd(), 'data', 'db.json'),
+    path.join(process.cwd(), '..', 'data', 'db.json'),
+    path.join(process.cwd(), 'applet', 'data', 'db.json'),
+    '/tmp/data/db.json',
+  ];
+  let targetFile = candidateFiles.find(f => {
+    try { return fs.existsSync(f); } catch { return false; }
+  }) || DB_FILE;
 
   if (fs.existsSync(targetFile)) {
     try {
       const content = fs.readFileSync(targetFile, 'utf-8');
       const data = JSON.parse(content) as DBData;
-      if (targetFile === localRepoFile && targetFile !== DB_FILE) {
+      if (targetFile !== DB_FILE) {
         try {
           fs.writeFileSync(DB_FILE, content, 'utf-8');
         } catch {
@@ -1076,18 +1029,22 @@ function initDB(): DBData {
       if (!data.contactInfo) {
         data.contactInfo = { ...DEFAULT_CONTACT_INFO };
       }
-      if (!data.users || data.users.length === 0) {
-        data.users = [...PERSISTENT_USERS_SEED];
+      if (!data.users || data.users.length === 0 || data.users.length < PERSISTENT_USERS_SEED.length) {
+        const existingUserIds = new Set((data.users || []).map(u => u.id));
+        const missingUsers = PERSISTENT_USERS_SEED.filter(u => !existingUserIds.has(u.id));
+        data.users = [...(data.users || []), ...missingUsers];
       }
-      if (!data.laws || data.laws.length === 0) {
-        data.laws = [...INITIAL_LAWS];
+      if (!data.laws || data.laws.length === 0 || data.laws.length < INITIAL_LAWS.length) {
+        const existingLawIds = new Set((data.laws || []).map(l => l.id));
+        const missingLaws = INITIAL_LAWS.filter(l => !existingLawIds.has(l.id));
+        data.laws = [...(data.laws || []), ...missingLaws];
       }
       if (!data.lawRequests || data.lawRequests.length === 0) {
         data.lawRequests = [...PERSISTENT_LAW_REQUESTS_SEED];
       }
       return data;
     } catch {
-      // Fallback
+      // Fallback to initialData
     }
   }
 
@@ -5593,7 +5550,7 @@ app.post('/api/admin/videos', async (req, res) => {
   db.videos.push(newVideo);
   saveDB('videos');
   try {
-    const { saveVideoToFirestore } = await import('./server/firestore.js');
+    const { saveVideoToFirestore } = await import('./server/firestore.ts');
     await saveVideoToFirestore(newVideo);
   } catch {}
   res.status(201).json({ message: 'Video added', video: newVideo });
@@ -5607,7 +5564,7 @@ app.put('/api/admin/videos/:id', async (req, res) => {
     db.videos[index] = { ...db.videos[index], ...req.body };
     saveDB('videos');
     try {
-      const { saveVideoToFirestore } = await import('./server/firestore.js');
+      const { saveVideoToFirestore } = await import('./server/firestore.ts');
       await saveVideoToFirestore(db.videos[index]);
     } catch {}
     res.json({ message: 'Video updated', video: db.videos[index] });
@@ -5622,7 +5579,7 @@ app.delete('/api/admin/videos/:id', async (req, res) => {
   db.videos = db.videos.filter(v => v.id !== id);
   saveDB('videos');
   try {
-    const { deleteVideoFromFirestore } = await import('./server/firestore.js');
+    const { deleteVideoFromFirestore } = await import('./server/firestore.ts');
     await deleteVideoFromFirestore(id);
   } catch {}
   res.json({ message: 'Video deleted' });

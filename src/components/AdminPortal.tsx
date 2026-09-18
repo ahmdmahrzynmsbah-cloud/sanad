@@ -69,7 +69,8 @@ import { LawRequestsAdminTab } from './admin/LawRequestsAdminTab';
 import { UserDetailsModal } from './admin/UserDetailsModal';
 import { useSync, notifySync } from '../utils/sync';
 import { safeFetchJson } from '../utils/safeApi';
-import { SEED_USERS } from '../data/seedData';
+import { SEED_USERS, SEED_LAW_REQUESTS } from '../data/seedData';
+import { SEED_LAWS } from '../data/seedLaws';
 import {
   directSaveLawToFirestore,
   directSaveLawsBatchToFirestore,
@@ -302,7 +303,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         }
       } catch {}
     }
-    return [];
+    return SEED_LAWS;
   });
   const [lawsLoading, setLawsLoading] = useState(false);
   const [lawSearch, setLawSearch] = useState('');
@@ -435,11 +436,17 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
 
     try {
       const list = await directFetchLawRequestsFromFirestore();
-      const count = list.filter((r) => r.status === 'pending').length;
-      setPendingLawRequestsCount(count);
+      if (Array.isArray(list) && list.length > 0) {
+        const count = list.filter((r) => r.status === 'pending').length;
+        setPendingLawRequestsCount(count);
+        return;
+      }
     } catch (fErr) {
       console.warn('Failed to fetch law requests count from direct Firestore:', fErr);
     }
+
+    const fallbackCount = SEED_LAW_REQUESTS.filter((r) => r.status === 'pending').length;
+    setPendingLawRequestsCount(fallbackCount);
   };
 
   // Fetch Users
@@ -474,15 +481,20 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       } catch {}
     } else {
       // Secondary fallback: recover previously cached users from localStorage or SEED_USERS
+      let recovered = false;
       try {
         const cached = localStorage.getItem('sanad_cached_users');
         if (cached) {
           const parsed = JSON.parse(cached);
           if (Array.isArray(parsed) && parsed.length > 0) {
             setUsers(parsed);
+            recovered = true;
           }
         }
       } catch {}
+      if (!recovered) {
+        setUsers(SEED_USERS);
+      }
     }
     setUsersLoading(false);
   };
@@ -554,6 +566,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
           }
         }
       } catch {}
+    }
+    if (!loaded) {
+      // Indestructible built-in legal repository guarantee
+      setLaws(SEED_LAWS);
+      if (onLawsUpdated) onLawsUpdated();
+      loaded = true;
     }
     setLawsLoading(false);
   };
@@ -761,26 +779,33 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         if (data.users && Array.isArray(data.users) && data.users.length > 0) {
           setUsers(data.users);
         } else {
-          // If init returned 0 users due to cold start, fetch directly from Firestore
+          // If init returned 0 users due to cold start, fetch directly from Firestore or SEED_USERS
+          let usersRecovered = false;
           try {
             const firestoreUsers = await directFetchUsersFromFirestore();
             if (firestoreUsers && firestoreUsers.length > 0) {
               setUsers(firestoreUsers);
+              usersRecovered = true;
             }
           } catch (fErr) {
             console.warn('Fallback direct users fetch failed:', fErr);
+          }
+          if (!usersRecovered) {
+            setUsers(SEED_USERS);
           }
         }
         if (data.laws && Array.isArray(data.laws) && data.laws.length > 0) {
           setLaws(data.laws);
           if (onLawsUpdated) onLawsUpdated();
         } else {
-          // If init returned 0 laws due to cold start, fetch from direct Firestore or localStorage cache
+          // If init returned 0 laws due to cold start, fetch from direct Firestore, localStorage cache, or SEED_LAWS
+          let lawsRecovered = false;
           try {
             const firestoreLaws = await directFetchLawsFromFirestore();
             if (firestoreLaws && firestoreLaws.length > 0) {
               setLaws(firestoreLaws);
               if (onLawsUpdated) onLawsUpdated();
+              lawsRecovered = true;
             } else {
               const cached = localStorage.getItem('sanad_cached_laws');
               if (cached) {
@@ -788,11 +813,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                 if (Array.isArray(parsed) && parsed.length > 0) {
                   setLaws(parsed);
                   if (onLawsUpdated) onLawsUpdated();
+                  lawsRecovered = true;
                 }
               }
             }
           } catch (fErr) {
             console.warn('Fallback laws fetch failed:', fErr);
+          }
+          if (!lawsRecovered) {
+            setLaws(SEED_LAWS);
+            if (onLawsUpdated) onLawsUpdated();
           }
         }
         if (data.categories) {
