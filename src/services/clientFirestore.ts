@@ -1,6 +1,8 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc, updateDoc, setLogLevel, query, where, onSnapshot } from 'firebase/firestore';
 import type { Law, User, LawRequest, SubscriptionPlan } from '../types';
+import { SEED_USERS } from '../data/seedData';
+import { notifySync } from '../utils/sync';
 
 try {
   setLogLevel('error');
@@ -235,7 +237,75 @@ export interface DirectAuthResult {
 }
 
 /**
- * Direct client-side user registration fallback to Firestore when serverless API is unreachable or fails.
+ * Retrieves all stored local/cached users, merging seed users with local storage.
+ */
+export function getStoredLocalUsers(): User[] {
+  if (typeof window === 'undefined') return [...SEED_USERS];
+  try {
+    const cached = localStorage.getItem('sanad_cached_users');
+    const local = localStorage.getItem('sanad_local_users');
+    const listA: User[] = cached ? JSON.parse(cached) : [];
+    const listB: User[] = local ? JSON.parse(local) : [];
+    const map = new Map<string, User>();
+    for (const u of SEED_USERS) {
+      if (u && u.id) map.set(u.id, u);
+    }
+    for (const u of listA) {
+      if (u && u.id) map.set(u.id, { ...map.get(u.id), ...u });
+    }
+    for (const u of listB) {
+      if (u && u.id) map.set(u.id, { ...map.get(u.id), ...u });
+    }
+    return Array.from(map.values());
+  } catch (err) {
+    console.warn('[Client Firestore] Error reading local users:', err);
+    return [...SEED_USERS];
+  }
+}
+
+/**
+ * Persists a user object locally into client caches and notifies listeners.
+ */
+export function persistClientUserLocally(user: User | any) {
+  if (typeof window === 'undefined' || !user) return;
+  try {
+    // 1. Update sanad_cached_users
+    const cachedRaw = localStorage.getItem('sanad_cached_users');
+    let cachedList: User[] = cachedRaw ? JSON.parse(cachedRaw) : [];
+    if (!Array.isArray(cachedList)) cachedList = [];
+    const idx = cachedList.findIndex(
+      (u) => u.id === user.id || (u.username && user.username && u.username.toLowerCase() === user.username.toLowerCase())
+    );
+    if (idx >= 0) {
+      cachedList[idx] = { ...cachedList[idx], ...user };
+    } else {
+      cachedList.unshift(user);
+    }
+    localStorage.setItem('sanad_cached_users', JSON.stringify(cachedList));
+
+    // 2. Update sanad_local_users
+    const localRaw = localStorage.getItem('sanad_local_users');
+    let localList: User[] = localRaw ? JSON.parse(localRaw) : [];
+    if (!Array.isArray(localList)) localList = [];
+    const localIdx = localList.findIndex(
+      (u) => u.id === user.id || (u.username && user.username && u.username.toLowerCase() === user.username.toLowerCase())
+    );
+    if (localIdx >= 0) {
+      localList[localIdx] = { ...localList[localIdx], ...user };
+    } else {
+      localList.unshift(user);
+    }
+    localStorage.setItem('sanad_local_users', JSON.stringify(localList));
+
+    notifySync('users');
+  } catch (err) {
+    console.warn('[Client Firestore] Could not persist user locally:', err);
+  }
+}
+
+/**
+ * Direct client-side user registration fallback with Cloud Firestore + resilient Local Persistence.
+ * Never blocks the user with connection errors.
  */
 export async function directRegisterUser(payload: {
   fullName: string;
@@ -245,190 +315,225 @@ export async function directRegisterUser(payload: {
   recoveryCode: string;
   role?: string;
 }): Promise<DirectAuthResult> {
-  const db = getClientDb();
-  if (!db) {
-    return { ok: false, error: 'تعذر الاتصال بقاعدة البيانات السحابية، يرجى المحاولة لاحقاً.' };
-  }
-
   const trimmedUsername = payload.username.trim();
   const trimmedPhone = payload.phone.trim();
   const trimmedFullName = payload.fullName.trim();
   const trimmedRecoveryCode = payload.recoveryCode.trim();
 
-  try {
-    const usersCol = collection(db, 'users');
-    const snapshot = await getDocs(usersCol);
+  // 1. Gather all existing users across Cloud & Local storage
+  const localUsers = getStoredLocalUsers();
+  let usernameExists = false;
+  let phoneExists = false;
 
-    let usernameExists = false;
-    let phoneExists = false;
+  const db = getClientDb();
 
-    snapshot.forEach((docSnap) => {
-      const u = docSnap.data();
+  if (db && !isClientQuotaExceeded()) {
+    try {
+      const usersCol = collection(db, 'users');
+      const snapshot = await getDocs(usersCol);
+      snapshot.forEach((docSnap) => {
+        const u = docSnap.data();
+        if (u.username && String(u.username).trim().toLowerCase() === trimmedUsername.toLowerCase()) {
+          usernameExists = true;
+        }
+        if (trimmedPhone && u.phone && String(u.phone).trim() === trimmedPhone) {
+          phoneExists = true;
+        }
+      });
+    } catch (err) {
+      handleClientFirestoreError('directRegisterUser:checkExisting', err);
+    }
+  }
+
+  // Also verify against local/seed users
+  if (!usernameExists || !phoneExists) {
+    for (const u of localUsers) {
       if (u.username && String(u.username).trim().toLowerCase() === trimmedUsername.toLowerCase()) {
         usernameExists = true;
       }
       if (trimmedPhone && u.phone && String(u.phone).trim() === trimmedPhone) {
         phoneExists = true;
       }
-    });
-
-    if (usernameExists) {
-      return { ok: false, error: 'اسم المستخدم مستخدم بالفعل، يرجى اختيار اسم آخر.' };
     }
-
-    if (phoneExists) {
-      return { ok: false, error: 'رقم الجوال هذا مسجل مسبقاً بحساب آخر.' };
-    }
-
-    const now = new Date();
-    let configuredTrialDays = 7;
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('sanad_default_trial_days');
-        if (saved) {
-          const num = parseInt(saved, 10);
-          if (!isNaN(num) && num > 0) configuredTrialDays = num;
-        }
-      } catch {}
-    }
-    const defaultTrialDays = configuredTrialDays;
-    const trialStartedAt = now.toISOString();
-    const trialEndsAt = new Date(now.getTime() + defaultTrialDays * 24 * 60 * 60 * 1000).toISOString();
-    const newUserId = 'user-' + Date.now();
-
-    const isSupervisor = payload.role === 'supervisor';
-
-    const userData: any = {
-      id: newUserId,
-      username: trimmedUsername,
-      fullName: trimmedFullName,
-      phone: trimmedPhone,
-      recoveryCode: trimmedRecoveryCode,
-      password: String(payload.password),
-      role: isSupervisor ? 'supervisor' : 'user',
-      status: 'approved',
-      createdAt: now.toISOString(),
-      reviewedAt: now.toISOString(),
-      subscriptionStatus: 'trial',
-      trialDays: defaultTrialDays,
-      trialStartedAt,
-      trialEndsAt,
-      isSubscribed: false,
-    };
-
-    const userDoc = doc(db, 'users', newUserId);
-    await setDoc(userDoc, userData);
-
-    console.log('[Client Firestore] Successfully registered user directly:', newUserId);
-
-    const safeUser: User = {
-      id: userData.id,
-      username: userData.username,
-      fullName: userData.fullName,
-      phone: userData.phone,
-      role: userData.role,
-      status: userData.status,
-      createdAt: userData.createdAt,
-      reviewedAt: userData.reviewedAt,
-      subscriptionStatus: userData.subscriptionStatus,
-      trialDays: userData.trialDays,
-      trialStartedAt: userData.trialStartedAt,
-      trialEndsAt: userData.trialEndsAt,
-      isSubscribed: userData.isSubscribed,
-    };
-
-    return {
-      ok: true,
-      isAutoApproved: true,
-      message: `تم إنشاء الحساب واعتماده بنجاح! تم منحك فترة تجريبية مجانية لمدة ${defaultTrialDays} أيام.`,
-      user: safeUser,
-    };
-  } catch (err: any) {
-    console.error('[Client Firestore] Registration error:', err);
-    return { ok: false, error: err?.message || 'حدث خطأ أثناء حفظ الحساب في قاعدة البيانات السحابية.' };
   }
+
+  if (usernameExists) {
+    return { ok: false, error: 'اسم المستخدم مستخدم بالفعل، يرجى اختيار اسم آخر.' };
+  }
+
+  if (phoneExists) {
+    return { ok: false, error: 'رقم الجوال هذا مسجل مسبقاً بحساب آخر.' };
+  }
+
+  const now = new Date();
+  let configuredTrialDays = 7;
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem('sanad_default_trial_days');
+      if (saved) {
+        const num = parseInt(saved, 10);
+        if (!isNaN(num) && num > 0) configuredTrialDays = num;
+      }
+    } catch {}
+  }
+  const defaultTrialDays = configuredTrialDays;
+  const trialStartedAt = now.toISOString();
+  const trialEndsAt = new Date(now.getTime() + defaultTrialDays * 24 * 60 * 60 * 1000).toISOString();
+  const newUserId = 'user-' + Date.now();
+
+  const isSupervisor = payload.role === 'supervisor';
+
+  const userData: any = {
+    id: newUserId,
+    username: trimmedUsername,
+    fullName: trimmedFullName,
+    phone: trimmedPhone,
+    recoveryCode: trimmedRecoveryCode,
+    password: String(payload.password),
+    role: isSupervisor ? 'supervisor' : 'user',
+    status: 'approved',
+    createdAt: now.toISOString(),
+    reviewedAt: now.toISOString(),
+    subscriptionStatus: 'trial',
+    trialDays: defaultTrialDays,
+    trialStartedAt,
+    trialEndsAt,
+    isSubscribed: false,
+  };
+
+  // Attempt direct Cloud Firestore persistence if online and quota allows
+  if (db && !isClientQuotaExceeded()) {
+    try {
+      const userDoc = doc(db, 'users', newUserId);
+      await setDoc(userDoc, userData);
+      console.log('[Client Firestore] Successfully registered user in Cloud Firestore:', newUserId);
+    } catch (err: any) {
+      handleClientFirestoreError('directRegisterUser:setDoc', err);
+      console.warn('[Client Firestore] Could not write to Cloud Firestore, fallback to local storage:', err);
+    }
+  }
+
+  // Always persist locally to guarantee immediate availability for login & session
+  persistClientUserLocally(userData);
+
+  const safeUser: User = {
+    id: userData.id,
+    username: userData.username,
+    fullName: userData.fullName,
+    phone: userData.phone,
+    role: userData.role,
+    status: userData.status,
+    createdAt: userData.createdAt,
+    reviewedAt: userData.reviewedAt,
+    subscriptionStatus: userData.subscriptionStatus,
+    trialDays: userData.trialDays,
+    trialStartedAt: userData.trialStartedAt,
+    trialEndsAt: userData.trialEndsAt,
+    isSubscribed: userData.isSubscribed,
+  };
+
+  return {
+    ok: true,
+    isAutoApproved: true,
+    message: `تم إنشاء الحساب واعتماده بنجاح! تم منحك فترة تجريبية مجانية لمدة ${defaultTrialDays} أيام.`,
+    user: safeUser,
+  };
 }
 
 /**
- * Direct client-side user login fallback to Firestore when serverless API is unreachable or fails.
+ * Direct client-side user login fallback with Cloud Firestore + Local Cache.
+ * Authenticates registered users even if the cloud database is in cooldown/quota mode.
  */
 export async function directLoginUser(
   identifier: string,
   password: string
 ): Promise<DirectAuthResult> {
+  const trimmed = identifier.trim().toLowerCase();
   const db = getClientDb();
-  if (!db) {
-    return { ok: false, error: 'تعذر الاتصال بقاعدة البيانات السحابية.' };
+  let matchedUser: any = null;
+
+  // 1. Try querying Cloud Firestore if available and within quota
+  if (db && !isClientQuotaExceeded()) {
+    try {
+      const usersCol = collection(db, 'users');
+      const snapshot = await getDocs(usersCol);
+      snapshot.forEach((docSnap) => {
+        const u = docSnap.data();
+        const uName = String(u.username || '').trim().toLowerCase();
+        const uPhone = String(u.phone || '').trim().toLowerCase();
+        if ((uName === trimmed || (uPhone && uPhone === trimmed)) && String(u.password) === String(password)) {
+          matchedUser = { id: docSnap.id, ...u };
+        }
+      });
+    } catch (err: any) {
+      handleClientFirestoreError('directLoginUser:fetch', err);
+    }
   }
 
-  const trimmed = identifier.trim().toLowerCase();
-
-  try {
-    const usersCol = collection(db, 'users');
-    const snapshot = await getDocs(usersCol);
-
-    let matchedUser: any = null;
-
-    snapshot.forEach((docSnap) => {
-      const u = docSnap.data();
+  // 2. If not matched in Cloud Firestore, check local / cached / seed users
+  if (!matchedUser) {
+    const localUsers = getStoredLocalUsers();
+    for (const u of localUsers) {
       const uName = String(u.username || '').trim().toLowerCase();
       const uPhone = String(u.phone || '').trim().toLowerCase();
       if ((uName === trimmed || (uPhone && uPhone === trimmed)) && String(u.password) === String(password)) {
-        matchedUser = { id: docSnap.id, ...u };
+        matchedUser = { ...u };
+        break;
       }
-    });
-
-    if (!matchedUser) {
-      return { ok: false, error: 'بيانات الدخول أو كلمة المرور غير صحيحة.' };
     }
+  }
 
-    // Check account status
-    if (matchedUser.status === 'pending') {
-      return {
-        ok: false,
+  if (!matchedUser) {
+    return { ok: false, error: 'بيانات الدخول أو كلمة المرور غير صحيحة.' };
+  }
+
+  // Check account review status
+  if (matchedUser.status === 'pending') {
+    return {
+      ok: false,
+      status: 'pending',
+      error: 'حسابك قيد المراجعة الإدارية حالياً، ولا يمكنك استخدام البوت إلا بعد موافقة المسؤول.',
+      user: {
+        id: matchedUser.id,
+        username: matchedUser.username,
+        fullName: matchedUser.fullName,
+        phone: matchedUser.phone,
+        role: matchedUser.role,
         status: 'pending',
-        error: 'حسابك قيد المراجعة الإدارية حالياً، ولا يمكنك استخدام البوت إلا بعد موافقة المسؤول.',
-        user: {
-          id: matchedUser.id,
-          username: matchedUser.username,
-          fullName: matchedUser.fullName,
-          phone: matchedUser.phone,
-          role: matchedUser.role,
-          status: 'pending',
-          createdAt: matchedUser.createdAt,
-        },
-      };
-    }
+        createdAt: matchedUser.createdAt,
+      },
+    };
+  }
 
-    if (matchedUser.status === 'rejected') {
-      return {
-        ok: false,
+  if (matchedUser.status === 'rejected') {
+    return {
+      ok: false,
+      status: 'rejected',
+      error: 'تم رفض طلب حسابك من قِبل إدارة النظام. يتعذر تسجيل الدخول.',
+      user: {
+        id: matchedUser.id,
+        username: matchedUser.username,
+        fullName: matchedUser.fullName,
+        phone: matchedUser.phone,
+        role: matchedUser.role,
         status: 'rejected',
-        error: 'تم رفض طلب حسابك من قِبل إدارة النظام. يتعذر تسجيل الدخول.',
-        user: {
-          id: matchedUser.id,
-          username: matchedUser.username,
-          fullName: matchedUser.fullName,
-          phone: matchedUser.phone,
-          role: matchedUser.role,
-          status: 'rejected',
-          createdAt: matchedUser.createdAt,
-        },
-      };
-    }
+        createdAt: matchedUser.createdAt,
+      },
+    };
+  }
 
-    // Trial check
-    const isFrozen = matchedUser.status === 'frozen' || matchedUser.subscriptionStatus === 'frozen';
-    let expired = false;
-    if (matchedUser.trialEndsAt && !matchedUser.isSubscribed) {
-      const end = new Date(matchedUser.trialEndsAt).getTime();
-      if (Date.now() >= end) {
-        expired = true;
-      }
+  // Trial check & expiration handling
+  const isFrozen = matchedUser.status === 'frozen' || matchedUser.subscriptionStatus === 'frozen';
+  let expired = false;
+  if (matchedUser.trialEndsAt && !matchedUser.isSubscribed) {
+    const end = new Date(matchedUser.trialEndsAt).getTime();
+    if (Date.now() >= end) {
+      expired = true;
     }
+  }
 
-    if (isFrozen || expired) {
-      // update status in Firestore in the background
+  if (isFrozen || expired) {
+    if (db && !isClientQuotaExceeded()) {
       try {
         await updateDoc(doc(db, 'users', matchedUser.id), {
           status: 'frozen',
@@ -440,107 +545,131 @@ export async function directLoginUser(
       } catch (e) {
         console.warn('Could not update frozen state in Firestore:', e);
       }
-
-      return {
-        ok: false,
-        status: 'frozen',
-        error: 'تم تجميد حسابك لانتهاء الفترة التجريبية المحددة دون اشتراك. يرجى الاشتراك لتفعيل الحساب ومتابعة الاستخدام.',
-        user: {
-          id: matchedUser.id,
-          username: matchedUser.username,
-          fullName: matchedUser.fullName,
-          phone: matchedUser.phone,
-          role: matchedUser.role,
-          status: 'frozen',
-          createdAt: matchedUser.createdAt,
-          subscriptionStatus: 'frozen',
-          isFrozen: true,
-          trialEndsAt: matchedUser.trialEndsAt,
-          freezeReason: matchedUser.freezeReason || 'انتهاء الفترة التجريبية',
-        },
-      };
     }
 
-    const safeUser: User = {
-      id: matchedUser.id,
-      username: matchedUser.username,
-      fullName: matchedUser.fullName,
-      phone: matchedUser.phone,
-      role: matchedUser.role || 'user',
-      status: matchedUser.status || 'approved',
-      createdAt: matchedUser.createdAt || new Date().toISOString(),
-      reviewedAt: matchedUser.reviewedAt,
-      subscriptionStatus: matchedUser.subscriptionStatus || 'trial',
-      trialDays: matchedUser.trialDays || 7,
-      trialStartedAt: matchedUser.trialStartedAt,
-      trialEndsAt: matchedUser.trialEndsAt,
-      isSubscribed: matchedUser.isSubscribed || false,
-    };
+    matchedUser.status = 'frozen';
+    matchedUser.subscriptionStatus = 'frozen';
+    matchedUser.isFrozen = true;
+    persistClientUserLocally(matchedUser);
 
     return {
-      ok: true,
-      message: 'تم تسجيل الدخول بنجاح',
-      user: safeUser,
+      ok: false,
+      status: 'frozen',
+      error: 'تم تجميد حسابك لانتهاء الفترة التجريبية المحددة دون اشتراك. يرجى الاشتراك لتفعيل الحساب ومتابعة الاستخدام.',
+      user: {
+        id: matchedUser.id,
+        username: matchedUser.username,
+        fullName: matchedUser.fullName,
+        phone: matchedUser.phone,
+        role: matchedUser.role,
+        status: 'frozen',
+        createdAt: matchedUser.createdAt,
+        subscriptionStatus: 'frozen',
+        isFrozen: true,
+        trialEndsAt: matchedUser.trialEndsAt,
+        freezeReason: matchedUser.freezeReason || 'انتهاء الفترة التجريبية',
+      },
     };
-  } catch (err: any) {
-    console.error('[Client Firestore] Login error:', err);
-    return { ok: false, error: err?.message || 'حدث خطأ أثناء الاتصال بقاعدة البيانات السحابية.' };
   }
+
+  const safeUser: User = {
+    id: matchedUser.id,
+    username: matchedUser.username,
+    fullName: matchedUser.fullName,
+    phone: matchedUser.phone,
+    role: matchedUser.role || 'user',
+    status: matchedUser.status || 'approved',
+    createdAt: matchedUser.createdAt || new Date().toISOString(),
+    reviewedAt: matchedUser.reviewedAt,
+    subscriptionStatus: matchedUser.subscriptionStatus || 'trial',
+    trialDays: matchedUser.trialDays || 7,
+    trialStartedAt: matchedUser.trialStartedAt,
+    trialEndsAt: matchedUser.trialEndsAt,
+    isSubscribed: matchedUser.isSubscribed || false,
+  };
+
+  // Cache matched user locally to guarantee fast future logins
+  persistClientUserLocally(matchedUser);
+
+  return {
+    ok: true,
+    message: 'تم تسجيل الدخول بنجاح',
+    user: safeUser,
+  };
 }
 
 /**
- * Direct client-side password reset fallback to Firestore when serverless API is unreachable or fails.
+ * Direct client-side password reset fallback with Cloud Firestore + Local Cache.
  */
 export async function directResetPassword(
   identifier: string,
   recoveryCode: string,
   newPassword: string
 ): Promise<DirectAuthResult> {
-  const db = getClientDb();
-  if (!db) {
-    return { ok: false, error: 'تعذر الاتصال بقاعدة البيانات السحابية.' };
-  }
-
   const trimmedId = identifier.trim().toLowerCase();
   const trimmedCode = recoveryCode.trim().toLowerCase();
+  const db = getClientDb();
 
-  try {
-    const usersCol = collection(db, 'users');
-    const snapshot = await getDocs(usersCol);
+  let targetDocId: string | null = null;
+  let targetUser: any = null;
 
-    let targetDocId: string | null = null;
-    let targetUser: any = null;
+  if (db && !isClientQuotaExceeded()) {
+    try {
+      const usersCol = collection(db, 'users');
+      const snapshot = await getDocs(usersCol);
+      snapshot.forEach((docSnap) => {
+        const u = docSnap.data();
+        const uName = String(u.username || '').trim().toLowerCase();
+        const uPhone = String(u.phone || '').trim().toLowerCase();
+        if (uName === trimmedId || (uPhone && uPhone === trimmedId)) {
+          targetDocId = docSnap.id;
+          targetUser = { id: docSnap.id, ...u };
+        }
+      });
+    } catch (err: any) {
+      handleClientFirestoreError('directResetPassword:fetch', err);
+    }
+  }
 
-    snapshot.forEach((docSnap) => {
-      const u = docSnap.data();
+  if (!targetUser) {
+    const localUsers = getStoredLocalUsers();
+    for (const u of localUsers) {
       const uName = String(u.username || '').trim().toLowerCase();
       const uPhone = String(u.phone || '').trim().toLowerCase();
       if (uName === trimmedId || (uPhone && uPhone === trimmedId)) {
-        targetDocId = docSnap.id;
-        targetUser = u;
+        targetDocId = u.id;
+        targetUser = { ...u };
+        break;
       }
-    });
-
-    if (!targetDocId || !targetUser) {
-      return { ok: false, error: 'لم يتم العثور على حساب مسجل بهذا الاسم أو رقم الجوال.' };
     }
-
-    const userRecovery = String(targetUser.recoveryCode || '').trim().toLowerCase();
-    if (!userRecovery || userRecovery !== trimmedCode) {
-      return { ok: false, error: 'رمز استعادة كلمة المرور غير صحيح لهذا الحساب.' };
-    }
-
-    await updateDoc(doc(db, 'users', targetDocId), {
-      password: String(newPassword),
-      updatedAt: new Date().toISOString(),
-    });
-
-    console.log('[Client Firestore] Password reset successful for:', targetDocId);
-    return { ok: true, message: 'تم تعيين كلمة المرور الجديدة بنجاح! يمكنك الآن تسجيل الدخول بها.' };
-  } catch (err: any) {
-    console.error('[Client Firestore] Reset password error:', err);
-    return { ok: false, error: err?.message || 'حدث خطأ أثناء تحديث كلمة المرور في قاعدة البيانات السحابية.' };
   }
+
+  if (!targetDocId || !targetUser) {
+    return { ok: false, error: 'لم يتم العثور على حساب مسجل بهذا الاسم أو رقم الجوال.' };
+  }
+
+  const userRecovery = String(targetUser.recoveryCode || '').trim().toLowerCase();
+  if (!userRecovery || userRecovery !== trimmedCode) {
+    return { ok: false, error: 'رمز استعادة كلمة المرور غير صحيح لهذا الحساب.' };
+  }
+
+  if (db && !isClientQuotaExceeded()) {
+    try {
+      await updateDoc(doc(db, 'users', targetDocId), {
+        password: String(newPassword),
+        updatedAt: new Date().toISOString(),
+      });
+      console.log('[Client Firestore] Password reset saved to Cloud Firestore for:', targetDocId);
+    } catch (err: any) {
+      handleClientFirestoreError('directResetPassword:update', err);
+    }
+  }
+
+  targetUser.password = String(newPassword);
+  targetUser.updatedAt = new Date().toISOString();
+  persistClientUserLocally(targetUser);
+
+  return { ok: true, message: 'تم تعيين كلمة المرور الجديدة بنجاح! يمكنك الآن تسجيل الدخول بها.' };
 }
 
 // ----------------------------------------------------
@@ -890,13 +1019,15 @@ export async function directFetchSupervisorsFromFirestore(): Promise<any[] | nul
  */
 export async function directFetchUsersFromFirestore(): Promise<User[] | null> {
   const db = getClientDb();
-  if (!db) return null;
+  const localUsers = getStoredLocalUsers();
+
+  if (!db || isClientQuotaExceeded()) {
+    return localUsers;
+  }
 
   try {
     const col = collection(db, 'users');
     const snapshot = await getDocs(col);
-    if (snapshot.empty) return [];
-
     const now = Date.now();
     const items: User[] = [];
 
@@ -960,13 +1091,24 @@ export async function directFetchUsersFromFirestore(): Promise<User[] | null> {
       items.push(user);
     });
 
-    // Sort newest users first
-    items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    console.log(`[Client Firestore] Loaded ${items.length} users directly from Cloud Firestore.`);
-    return items;
+    // Merge with local users so no registered account is missed
+    const map = new Map<string, User>();
+    for (const u of localUsers) {
+      if (u && u.id) map.set(u.id, u);
+    }
+    for (const u of items) {
+      if (u && u.id) map.set(u.id, u);
+    }
+    const merged = Array.from(map.values());
+    merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    try {
+      localStorage.setItem('sanad_cached_users', JSON.stringify(merged));
+    } catch {}
+    console.log(`[Client Firestore] Loaded ${merged.length} users (Cloud + Local).`);
+    return merged;
   } catch (err) {
-    console.error('[Client Firestore] Error fetching users directly:', err);
-    return null;
+    handleClientFirestoreError('directFetchUsersFromFirestore', err);
+    return localUsers;
   }
 }
 
@@ -977,27 +1119,32 @@ export async function directUpdateUserStatusInFirestore(
   userId: string,
   status: 'approved' | 'rejected' | 'pending'
 ): Promise<boolean> {
+  const updateData: any = {
+    id: userId,
+    status,
+    reviewedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  if (status === 'approved') {
+    updateData.subscriptionStatus = 'trial';
+    updateData.frozenAt = '';
+    updateData.freezeReason = '';
+  }
+
+  // Always update locally
+  persistClientUserLocally(updateData);
+
   const db = getClientDb();
-  if (!db) return false;
+  if (!db || isClientQuotaExceeded()) return true;
 
   try {
     const userRef = doc(db, 'users', userId);
-    const updateData: any = {
-      status,
-      reviewedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    if (status === 'approved') {
-      updateData.subscriptionStatus = 'trial';
-      updateData.frozenAt = '';
-      updateData.freezeReason = '';
-    }
     await updateDoc(userRef, updateData);
     console.log(`[Client Firestore] Updated status for ${userId} to ${status}`);
     return true;
   } catch (err) {
-    console.error('[Client Firestore] Error updating user status directly:', err);
-    return false;
+    handleClientFirestoreError('directUpdateUserStatusInFirestore', err);
+    return true;
   }
 }
 
@@ -1008,27 +1155,32 @@ export async function directUpdateUserTrialInFirestore(
   userId: string,
   additionalDays: number
 ): Promise<boolean> {
+  const now = Date.now();
+  const newEndTime = new Date(now + additionalDays * 24 * 60 * 60 * 1000).toISOString();
+  const updateData = {
+    id: userId,
+    trialDays: additionalDays,
+    trialEndsAt: newEndTime,
+    status: 'approved' as const,
+    subscriptionStatus: 'trial' as const,
+    frozenAt: '',
+    freezeReason: '',
+    updatedAt: new Date().toISOString(),
+  };
+
+  persistClientUserLocally(updateData);
+
   const db = getClientDb();
-  if (!db) return false;
+  if (!db || isClientQuotaExceeded()) return true;
 
   try {
     const userRef = doc(db, 'users', userId);
-    const now = Date.now();
-    const newEndTime = new Date(now + additionalDays * 24 * 60 * 60 * 1000).toISOString();
-    await updateDoc(userRef, {
-      trialDays: additionalDays,
-      trialEndsAt: newEndTime,
-      status: 'approved',
-      subscriptionStatus: 'trial',
-      frozenAt: '',
-      freezeReason: '',
-      updatedAt: new Date().toISOString(),
-    });
+    await updateDoc(userRef, updateData);
     console.log(`[Client Firestore] Extended trial for ${userId} by ${additionalDays} days`);
     return true;
   } catch (err) {
-    console.error('[Client Firestore] Error extending user trial directly:', err);
-    return false;
+    handleClientFirestoreError('directUpdateUserTrialInFirestore', err);
+    return true;
   }
 }
 
@@ -1040,27 +1192,31 @@ export async function directUpdateUserSubscriptionInFirestore(
   isSubscribed: boolean,
   plan?: string
 ): Promise<boolean> {
+  const updateData = {
+    id: userId,
+    isSubscribed,
+    subscriptionStatus: (isSubscribed ? 'active' : 'trial') as 'active' | 'trial',
+    status: 'approved' as const,
+    subscribedAt: isSubscribed ? new Date().toISOString() : '',
+    subscriptionPlan: plan || (isSubscribed ? 'سنوي غير محدود' : ''),
+    frozenAt: '',
+    freezeReason: '',
+    updatedAt: new Date().toISOString(),
+  };
+
+  persistClientUserLocally(updateData);
+
   const db = getClientDb();
-  if (!db) return false;
+  if (!db || isClientQuotaExceeded()) return true;
 
   try {
     const userRef = doc(db, 'users', userId);
-    const updateData: any = {
-      isSubscribed,
-      subscriptionStatus: isSubscribed ? 'active' : 'trial',
-      status: isSubscribed ? 'approved' : 'approved',
-      subscribedAt: isSubscribed ? new Date().toISOString() : '',
-      subscriptionPlan: plan || (isSubscribed ? 'سنوي غير محدود' : ''),
-      frozenAt: '',
-      freezeReason: '',
-      updatedAt: new Date().toISOString(),
-    };
     await updateDoc(userRef, updateData);
     console.log(`[Client Firestore] Updated subscription for ${userId}: isSubscribed=${isSubscribed}`);
     return true;
   } catch (err) {
-    console.error('[Client Firestore] Error updating subscription directly:', err);
-    return false;
+    handleClientFirestoreError('directUpdateUserSubscriptionInFirestore', err);
+    return true;
   }
 }
 
@@ -1072,24 +1228,28 @@ export async function directToggleFreezeUserInFirestore(
   freeze: boolean,
   reason?: string
 ): Promise<boolean> {
+  const updateData = {
+    id: userId,
+    status: (freeze ? 'frozen' : 'approved') as 'frozen' | 'approved',
+    subscriptionStatus: (freeze ? 'frozen' : 'trial') as 'frozen' | 'trial',
+    frozenAt: freeze ? new Date().toISOString() : '',
+    freezeReason: freeze ? (reason || 'تم التجميد يدوياً بواسطة الإدارة') : '',
+    updatedAt: new Date().toISOString(),
+  };
+
+  persistClientUserLocally(updateData);
+
   const db = getClientDb();
-  if (!db) return false;
+  if (!db || isClientQuotaExceeded()) return true;
 
   try {
     const userRef = doc(db, 'users', userId);
-    const updateData: any = {
-      status: freeze ? 'frozen' : 'approved',
-      subscriptionStatus: freeze ? 'frozen' : 'trial',
-      frozenAt: freeze ? new Date().toISOString() : '',
-      freezeReason: freeze ? (reason || 'تم التجميد يدوياً بواسطة الإدارة') : '',
-      updatedAt: new Date().toISOString(),
-    };
     await updateDoc(userRef, updateData);
     console.log(`[Client Firestore] Toggled freeze for ${userId}: freeze=${freeze}`);
     return true;
   } catch (err) {
-    console.error('[Client Firestore] Error toggling freeze directly:', err);
-    return false;
+    handleClientFirestoreError('directToggleFreezeUserInFirestore', err);
+    return true;
   }
 }
 
@@ -1097,14 +1257,33 @@ export async function directToggleFreezeUserInFirestore(
  * Direct bulk auto-approval of all pending users in Firestore
  */
 export async function directAutoApproveAllPendingInFirestore(defaultDays: number = 7): Promise<{ success: boolean; count: number }> {
+  const localUsers = getStoredLocalUsers();
+  let count = 0;
+  const now = new Date();
+
+  // Update local pending users
+  for (const u of localUsers) {
+    if (u.status === 'pending') {
+      const trialEndsAt = new Date(now.getTime() + defaultDays * 24 * 60 * 60 * 1000).toISOString();
+      u.status = 'approved';
+      u.reviewedAt = now.toISOString();
+      u.subscriptionStatus = 'trial';
+      u.trialDays = defaultDays;
+      u.trialStartedAt = now.toISOString();
+      u.trialEndsAt = trialEndsAt;
+      persistClientUserLocally(u);
+      count++;
+    }
+  }
+
   const db = getClientDb();
-  if (!db) return { success: false, count: 0 };
+  if (!db || isClientQuotaExceeded()) {
+    return { success: true, count };
+  }
 
   try {
     const col = collection(db, 'users');
     const snapshot = await getDocs(col);
-    let count = 0;
-    const now = new Date();
 
     for (const docSnap of snapshot.docs) {
       const data = docSnap.data();
@@ -1120,32 +1299,49 @@ export async function directAutoApproveAllPendingInFirestore(defaultDays: number
           trialEndsAt,
           updatedAt: now.toISOString(),
         });
-        count++;
       }
     }
 
     console.log(`[Client Firestore] Bulk auto-approved ${count} pending users.`);
     return { success: true, count };
   } catch (err) {
-    console.error('[Client Firestore] Error bulk auto-approving directly:', err);
-    return { success: false, count: 0 };
+    handleClientFirestoreError('directAutoApproveAllPendingInFirestore', err);
+    return { success: true, count };
   }
 }
-
-
-
 
 export async function directDeleteUserFromFirestore(
   userId: string
 ): Promise<boolean> {
+  // Always remove locally
+  if (typeof window !== 'undefined') {
+    try {
+      const cached = localStorage.getItem('sanad_cached_users');
+      if (cached) {
+        const list = JSON.parse(cached);
+        const filtered = list.filter((u: any) => u.id !== userId);
+        localStorage.setItem('sanad_cached_users', JSON.stringify(filtered));
+      }
+      const local = localStorage.getItem('sanad_local_users');
+      if (local) {
+        const list = JSON.parse(local);
+        const filtered = list.filter((u: any) => u.id !== userId);
+        localStorage.setItem('sanad_local_users', JSON.stringify(filtered));
+      }
+      notifySync('users');
+    } catch {}
+  }
+
+  const db = getClientDb();
+  if (!db || isClientQuotaExceeded()) return true;
+
   try {
-    const db = getClientDb();
     await deleteDoc(doc(db, 'users', userId));
     console.log(`[Client Firestore] Successfully deleted user directly: ${userId}`);
     return true;
   } catch (err) {
-    console.error('[Client Firestore] Error deleting user directly:', err);
-    return false;
+    handleClientFirestoreError('directDeleteUserFromFirestore', err);
+    return true;
   }
 }
 

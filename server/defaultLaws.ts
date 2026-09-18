@@ -1,4 +1,4 @@
-import { StoredLaw } from './firestore.ts';
+import type { StoredLaw } from './firestore.ts';
 
 export const INITIAL_LAWS: StoredLaw[] = [
   {

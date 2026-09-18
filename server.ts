@@ -1552,7 +1552,10 @@ app.post('/api/auth/register', async (req, res) => {
       try {
         const cloudUsers = await fetchUsersFromFirestore();
         if (cloudUsers && Array.isArray(cloudUsers)) {
-          db.users = cloudUsers;
+          const map = new Map<string, StoredUser>();
+          for (const u of db.users) if (u && u.id) map.set(u.id, u);
+          for (const u of cloudUsers) if (u && u.id) map.set(u.id, u);
+          db.users = Array.from(map.values());
           existingUser = db.users.find(
             (u) => u && u.username && u.username.toLowerCase() === trimmedUsername.toLowerCase()
           );
@@ -1649,7 +1652,10 @@ app.post('/api/auth/login', async (req, res) => {
       try {
         const cloudUsers = await fetchUsersFromFirestore();
         if (cloudUsers && Array.isArray(cloudUsers)) {
-          db.users = cloudUsers;
+          const map = new Map<string, StoredUser>();
+          for (const u of db.users) if (u && u.id) map.set(u.id, u);
+          for (const u of cloudUsers) if (u && u.id) map.set(u.id, u);
+          db.users = Array.from(map.values());
           user = db.users.find(
             (u) =>
               u &&
@@ -1746,7 +1752,10 @@ app.post('/api/auth/reset-password', async (req, res) => {
       try {
         const cloudUsers = await fetchUsersFromFirestore();
         if (cloudUsers && Array.isArray(cloudUsers)) {
-          db.users = cloudUsers;
+          const map = new Map<string, StoredUser>();
+          for (const u of db.users) if (u && u.id) map.set(u.id, u);
+          for (const u of cloudUsers) if (u && u.id) map.set(u.id, u);
+          db.users = Array.from(map.values());
           user = db.users.find(
             (u) =>
               u &&
