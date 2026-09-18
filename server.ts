@@ -4897,6 +4897,7 @@ app.post('/api/chat', async (req, res) => {
      ⚖️ **المرجع والأساس التشريعي المعتمد:**
      * اسم القانون أو القرار بقانون أو اسم الملف المرفوع الرسمي وسنة صدوره ونفاذه.
      * رقم المادة أو البند أو الفقرة المحددة المنطبقة تماماً في الوثيقة بدقة بالغة.
+     * تنبيه حاسم: استشهد فقط بالمواد المنطبقة موضوعياً على استفسار المستخدم (مثلاً: إذا كان السؤال عن ضريبة أو جمارك أو عقوبة تهرب، يمنع الاستشهاد بقوانين غير ذات صلة مثل مدققي الحسابات أو الجمعيات إلا إذا كان الاستفسار متعلقاً بها تحديداً).
 
      💡 **الحكم والتكييف القانوني المفصل:**
      * صياغة قانونية واضحة، محكمة، ومفصلة تبين الحكم والإجراء النظامي المترتب بشكل دقيق يشرح كل جوانب استفسار المكلف.
@@ -5249,7 +5250,9 @@ function convertArabicIndicDigits(text: string): string {
 // Helper to normalize Arabic text for deep search matching and comparison
 function normalizeArabic(text: string): string {
   if (!text) return '';
-  let str = convertArabicIndicDigits(text);
+  // Normalize presentation forms (NFKD) to convert isolated/joining Arabic glyphs into standard Arabic
+  let str = text.normalize('NFKD');
+  str = convertArabicIndicDigits(str);
   return str
     .replace(/[\u064B-\u0652\u0670\u0640]/g, '') // remove diacritics / tatweel
     .replace(/[أإآٱ]/g, 'ا')
@@ -5552,6 +5555,10 @@ function isLegalTaxCustomsQuery(query: string): boolean {
   return legalTermsRegex.test(q);
 }
 
+const GENERIC_PALESTINIAN_STOPWORDS = new Set([
+  'فلسطين', 'فلسطينية', 'فلسطيني', 'دولة', 'قانون', 'قرار', 'بقانون', 'رقم', 'سنة', 'بشأن', 'لسنة', 'احكام', 'أحكام', 'بشان', 'الفلسطينية', 'الفلسطيني'
+]);
+
 const ARABIC_STOPWORDS = new Set([
   'هل', 'ما', 'ماذا', 'من', 'في', 'على', 'إلى', 'الي', 'عن', 'مع', 'هذا', 'هذه', 'ذلك', 'تلك',
   'هو', 'هي', 'هم', 'نحن', 'أنت', 'انت', 'انا', 'أنا', 'كان', 'كانت', 'يكون', 'تكون', 'ليس',
@@ -5561,6 +5568,17 @@ const ARABIC_STOPWORDS = new Set([
   'ذكر', 'عرف', 'تعرف', 'أود', 'اريد', 'أريد', 'استفسار', 'سؤال', 'تخبرني', 'تقول', 'اعرف', 'أعرف',
   'بدي', 'عايز', 'انسان', 'إنسان', 'شخص', 'بشر', 'صلاح', 'محمد', 'شيء', 'حاجة', 'ممكن', 'مرحبا', 'شكرا'
 ]);
+
+// Helper to filter out placeholder entries lacking substantive content
+function isSubstantiveLaw(law: StoredLaw): boolean {
+  if (!law || !law.content) return false;
+  const trimmed = law.content.trim();
+  if (trimmed.length < 60) return false;
+  if (trimmed.includes('تم إرفاق المستند بنجاح بحجم') && trimmed.includes('يمكنك كتابة وتعديل نصوص المواد')) {
+    return false;
+  }
+  return true;
+}
 
 // Search and retrieve relevant Palestinian legal texts and uploaded files as a mandatory reference
 function searchRelevantPalestinianLaws(
@@ -5582,28 +5600,38 @@ function searchRelevantPalestinianLaws(
     };
   }
 
+  // Filter out placeholder laws that pollute search results
+  const validLaws = laws.filter(isSubstantiveLaw);
+  const activeLaws = validLaws.length > 0 ? validLaws : laws;
+
   const requestedArticleNumber = extractRequestedArticleNumber(query);
   const normQuery = normalizeArabic(query);
-  const rawWords = normQuery
+  
+  // Specific substantive words for scoring (excludes both generic stopwords and generic Palestinian terms)
+  const substantiveWords = normQuery
+    .split(/\s+/)
+    .filter((w) => w.length >= 2 && !ARABIC_STOPWORDS.has(w) && !GENERIC_PALESTINIAN_STOPWORDS.has(w));
+
+  const allQueryWords = normQuery
     .split(/\s+/)
     .filter((w) => w.length >= 2 && !ARABIC_STOPWORDS.has(w));
 
   // Check if query is looking for an uploaded file directly
   const asksForUploadedFile = /(ملف|ملفات|مستند|وثيقة|مرفوع|رفعت|الملف|المستند|المرفوعة)/i.test(query);
 
-  // Retrieve or compute indexed chunks
+  // Retrieve or compute indexed chunks (rebuild index when law count or substantive laws change)
   let baseChunks: LegalChunk[];
-  if (cachedIndexedChunks && cachedIndexedChunks.lawsCount === laws.length) {
+  if (cachedIndexedChunks && cachedIndexedChunks.lawsCount === activeLaws.length) {
     baseChunks = cachedIndexedChunks.chunks;
   } else {
     baseChunks = [];
-    for (const law of laws) {
+    for (const law of activeLaws) {
       const lawChunks = chunkLawContent(law);
       for (const chunk of lawChunks) {
         baseChunks.push(chunk);
       }
     }
-    cachedIndexedChunks = { lawsCount: laws.length, chunks: baseChunks };
+    cachedIndexedChunks = { lawsCount: activeLaws.length, chunks: baseChunks };
   }
 
   // Score individual chunks across all laws
@@ -5635,21 +5663,21 @@ function searchRelevantPalestinianLaws(
       }
     }
 
-    // 2. Direct file name matching
-    if (normFileName && rawWords.some((w) => w.length >= 3 && normFileName.includes(w))) {
+    // 2. Direct file name matching (use substantiveWords to prevent generic 'فلسطين' from triggering +25)
+    if (normFileName && substantiveWords.some((w) => w.length >= 3 && normFileName.includes(w))) {
       score += 25;
     }
 
     // 3. Direct law title matching
-    if (rawWords.some((w) => w.length >= 3 && normTitle.includes(w))) {
+    if (substantiveWords.some((w) => w.length >= 3 && normTitle.includes(w))) {
       score += 15;
     }
 
     // 4. Keyword matching with section header & content boost
-    for (const word of rawWords) {
+    for (const word of substantiveWords) {
       if (word.length < 2) continue;
       if (normHeader.includes(word)) {
-        score += 10;
+        score += 12;
       }
       if (normTitle.includes(word)) {
         score += 8;
@@ -5658,32 +5686,42 @@ function searchRelevantPalestinianLaws(
         score += 5;
       }
       if (normText.includes(word)) {
-        score += 3;
+        score += 4;
+      }
+    }
+
+    // Secondary pass for broader query words if substantive words are scarce
+    if (substantiveWords.length === 0) {
+      for (const word of allQueryWords) {
+        if (normHeader.includes(word)) score += 4;
+        if (normText.includes(word)) score += 2;
       }
     }
 
     // 5. Subject and domain specific boosts
     if (normQuery.includes('دخل') && (normCategory.includes('دخل') || normTitle.includes('دخل'))) {
-      score += 6;
+      score += 8;
     }
     if (normQuery.includes('جمرك') && (normCategory.includes('جمرك') || normTitle.includes('جمرك'))) {
-      score += 6;
+      score += 8;
     }
     if ((normQuery.includes('قيمه مضافه') || normQuery.includes('مضافه')) && (normCategory.includes('مضافه') || normTitle.includes('مضافه'))) {
-      score += 6;
+      score += 8;
     }
     if (normQuery.includes('اعفاء') && (normHeader.includes('اعفاء') || normText.includes('اعفاء') || normText.includes('يعفى') || normText.includes('تستثنى'))) {
-      score += 8;
+      score += 10;
     }
-    if (normQuery.includes('غرامه') && (normHeader.includes('غرامه') || normText.includes('غرامه') || normText.includes('عقوبه') || normText.includes('مخالفه') || normText.includes('حبس'))) {
-      score += 8;
+    if ((normQuery.includes('غرامه') || normQuery.includes('عقوبه') || normQuery.includes('مخالفه')) && 
+        (normHeader.includes('غرامه') || normHeader.includes('عقوبه') || normText.includes('غرامه') || normText.includes('عقوبه') || normText.includes('مخالفه') || normText.includes('حبس'))) {
+      score += 10;
     }
 
     if (asksForUploadedFile && chunk.sourceFileName) {
       score += 8;
     }
 
-    if (score >= 2) {
+    // Filter out chunks with very low relevance score (< 5) unless it is an exact article match
+    if (score >= 5) {
       scoredChunks.push({ ...chunk, score });
     }
   }
@@ -5711,9 +5749,9 @@ function searchRelevantPalestinianLaws(
     if (topChunks.length >= 6) break;
   }
 
-  // If no chunks scored high enough but laws exist and user asks for uploaded files or general law question, include top chunks from first laws
-  if (topChunks.length === 0 && laws.length > 0) {
-    for (const law of laws.slice(0, 2)) {
+  // If no chunks scored high enough but user asks about uploaded files or general law, include top chunks from first substantive laws
+  if (topChunks.length === 0 && activeLaws.length > 0 && asksForUploadedFile) {
+    for (const law of activeLaws.slice(0, 2)) {
       const lawChunks = chunkLawContent(law);
       for (const lc of lawChunks.slice(0, 2)) {
         topChunks.push(lc);
@@ -5745,15 +5783,15 @@ function searchRelevantPalestinianLaws(
         .join('\n\n');
   }
 
-  // Compact catalog of available Palestinian laws and files
-  const fullCatalog = `[فهرس التشريعات والملفات المتاحة في قاعدة المعرفة (${laws.length} تشريع/ملف)]:\n` +
-    laws
+  // Compact catalog of available substantive Palestinian laws and files
+  const fullCatalog = `[فهرس التشريعات والملفات المتاحة في قاعدة المعرفة (${activeLaws.length} تشريع/ملف)]:\n` +
+    activeLaws
       .slice(0, 40)
       .map((l, index) => `${index + 1}. ${l.title} (${l.category})${l.sourceFileName ? ` [ملف: ${l.sourceFileName}]` : ''}`)
       .join('\n');
 
   return {
-    hasMatches: topChunks.length > 0 || laws.length > 0,
+    hasMatches: topChunks.length > 0,
     prioritizedContext,
     topChunks,
     fullCatalog,

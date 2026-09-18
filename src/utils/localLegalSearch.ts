@@ -29,7 +29,9 @@ export function convertArabicIndicDigits(text: string): string {
  */
 export function normalizeArabic(text: string): string {
   if (!text) return '';
-  const str = convertArabicIndicDigits(text);
+  // Normalize presentation forms (NFKD)
+  let str = text.normalize('NFKD');
+  str = convertArabicIndicDigits(str);
   return str
     .replace(/[\u064B-\u0652\u0670\u0640]/g, '') // remove diacritics / tatweel
     .replace(/[أإآٱ]/g, 'ا')
@@ -298,21 +300,40 @@ export function chunkLawContent(law: Law): LegalChunk[] {
 }
 
 /**
+ * Helper to filter out placeholder entries lacking substantive content
+ */
+export function isSubstantiveLaw(law: Law): boolean {
+  if (!law || !law.content) return false;
+  const trimmed = law.content.trim();
+  if (trimmed.length < 60) return false;
+  if (trimmed.includes('تم إرفاق المستند بنجاح بحجم') && trimmed.includes('يمكنك كتابة وتعديل نصوص المواد')) {
+    return false;
+  }
+  return true;
+}
+
+/**
  * Search and build precise citation sources for a given legal query
  */
 export function findCitationsForQuery(query: string, laws: Law[]): CitationSource[] {
   if (!laws || laws.length === 0 || !query) return [];
 
+  const validLaws = laws.filter(isSubstantiveLaw);
+  const activeLaws = validLaws.length > 0 ? validLaws : laws;
+
   const requestedArticleNumber = extractRequestedArticleNumber(query);
   const normQuery = normalizeArabic(query);
+  const genericStopwords = new Set([
+    'قانون', 'مرسوم', 'سنة', 'قرار', 'مادة', 'نظام', 'بند', 'ملف', 'فلسطين', 'دولة', 'رقم', 'لسنة', 'احكام', 'أحكام', 'بشأن'
+  ]);
   const keywords = normQuery
     .split(/\s+/)
-    .filter((w) => w.length >= 2 && !['قانون', 'مرسوم', 'سنة', 'قرار', 'مادة', 'نظام', 'بند', 'ملف'].includes(w));
+    .filter((w) => w.length >= 2 && !genericStopwords.has(w));
 
   const allChunks: LegalChunk[] = [];
   let exactArticleMatches: LegalChunk[] = [];
 
-  for (const law of laws) {
+  for (const law of activeLaws) {
     const lawChunks = chunkLawContent(law);
     for (const chunk of lawChunks) {
       const normTitle = normalizeArabic(chunk.lawTitle);
@@ -348,14 +369,14 @@ export function findCitationsForQuery(query: string, laws: Law[]): CitationSourc
 
       for (const word of keywords) {
         if (word.length < 2) continue;
-        if (normHeader.includes(word)) score += 10;
+        if (normHeader.includes(word)) score += 12;
         if (normTitle.includes(word)) score += 8;
         if (normCategory.includes(word)) score += 5;
-        if (normText.includes(word)) score += 3;
+        if (normText.includes(word)) score += 4;
       }
 
       chunk.score = score;
-      if (score >= 2) allChunks.push(chunk);
+      if (score >= 5) allChunks.push(chunk);
     }
   }
 
