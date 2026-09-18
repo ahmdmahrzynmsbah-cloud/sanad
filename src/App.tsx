@@ -1,25 +1,39 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
 import { Header, ActiveView } from './components/Header';
 import { AuthModal } from './components/AuthModal';
 import { AdminLogin } from './components/AdminLogin';
-import { AdminPortal } from './components/AdminPortal';
-import { ChatPortal } from './components/ChatPortal';
 import { HomeLandingView } from './components/HomeLandingView';
 import { SupervisorsView } from './components/SupervisorsView';
 import { RelatedSitesView } from './components/RelatedSitesView';
 import { PartnersView } from './components/PartnersView';
 import { AboutPlatformView } from './components/AboutPlatformView';
 import { ContactUsView } from './components/ContactUsView';
-import { SanadWelcomeModal } from './components/SanadWelcomeModal';
-import { SubmitLawModal } from './components/SubmitLawModal';
+import { MobileBottomNav } from './components/MobileBottomNav';
 import { User, SystemBranding, PlatformAboutData, ContactInfo } from './types';
-import { Scale, ShieldAlert, Clock, LogOut, ArrowRight, BookOpen } from 'lucide-react';
+import { Scale, ShieldAlert, Clock, LogOut, ArrowRight, BookOpen, Loader2 } from 'lucide-react';
 import { initGlobalSync, useSync } from './utils/sync';
 import {
   directFetchBrandingFromFirestore,
   directFetchPlatformAboutFromFirestore,
   directFetchContactInfoFromFirestore,
 } from './services/clientFirestore';
+
+// Lazy loading heavy modular components to drastically optimize initial page load
+const AdminPortal = lazy(() => import('./components/AdminPortal'));
+const ChatPortal = lazy(() => import('./components/ChatPortal'));
+const SanadWelcomeModal = lazy(() => import('./components/SanadWelcomeModal'));
+const SubmitLawModal = lazy(() => import('./components/SubmitLawModal'));
+
+// Elegant Minimalist Suspense Fallback
+const ModuleLoadingFallback: React.FC<{ label?: string }> = ({ label = 'جاري تحميل الوحدة...' }) => (
+  <div className="flex flex-col items-center justify-center min-h-[360px] p-8 text-center" aria-live="polite">
+    <div className="w-12 h-12 rounded-2xl bg-emerald-900/10 border border-emerald-900/20 flex items-center justify-center text-emerald-800 mb-3 shadow-xs">
+      <Loader2 className="w-6 h-6 animate-spin" />
+    </div>
+    <p className="text-sm font-semibold text-slate-800">{label}</p>
+    <p className="text-xs text-slate-500 mt-1">يرجى الانتظار لحظات...</p>
+  </div>
+);
 
 export default function App() {
   const [branding, setBranding] = useState<SystemBranding | undefined>(() => {
@@ -335,7 +349,7 @@ export default function App() {
   return (
     <div
       className={`bg-[#f4f7f5] text-slate-900 flex flex-col font-['IBM_Plex_Sans_Arabic',sans-serif] ${
-        isFullChatView ? 'h-screen max-h-screen w-full overflow-hidden' : 'min-h-screen w-full'
+        isFullChatView ? 'h-[100dvh] max-h-[100dvh] w-full overflow-hidden' : 'min-h-[100dvh] w-full'
       }`}
     >
       {/* Official State Header */}
@@ -354,7 +368,7 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <main className={`flex-1 flex flex-col ${isFullChatView ? 'min-h-0 overflow-hidden p-0' : 'justify-center py-2 sm:py-4'}`}>
+      <main className={`flex-1 flex flex-col ${isFullChatView ? 'min-h-0 overflow-hidden p-0' : 'justify-center py-2 sm:py-4 pb-24 xl:pb-4'}`}>
         {/* VIEW 0: Public Landing Page (عن الموقع والمؤسس وزرارين تسجيل دخول وإنشاء حساب) */}
         {activeView === 'home' && (
           <div className="w-full">
@@ -466,22 +480,24 @@ export default function App() {
         {activeView === 'admin-portal' && (
           <div>
             {currentAdmin ? (
-              <AdminPortal
-                currentAdmin={currentAdmin}
-                onLawsUpdated={fetchLawsCount}
-                onBrandingUpdated={(newBranding) => {
-                  setBranding(newBranding);
-                  if (newBranding.systemName) {
-                    document.title = newBranding.systemName;
-                  }
-                }}
-                onAboutUpdated={(newAbout) => {
-                  setPlatformAbout(newAbout);
-                }}
-                onContactUpdated={(newContact) => {
-                  setContactInfo(newContact);
-                }}
-              />
+              <Suspense fallback={<ModuleLoadingFallback label="جاري تحميل لوحة تحكم إدارة المنظومة..." />}>
+                <AdminPortal
+                  currentAdmin={currentAdmin}
+                  onLawsUpdated={fetchLawsCount}
+                  onBrandingUpdated={(newBranding) => {
+                    setBranding(newBranding);
+                    if (newBranding.systemName) {
+                      document.title = newBranding.systemName;
+                    }
+                  }}
+                  onAboutUpdated={(newAbout) => {
+                    setPlatformAbout(newAbout);
+                  }}
+                  onContactUpdated={(newContact) => {
+                    setContactInfo(newContact);
+                  }}
+                />
+              </Suspense>
             ) : (
               <div className="max-w-md mx-auto my-12 p-6 bg-white rounded-xl border border-red-200 text-center shadow-xs">
                 <ShieldAlert className="w-12 h-12 text-red-500 mx-auto mb-3" />
@@ -558,13 +574,16 @@ export default function App() {
                 </div>
               </div>
             ) : currentUser && currentUser.status === 'approved' ? (
-              <ChatPortal
-                currentUser={currentUser}
-                lawsCount={lawsCount}
-                branding={branding}
-                onLogout={handleLogout}
-                onOpenSubmitLaw={() => setShowSubmitLawModal(true)}
-              />
+              <Suspense fallback={<ModuleLoadingFallback label="جاري تحميل المستشار الذكي (سَنَد)..." />}>
+                <ChatPortal
+                  currentUser={currentUser}
+                  lawsCount={lawsCount}
+                  branding={branding}
+                  onLogout={handleLogout}
+                  onOpenSubmitLaw={() => setShowSubmitLawModal(true)}
+                  onBackToHome={() => setActiveView('home')}
+                />
+              </Suspense>
             ) : currentUser && currentUser.status === 'pending' ? (
               /* Blocked pending user trying to access chat directly */
               <div className="max-w-md mx-auto my-14 p-6 bg-white rounded-xl border border-amber-200 text-center shadow-md">
@@ -621,22 +640,44 @@ export default function App() {
       )}
 
       {/* Interactive Sanad Welcome Dialog (النافذة المنبثقة: اسأل سند + من هو سند) */}
-      <SanadWelcomeModal
-        isOpen={showWelcomeModal}
-        branding={branding}
-        onClose={() => {
-          setShowWelcomeModal(false);
-          localStorage.setItem('sanad_welcome_seen', 'true');
-        }}
-        onQuestionAsked={handleQuestionFromWelcomeModal}
-      />
+      {showWelcomeModal && (
+        <Suspense fallback={null}>
+          <SanadWelcomeModal
+            isOpen={showWelcomeModal}
+            branding={branding}
+            onClose={() => {
+              setShowWelcomeModal(false);
+              localStorage.setItem('sanad_welcome_seen', 'true');
+            }}
+            onQuestionAsked={handleQuestionFromWelcomeModal}
+          />
+        </Suspense>
+      )}
 
       {/* Submit Law Modal for beneficiaries / users */}
-      <SubmitLawModal
-        isOpen={showSubmitLawModal}
-        onClose={() => setShowSubmitLawModal(false)}
-        currentUser={currentUser}
-      />
+      {showSubmitLawModal && (
+        <Suspense fallback={null}>
+          <SubmitLawModal
+            isOpen={showSubmitLawModal}
+            onClose={() => setShowSubmitLawModal(false)}
+            currentUser={currentUser}
+          />
+        </Suspense>
+      )}
+
+      {/* Floating Responsive Mobile Bottom Navigation Bar */}
+      {!isFullChatView && (
+        <MobileBottomNav
+          activeView={activeView}
+          setActiveView={setActiveView}
+          currentUser={currentUser}
+          currentAdmin={currentAdmin}
+          onOpenAuth={(mode) => {
+            setAuthInitialMode(mode);
+            setActiveView('auth');
+          }}
+        />
+      )}
     </div>
   );
 }

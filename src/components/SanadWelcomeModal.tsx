@@ -618,3 +618,5 @@ export const SanadWelcomeModal: React.FC<SanadWelcomeModalProps> = ({
     </div>
   );
 };
+
+export default SanadWelcomeModal;

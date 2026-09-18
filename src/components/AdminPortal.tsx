@@ -6299,3 +6299,5 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     </div>
   );
 };
+
+export default AdminPortal;

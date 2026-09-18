@@ -20,6 +20,7 @@ import {
   Sparkles,
   HelpCircle,
   MessageSquare,
+  Home,
 } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { User, ChatMessage, Conversation, SystemBranding, Law, CitationSource } from '../types';
@@ -37,6 +38,7 @@ interface ChatPortalProps {
   branding?: SystemBranding;
   onLogout?: () => void;
   onOpenSubmitLaw?: () => void;
+  onBackToHome?: () => void;
 }
 
 export const ChatPortal: React.FC<ChatPortalProps> = ({
@@ -45,6 +47,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
   branding,
   onLogout,
   onOpenSubmitLaw,
+  onBackToHome,
 }) => {
   const systemName = branding?.systemName || 'مساعد الجمارك والضرائب';
   const logoType = branding?.logoType || 'preset';
@@ -614,8 +617,21 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
       {/* 2. Main Chat View Container (Center) */}
       <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden max-w-5xl mx-auto w-full gap-1.5 sm:gap-2">
         {/* Top Status & Quick Bar */}
-        <div className="bg-white border border-zinc-950 rounded-2xl px-2.5 sm:px-3.5 py-2 shadow-2xs flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 text-xs shrink-0">
-          <div className="flex items-center gap-1.5 sm:gap-2 text-zinc-700 flex-wrap">
+        <div className="bg-white border border-zinc-950 rounded-2xl px-2 sm:px-3.5 py-2 shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-1.5 sm:gap-2 text-xs shrink-0">
+          <div className="flex items-center gap-1 sm:gap-2 text-zinc-700 overflow-x-auto scrollbar-none touch-scroll py-0.5">
+            {/* Quick Home Return on Mobile */}
+            {onBackToHome && (
+              <button
+                id="mobile-chat-back-home-btn"
+                onClick={onBackToHome}
+                className="lg:hidden p-1.5 rounded-xl border border-zinc-300 hover:bg-zinc-100 text-zinc-700 transition-colors flex items-center gap-1 cursor-pointer font-bold text-xs shrink-0 min-h-[36px]"
+                title="العودة للصفحة الرئيسية"
+              >
+                <Home className="w-4 h-4 text-emerald-800" />
+                <span className="hidden xs:inline">الرئيسية</span>
+              </button>
+            )}
+
             {/* Mobile Open History Sidebar Button (Right) */}
             <button
               id="mobile-toggle-sidebar-btn"
@@ -643,16 +659,16 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
               <span>منظومة سند</span>
             </button>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 shrink-0">
               <div className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></div>
-              <span className="font-semibold text-zinc-800">قاعدة المعرفة:</span>
+              <span className="font-semibold text-zinc-800 hidden xs:inline">قاعدة المعرفة:</span>
               <span className="bg-zinc-100 text-zinc-700 px-2 py-0.5 rounded-lg border border-zinc-300 font-medium text-[11px]">
-                {lawsCount} تشريعات مفعلة
+                {lawsCount} تشريعات
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:flex-nowrap">
+          <div className="flex items-center justify-between sm:justify-end gap-1.5 sm:gap-2 flex-nowrap shrink-0 overflow-x-auto scrollbar-none py-0.5">
             {/* User Daily Upload & Storage Quota Badge */}
             <UserUploadQuotaBadge
               currentUser={currentUser}
@@ -660,12 +676,12 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
             />
 
             {currentUser.isSubscribed ? (
-              <span className="bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-semibold px-2.5 py-0.5 rounded-full flex items-center gap-1">
+              <span className="bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0">
                 <Crown className="w-3 h-3 text-amber-600" />
-                مشترك دائم
+                مشترك
               </span>
             ) : (
-              <span className="bg-zinc-100 text-zinc-700 border border-zinc-300 text-[11px] font-medium px-2.5 py-0.5 rounded-full flex items-center gap-1">
+              <span className="bg-zinc-100 text-zinc-700 border border-zinc-300 text-[11px] font-medium px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0">
                 <Clock className="w-3 h-3 text-emerald-700" />
                 تجريبي ({currentUser.remainingTrialDays ?? currentUser.trialDays ?? 7} يوم)
               </span>
@@ -904,7 +920,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
                       className="text-right text-[11px] bg-white hover:bg-amber-50 text-amber-950 border border-amber-200/80 px-2.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer flex items-center justify-between group"
                     >
                       <span>{q}</span>
-                      <Send className="w-2.5 h-2.5 rotate-180 text-amber-600 group-hover:translate-x-[-2px] transition-transform shrink-0" />
+                      <Send className="w-2.5 h-2.5 scale-x-[-1] text-amber-600 group-hover:translate-x-[-2px] transition-transform shrink-0" />
                     </button>
                   ))}
                 </div>
@@ -930,14 +946,14 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Clean Input Bar */}
-        <div className="bg-white border border-zinc-950 rounded-2xl p-1.5 shadow-2xs shrink-0">
+        {/* Modern Responsive Input Bar */}
+        <div className="bg-white border border-slate-300 sm:border-slate-800/80 rounded-2xl sm:rounded-2xl p-1.5 sm:p-2 shadow-md sm:shadow-sm shrink-0 transition-all focus-within:border-emerald-700 focus-within:ring-2 focus-within:ring-emerald-700/20">
           <form
             onSubmit={(e) => {
               e.preventDefault();
               handleSendMessage();
             }}
-            className="flex items-center gap-2"
+            className="flex items-center gap-1.5 sm:gap-2"
           >
             <input
               ref={inputRef}
@@ -946,17 +962,18 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
               value={inputPrompt}
               onChange={(e) => setInputPrompt(e.target.value)}
               disabled={loading}
-              placeholder="اكتب استفسارك أو سؤالك هنا..."
-              className="flex-1 px-3.5 py-2.5 text-xs sm:text-sm text-zinc-900 bg-transparent focus:outline-none placeholder-zinc-400"
+              placeholder="اكتب استفسارك الجمركي أو الضريبي هنا..."
+              className="flex-1 px-3 sm:px-4 py-2 text-sm sm:text-sm text-slate-900 bg-transparent focus:outline-none placeholder-slate-400 min-h-[44px]"
             />
             <button
               id="chat-send-btn"
               type="submit"
               disabled={loading || !inputPrompt.trim()}
-              className="px-4 py-2.5 bg-[#103025] hover:bg-emerald-900 text-white text-xs sm:text-sm font-semibold rounded-xl transition-colors flex items-center gap-1.5 shadow-xs disabled:opacity-40 disabled:cursor-not-allowed shrink-0 cursor-pointer"
+              title="إرسال الاستفسار (Enter)"
+              className="h-11 px-4 sm:px-5 bg-gradient-to-r from-emerald-800 to-[#103025] hover:from-emerald-700 hover:to-emerald-900 active:scale-95 text-white text-xs sm:text-sm font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:from-slate-400 disabled:to-slate-500 shrink-0 cursor-pointer min-w-[44px]"
             >
               <span>إرسال</span>
-              <Send className="w-3.5 h-3.5 rotate-180" />
+              <Send className="w-4 h-4 text-[#e2b952] scale-x-[-1] transition-transform group-hover:translate-x-[-2px]" />
             </button>
           </form>
         </div>
@@ -972,3 +989,5 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
     </div>
   );
 };
+
+export default ChatPortal;

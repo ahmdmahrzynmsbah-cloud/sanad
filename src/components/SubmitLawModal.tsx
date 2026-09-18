@@ -906,3 +906,5 @@ export const SubmitLawModal: React.FC<SubmitLawModalProps> = ({
     </div>
   );
 };
+
+export default SubmitLawModal;

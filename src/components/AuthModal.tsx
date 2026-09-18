@@ -458,32 +458,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       <div className="bg-white rounded-2xl shadow-xl shadow-slate-900/5 border border-slate-200/90 overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-[520px]">
         
         {/* RIGHT SIDE: Deep Olive Executive Brand Banner (LG: 5 cols) */}
-        <div className="lg:col-span-5 bg-gradient-to-br from-[#0b1f1a] via-[#0f2a24] to-[#081814] text-white p-5 sm:p-7 lg:p-9 flex flex-col justify-between relative overflow-hidden border-b lg:border-b-0 lg:border-l border-[#1a3f36]">
+        <div className="lg:col-span-5 bg-gradient-to-br from-[#0b1f1a] via-[#0f2a24] to-[#081814] text-white p-3.5 sm:p-7 lg:p-9 flex flex-col justify-between relative overflow-hidden border-b lg:border-b-0 lg:border-l border-[#1a3f36]">
           {/* Subtle Ambient Glows & Grid Pattern */}
           <div className="absolute -top-24 -right-24 w-72 h-72 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
           <div className="absolute -bottom-24 -left-24 w-72 h-72 bg-[#d4af37]/10 rounded-full blur-3xl pointer-events-none"></div>
           
           {/* Top Brand Block */}
           <div className="relative z-10">
-            <div className="flex items-center gap-2.5 sm:gap-3 mb-4 sm:mb-6">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-white/10 backdrop-blur-md border border-white/15 flex items-center justify-center shadow-lg text-[#d4af37] shrink-0">
-                <Scale className="w-5 h-5 sm:w-6 sm:h-6" />
+            <div className="flex items-center gap-2.5 sm:gap-3 mb-2 sm:mb-6">
+              <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl bg-white/10 backdrop-blur-md border border-white/15 flex items-center justify-center shadow-lg text-[#d4af37] shrink-0">
+                <Scale className="w-4 h-4 sm:w-6 sm:h-6" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm sm:text-base font-bold tracking-tight text-white">{branding?.authPortalHeaderTop || 'دولة فلسطين'}</span>
-                  <span className="text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                  <span className="text-xs sm:text-base font-bold tracking-tight text-white">{branding?.authPortalHeaderTop || 'دولة فلسطين'}</span>
+                  <span className="text-[9px] sm:text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/30">
                     رسمي
                   </span>
                 </div>
-                <p className="text-[11px] sm:text-xs text-slate-300 font-light mt-0.5">
+                <p className="text-[10px] sm:text-xs text-slate-300 font-light mt-0.5">
                   {branding?.authPortalHeaderBottom || 'وزارة المالية • الإدارة العامة للجمارك وضريبة الدخل'}
                 </p>
               </div>
             </div>
 
-            <div className="space-y-2 sm:space-y-3 mt-4 sm:mt-8">
-              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-white leading-snug">
+            <div className="space-y-1 sm:space-y-3 mt-2 sm:mt-8">
+              <h2 className="text-base sm:text-2xl lg:text-3xl font-bold tracking-tight text-white leading-snug">
                 {(() => {
                   const rawTitle = branding?.authPortalTitle || 'بوابة المستفيدين\nوالاستعلام الجمركي والضريبي';
                   const parts = rawTitle.split('\n');
@@ -492,21 +492,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       {parts[0]}
                       {parts.length > 1 && (
                         <>
-                          <br />
-                          <span className="text-[#a7d9c0]">{parts.slice(1).join('\n')}</span>
+                          <br className="hidden sm:inline" />
+                          <span className="text-[#a7d9c0] mr-1 sm:mr-0">{parts.slice(1).join('\n')}</span>
                         </>
                       )}
                     </>
                   );
                 })()}
               </h2>
-              <p className="text-xs sm:text-sm text-slate-300/90 leading-relaxed font-normal">
+              <p className="hidden sm:block text-xs sm:text-sm text-slate-300/90 leading-relaxed font-normal">
                 {branding?.authPortalDescription || 'منظومة وطنية ذكية توفر فتاوى وحسابات مخصصة استناداً إلى قرارات بقانون واللوائح التنفيذية النافذة في فلسطين.'}
               </p>
             </div>
 
-            {/* Value Points Pill Highlights */}
-            <div className="mt-5 sm:mt-8 space-y-2.5 sm:space-y-3 pt-4 sm:pt-6 border-t border-white/10">
+            {/* Value Points Pill Highlights (Visible on desktop/tablet) */}
+            <div className="hidden lg:block mt-5 sm:mt-8 space-y-2.5 sm:space-y-3 pt-4 sm:pt-6 border-t border-white/10">
               <div className="flex items-center gap-2.5 sm:gap-3 text-xs text-slate-200">
                 <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-emerald-400 shrink-0">
                   <BookOpen className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
@@ -528,8 +528,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           </div>
 
-          {/* Bottom Security Assurance */}
-          <div className="mt-5 sm:mt-8 pt-4 sm:pt-6 border-t border-white/10 relative z-10 flex items-center justify-between text-[11px] text-slate-400">
+          {/* Bottom Security Assurance (Visible on desktop) */}
+          <div className="hidden lg:flex mt-5 sm:mt-8 pt-4 sm:pt-6 border-t border-white/10 relative z-10 items-center justify-between text-[11px] text-slate-400">
             <span className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
               اتصال مشفر ومؤمّن
