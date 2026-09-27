@@ -457,9 +457,15 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
         botResponseText = data.reply || 'عذراً، لم أتمكن من استرجاع إجابة مطابقة في الوقت الحالي.';
         if (typeof data.isLegal === 'boolean') isQueryLegal = data.isLegal;
         if (data.queryType) resQueryType = data.queryType;
-        if (Array.isArray(data.suggestedDetails)) resSuggestedDetails = data.suggestedDetails;
-        if (Array.isArray(data.citations) && data.citations.length > 0) {
+        if (Array.isArray(data.suggestedDetails) && isQueryLegal && resQueryType === 'legal') {
+          resSuggestedDetails = data.suggestedDetails;
+        } else {
+          resSuggestedDetails = undefined;
+        }
+        if (Array.isArray(data.citations) && data.citations.length > 0 && isQueryLegal && resQueryType === 'legal') {
           botCitations = data.citations;
+        } else {
+          botCitations = undefined;
         }
       } else {
         // Parse error response if provided by backend
@@ -482,13 +488,14 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
             botResponseText = serverError || '⚠️ ليس لديك صلاحية استخدام المساعد الذكي حالياً.';
           }
           resSuggestedDetails = undefined;
+          botCitations = undefined;
         } else {
           // Fallback: If server returned an error or Vercel function timed out
           console.warn('[Chat] Backend returned status:', res.status, 'Attempting direct client knowledge fallback...');
           try {
             const directLaws = lawsList.length > 0 ? lawsList : await directFetchLawsFromFirestore();
             botResponseText = generateClientKnowledgeFallback(query, directLaws || []);
-            if (isQueryLegal) {
+            if (isQueryLegal && resQueryType === 'legal') {
               botCitations = findCitationsForQuery(query, directLaws || []);
             }
           } catch {
@@ -497,8 +504,8 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
         }
       }
 
-      // If legal query and citations not received from backend, extract directly
-      if (!botCitations && isQueryLegal) {
+      // If legal query and citations not received from backend, extract directly ONLY if truly legal
+      if (!botCitations && isQueryLegal && resQueryType === 'legal') {
         try {
           const directLaws = lawsList.length > 0 ? lawsList : await directFetchLawsFromFirestore();
           const found = findCitationsForQuery(query, directLaws || []);

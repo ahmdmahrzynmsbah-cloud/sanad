@@ -4768,11 +4768,84 @@ app.post('/api/chat', async (req, res) => {
     }
   }
 
-  // 0. Smart intent detection & fast standalone conversational replies
+  // 0. Smart intent detection & fast standalone conversational and meta replies
   const trimmed = message.trim();
   const normalizedLower = trimmed.toLowerCase();
   const cleanedLower = trimmed.toLowerCase().replace(/[!؟?.,،:\-\s]+/g, ' ').trim();
   const words = cleanedLower.split(/\s+/).filter(Boolean);
+  const metaCheck = isPlatformOrMetaQuery(trimmed);
+
+  // A. Meta query: Count and catalog of available laws
+  if (metaCheck.isMeta && metaCheck.type === 'laws_catalog') {
+    const validLaws = (db.laws || []).filter(isSubstantiveLaw);
+    const subCount = validLaws.length > 0 ? validLaws.length : (db.laws || []).length;
+    const totalCount = (db.laws || []).length;
+    return res.json({
+      reply: `تحتوي قاعدة بيانات «سَنَد» حالياً على **${subCount}** تشريعاً وقراراً بقانون وملفاً رسمياً معتمداً في دولة فلسطين (من إجمالي ${totalCount} وثيقة مسجلة ومفهرسة في المنصة)، وتغطي المحاور القانونية والتشريعية التالية:
+
+1. **الضرائب والرسوم المالية:**
+   • **قرار بقانون رقم (8) لسنة 2011م بشأن ضريبة الدخل وتعديلاته:** (الإعفاء الأساسي 36,000 شيكل سنوياً للمقيم، الشرائح التصاعدية 5% و10% و15%، ضريبة الشركات 15%، والخصم من المنبع).
+   • **أحكام وتعليمات ضريبة القيمة المضافة النافذة:** (النسبة العامة 16%، فواتير المقاصة، الإعفاءات، ورد الضريبة).
+   • **ضريبة الأملاك ورسوم الرخص والمهن والتراخيص التجارية.**
+
+2. **الجمارك والمكوس والتجارة الخارجية:**
+   • **قانون الجمارك والمكوس رقم (1) لسنة 1962م وتعديلاته:** (الإجراءات، البيانات الجمركية، المعاينة، وقضايا التهريب الجمركي).
+   • **لائحة التعرفة والرسوم الجمركية الفلسطينية للطرود البريدية والمركبات:** (إعفاء الطرود الشخصية حتى 150 دولار، وشرائح الرسوم لما فوق ذلك).
+   • **الاتفاقيات التجارية الرسمية:** (مثل اتفاقية الميركسور والتجارة الحرة).
+
+3. **العمل والشركات والضمان الاجتماعي:**
+   • **قانون العمل الفلسطيني رقم (7) لسنة 2000م:** (الإجازات السنوية 14 أو 21 يوماً، مكافأة نهاية الخدمة، ساعات العمل 45 ساعة أسبوعياً، عقود العمل، وحالات الفصل التعسفي).
+   • **قانون الشركات والأنظمة ذات العلاقة بمراقب الشركات.**
+   • **قانون وتشريعات الضمان الاجتماعي وحماية حقوق العمال.**
+
+4. **الامتثال والرقابة ومكافحة غسل الأموال:**
+   • **قرار بقانون رقم (39) لسنة 2022م بشأن مكافحة غسل الأموال وتمويل الإرهاب وتعديلاته.**
+   • **قرارات تنفيذ قرارات مجلس الأمن ونظام تحديد السلطات المشرفة لسنة 2023م.**
+   • **قانون سلطة النقد وقانون المدفوعات الوطني رقم (41) لسنة 2022م.**
+
+5. **أعداد الوقائع الفلسطينية والملفات المرفوعة حديثاً:**
+   • أعداد الجريدة الرسمية المنشورة والقرارات بقوانين الرئاسية، بالإضافة إلى كافة المستندات واللوائح المرفوعة حديثاً إلى المنصة.
+
+💡 **كيف تستفيد مني؟**
+يمكنك سؤالي عن نص أي مادة محددة (مثلاً: «المادة 13 من قانون ضريبة الدخل» أو «المادة 74 من قانون العمل»)، أو الاستفسار عن نسبة معينة، أو كيفية احتساب مستحقات عمالية أو ضريبية، وسأجيبك بدقة تشريعية متناهية وموثقة.`,
+      isFastReply: true,
+      isLegal: false,
+      queryType: 'meta',
+    });
+  }
+
+  // B. Meta query: Owner / Founder of the platform
+  if (metaCheck.isMeta && metaCheck.type === 'founder') {
+    const founderName = db.settings?.founderName || DEFAULT_FOUNDER.founderName;
+    const founderTitle = db.settings?.founderTitle || DEFAULT_FOUNDER.founderTitle;
+    const founderBio = db.settings?.founderBio || DEFAULT_FOUNDER.founderBio;
+    return res.json({
+      reply: `منصة ومستشار «سَنَد» هي المنظومة الوطنية الرقمية الذكية المتخصصة في القوانين والضرائب والجمارك بدولة فلسطين، تم تأسيسها وإدارتها بإشراف:
+
+⚖️ **${founderName}**
+• **الصفة:** ${founderTitle}
+• **النبذة:** ${founderBio}
+
+🏛️ **المرجعية المؤسسية والتشريعية:**
+تعتمد المنصة على التشريعات والقرارات بقانون المعتمدة والصادرة عن دولة فلسطين، وزارة المالية، والإدارة العامة للجمارك وضريبة الدخل.
+وأنا «سَنَد» أعمل كمستشارك القانوني الذكي المعتمد لتقديم استشارات فورية ودقيقة وموثقة للمكلفين والشركات والمواطنين على مدار الساعة.`,
+      isFastReply: true,
+      isLegal: false,
+      queryType: 'meta',
+    });
+  }
+
+  // C. Meta query: Bot identity / "Are you human?"
+  if (metaCheck.isMeta && metaCheck.type === 'bot_identity') {
+    return res.json({
+      reply: `أنا «سَنَد»، المستشار القانوني والتشريعي الذكي لمنظومة القوانين والضرائب والجمارك في دولة فلسطين، ولست إنساناً بشرياً بل مساعدك الافتراضي الرقمي المتخصص.
+تم تطويري لتقديم استشارات تشريعية دقيقة وموثقة مستندة إلى نصوص القوانين الفلسطينية المعتمدة والقرارات بقوانين والملفات المرفوعة، إلى جانب مساعدتك في كافة الاستفسارات العامة والمعرفية بكل سرور وسلاسة. تفضل بطرح سؤالك!`,
+      isFastReply: true,
+      isLegal: false,
+      queryType: 'meta',
+    });
+  }
+
   const isLegal = isLegalTaxCustomsQuery(trimmed);
 
   // Fast direct replies ONLY for short, standalone conversational greetings and simple identity checks (1-4 words with no legal keywords)
@@ -4853,38 +4926,67 @@ app.post('/api/chat', async (req, res) => {
   // Effective legal status: if isLegal is true OR high-scoring search matches were found
   const effectiveIsLegal = isLegal || (searchResult?.hasMatches && searchResult.topChunks.length > 0);
 
-  const citations: any[] = searchResult?.topChunks?.slice(0, 3).map((c, idx) => ({
-    id: `cit-${idx + 1}-${c.lawId}`,
-    lawId: c.lawId,
-    lawTitle: c.lawTitle,
-    articleNumber: c.articleNumber || extractRequestedArticleNumber(c.sectionHeader) || undefined,
-    sectionHeader: c.sectionHeader,
-    sourceFileName: c.sourceFileName,
-    category: c.category,
-    originalText: c.text,
-    snippet: c.text.length > 300 ? c.text.substring(0, 290).trim() + '...' : c.text,
-    matchScore: c.score,
-  })) || [];
+  const citations: any[] = (effectiveIsLegal && searchResult?.topChunks)
+    ? searchResult.topChunks.slice(0, 3).map((c, idx) => ({
+        id: `cit-${idx + 1}-${c.lawId}`,
+        lawId: c.lawId,
+        lawTitle: c.lawTitle,
+        articleNumber: c.articleNumber || extractRequestedArticleNumber(c.sectionHeader) || undefined,
+        sectionHeader: c.sectionHeader,
+        sourceFileName: c.sourceFileName,
+        category: c.category,
+        originalText: c.text,
+        snippet: c.text.length > 300 ? c.text.substring(0, 290).trim() + '...' : c.text,
+        matchScore: c.score,
+      }))
+    : [];
 
   // 2. Clear, authoritative, and natural system instruction for Palestinian Law and general inquiries
   const systemInstruction = `أنت "سَنَد"، المستشار القانوني والتشريعي الذكي لمنظومة القوانين والضرائب والجمارك في دولة فلسطين، والمساعد الرقمي الذكي للمستخدم.
+المنصة تأسست وتُدار بإشراف المستشار القانوني أ. محمد ناصر خليل (مستشار السياسات الجمركية والتشريعات الضريبية).
+لا تقل إطلاقاً أنك روبوت عام أو نموذج تم تدريبه بواسطة جوجل أو أنه ليس لديك موقع أو منصة، بل أنت «سَنَد» المستشار الذكي المتخصص.
 
-إرشادات تقديم الاستشارة والإجابة بدقة متناهية:
-1. **الاستفسارات القانونية والضريبية والجمركية وملفات النظام المرفوعة:**
-   - **الاستناد الإلزامي والمباشر للنصوص الرسمية:** اعتمد بشكل أساسي ومباشر على نصوص التشريعات والقرارات بقانون والمواد المرفقة أدناه من قاعدة المعرفة الفلسطينية.
-   - **الدقة والمباشرة في الإجابة:**
-     * أجب مباشرة وبوضوح على صلب سؤال المستخدم في البداية (مثلاً: حدد النسبة المئوية فوراً، أو مبلغ الغرامة، أو مدة الإجازة، أو شروط الاستيراد، أو عقوبة التهرب).
-     * اذكر اسم القانون أو القرار بقانون وسنة صدوره ورقم المادة المحددة المنطبقة بدقة تامة.
-     * فصل الشروط، الاستثناءات، الفئات المعفاة، أو الإجراءات العملية الواجب اتباعها لدى الدوائر المختصة (دائرة ضريبة الدخل، دائرة الجمارك والمكوس وضريبة القيمة المضافة، وزارة العمل، وزارة الاقتصاد).
-     * إذا كان السؤال يحتوي على تحية في البداية (مثل: "مرحبا"، "السلام عليكم")، رد التحية بلباقة وسلاسة ثم ادخل فوراً في الإجابة القانونية الدقيقة.
-   - **الأسلوب:** أسلوب قانوني واستشاري راقٍ، واضح، منظم بعناوين وفقرات ونقاط سهلة القراءة، دون حشو أو تكرار لقوالب جامدة لا داعي لها.
+قواعد وثوابت التشريعات الفلسطينية الإلزامية:
+1. **ضريبة القيمة المضافة (VAT):**
+   - النسبة القانونية العامة النافذة في فلسطين هي **16%** بموجب تعليمات وقرارات وزارة المالية الفلسطينية والإدارة العامة للجمارك والمكوس وضريبة القيمة المضافة.
+   - السلع والخدمات المحلية والمستوردة تخضع لنسبة 16%. الصادرات تخضع لنسبة الصفر (0%).
+   - فواتير المقاصة والمعاملات المشتركة مع مناطق 48 تخضع لقواعد التنسيق والمقاصة المعمول بها.
 
-2. **الأسئلة العامة والمعرفية والدردشة (خارج القوانين والضرائب):**
-   - أجب كشخصية افتراضية ومساعد رقمي ذكي بكل دقة وطلاقة في شتى مجالات المعرفة (دين، علوم، تاريخ، رياضة، لغات، تكنولوجيا، ثقافة).
-   - إذا سُئلت "هل أنت إنسان؟"، وضح بلباقة أنك شخصية افتراضية ومساعد ذكي «سَنَد».
+2. **ضريبة الدخل (قرار بقانون رقم 8 لسنة 2011م وتعديلاته):**
+   - **الإعفاء الأساسي:** يُمنح الشخص الطبيعي المقيم (الموظف) إعفاءً سنوياً أساسياً قدره **36,000 شيكل سنوياً** (المادة 13).
+   - بالإضافة إلى إعفاء مساهمات التقاعد والتأمين الصحي، وإعفاء شراء أو بناء سكن لمرة واحدة وفق الحدود المقررة.
+   - **الشرائح الضريبية التصاعدية للأفراد بعد خصم الإعفاءات (المادة 18):**
+     * من 1 إلى 40,000 شيكل: **5%**
+     * من 40,001 إلى 80,000 شيكل: **10%**
+     * ما زاد عن 80,000 شيكل: **15%**
+   - **ضريبة الشركات (الأشخاص المعنويين):** النسبة الأساسية **15%** من الدخل الصافي الخاضع للضريبة (مع حوافز تشجيع الاستثمار).
 
-${prioritizedContext ? `\n[قاعدة المعرفة والتشريعات والملفات الفلسطينية المعتمدة - المرجعية الإلزامية]:\n${prioritizedContext}\n` : ''}
-${fullCatalog ? `\n[فهرس التشريعات والملفات الفلسطينية المعتمدة]:\n${fullCatalog}` : ''}`;
+3. **قانون العمل الفلسطيني رقم (7) لسنة 2000م:**
+   - **ساعات العمل الرسمية:** 45 ساعة أسبوعياً كحد أقصى (المادة 68).
+   - **الإجازة السنوية:** 14 يوماً مدفوعة الأجر سنوياً، وتصبح 21 يوماً لمن أمضى 5 سنوات في العمل أو في الأعمال الخطرة (المادة 74).
+   - **مكافأة نهاية الخدمة:** أجر شهر عن كل سنة عمل قضاها العامل لدى صاحب العمل، وكسور السنة بنسبة ما قضاها (المادة 42).
+   - **الإجازة المرضية:** 14 يوماً بأجر كامل و14 يوماً بنصف أجر في السنة (المادة 79).
+   - **إجازة الأمومة:** 10 أسابيع (70 يوماً) مدفوعة الأجر (المادة 103).
+   - **فترة التجربة:** 3 أشهر كحد أقصى (المادة 34).
+
+4. **سريان القوانين وعدم رجعيتها (مبدأ دستوري وتشريعي):**
+   - وفقاً لأحكام **القانون الأساسي الفلسطيني المعدل لسنة 2003م (المادة 15)**: تسري القوانين والقرارات بقوانين من **تاريخ نشرها في الجريدة الرسمية (الوقائع الفلسطينية)** أو التاريخ المحدد لنفاذها في صلب القانون.
+   - **مبدأ عدم رجعية القوانين (الأثر المباشر):** لا تنطبق أحكام القانون إلا على الوقائع والتصرفات اللاحقة لنفاذه، ولا تسري بأثر رجعي على فترات سابقة.
+   - في الضرائب والجمارك: إعمالاً لمبدأ الشرعية الضريبية واستقرار المراكز، لا يجوز فرض ضرائب أو رسوم أو غرامات بأثر رجعي على فترات مالية سابقة لنفاذ القانون. الاستثناء في القضايا الجزائية فقط لصالح المتهم إذا كان القانون الجديد أصلح له.
+
+5. **الجمارك والطرود البريدية:**
+   - قانون الجمارك والمكوس رقم (1) لسنة 1962م وتعديلاته. الطرود البريدية الشخصية معفاة حتى 150 دولار، وما بين 150 و500 دولار يخضع لضريبة القيمة المضافة ورسوم مقطوعة، وما زاد عن 500 دولار يخضع للبيان الجمركي الكامل.
+
+إرشادات تقديم الاستشارة والتنظيم:
+- **الموضوعية وعدم خلط القوانين:** لا تقحم أبداً نصوصاً غير منطبقة. إذا كان السؤال عن سريان القوانين أو الإجازات أو الضرائب وكانت المقتطفات المسترجعة من قانون آخر (كقانون غسل الأموال)، فتجاهل المقتطف غير المنطبق وأجب مباشرة بموجب نصوص القانون الفلسطيني المختص.
+- **التنسيق المنظم والمريح:**
+  * 📌 **الحكم المباشر والصريح:** إجابة واضحة ومباشرة في البداية بالأرقام والنسب والمواعيد.
+  * ⚖️ **السند والمرجع القانوني:** ذكر اسم القانون أو القرار بقانون وسنة صدوره ورقم المادة بدقة تامة.
+  * 📋 **الشروط والضوابط والاستثناءات:** بنود مرقمة ونقاط واضحة.
+  * 💡 **إرشادات وتوجيهات عملية للمكلف أو المستفسر:** الإجراءات والمستندات والدوائر المعنية.
+
+${prioritizedContext ? `\n[مقتطفات قاعدة المعرفة والتشريعات المعتمدة المسترجعة]:\n${prioritizedContext}\n` : ''}
+${fullCatalog ? `\n[فهرس التشريعات والملفات المعتمدة في المنصة]:\n${fullCatalog}` : ''}`;
 
   try {
     const ai = getGemini();
@@ -4893,25 +4995,25 @@ ${fullCatalog ? `\n[فهرس التشريعات والملفات الفلسطي�
         model: 'gemini-2.5-flash',
         config: {
           systemInstruction,
-          temperature: 0.4,
+          temperature: 0.2,
         },
-        timeoutMs: 14000,
+        timeoutMs: 25000,
       },
       {
-        model: 'gemini-3.8-flash',
+        model: 'gemini-flash-latest',
         config: {
           systemInstruction,
-          temperature: 0.4,
+          temperature: 0.2,
         },
-        timeoutMs: 14000,
+        timeoutMs: 25000,
       },
       {
-        model: 'gemini-2.5-flash-lite',
+        model: 'gemini-3.1-flash-lite',
         config: {
           systemInstruction,
-          temperature: 0.4,
+          temperature: 0.2,
         },
-        timeoutMs: 12000,
+        timeoutMs: 20000,
       },
     ];
     let response: any = null;
@@ -4961,7 +5063,7 @@ ${fullCatalog ? `\n[فهرس التشريعات والملفات الفلسطي�
 
     for (const candidate of candidateConfigs) {
       try {
-        const timeoutMs = candidate.timeoutMs || 12000;
+        const timeoutMs = candidate.timeoutMs || 20000;
         const generatePromise = ai.models.generateContent({
           model: candidate.model,
           contents: contentsToSend,
@@ -4982,7 +5084,7 @@ ${fullCatalog ? `\n[فهرس التشريعات والملفات الفلسطي�
       }
     }
 
-    const suggestedDetails = isLegal
+    const suggestedDetails = effectiveIsLegal
       ? [
           'صفة المكلف: فرد طبيعي (موظف/مهني)',
           'صفة المكلف: شركة تجارية/مساهمة',
@@ -4994,8 +5096,8 @@ ${fullCatalog ? `\n[فهرس التشريعات والملفات الفلسطي�
     if (response?.text) {
       return res.json({
         reply: response.text,
-        isLegal,
-        queryType: isLegal ? 'legal' : 'general',
+        isLegal: effectiveIsLegal,
+        queryType: effectiveIsLegal ? 'legal' : 'general',
         suggestedDetails,
         citations: citations.length > 0 ? citations : undefined,
       });
@@ -5007,35 +5109,36 @@ ${fullCatalog ? `\n[فهرس التشريعات والملفات الفلسطي�
     return res.json({
       reply: fallbackAnswer,
       isFallback: true,
-      isLegal,
-      queryType: isLegal ? 'legal' : 'general',
+      isLegal: effectiveIsLegal,
+      queryType: effectiveIsLegal ? 'legal' : 'general',
       suggestedDetails,
       citations: citations.length > 0 ? citations : undefined,
     });
   } catch (error: any) {
     console.error('Error in AI handler, using fallback:', error?.message || error);
-    // Even if client creation fails, provide direct database/general response
     const fallbackAnswer = generateKnowledgeFallback(message, db.laws);
     const fallbackSearchResult = searchRelevantPalestinianLaws(message, db.laws || []);
-    const fallbackCitations = fallbackSearchResult.topChunks.slice(0, 3).map((c, idx) => ({
-      id: `cit-fb-${idx + 1}`,
-      lawId: c.lawId,
-      lawTitle: c.lawTitle,
-      articleNumber: c.articleNumber || extractRequestedArticleNumber(c.sectionHeader) || undefined,
-      sectionHeader: c.sectionHeader,
-      sourceFileName: c.sourceFileName,
-      category: c.category,
-      originalText: c.text,
-      snippet: c.text.length > 300 ? c.text.substring(0, 290).trim() + '...' : c.text,
-      matchScore: c.score,
-    }));
+    const fallbackCitations = (effectiveIsLegal && fallbackSearchResult?.topChunks)
+      ? fallbackSearchResult.topChunks.slice(0, 3).map((c, idx) => ({
+          id: `cit-fb-${idx + 1}`,
+          lawId: c.lawId,
+          lawTitle: c.lawTitle,
+          articleNumber: c.articleNumber || extractRequestedArticleNumber(c.sectionHeader) || undefined,
+          sectionHeader: c.sectionHeader,
+          sourceFileName: c.sourceFileName,
+          category: c.category,
+          originalText: c.text,
+          snippet: c.text.length > 300 ? c.text.substring(0, 290).trim() + '...' : c.text,
+          matchScore: c.score,
+        }))
+      : [];
 
     return res.json({
       reply: fallbackAnswer,
       isFallback: true,
-      isLegal,
-      queryType: isLegal ? 'legal' : 'general',
-      suggestedDetails: isLegal
+      isLegal: effectiveIsLegal,
+      queryType: effectiveIsLegal ? 'legal' : 'general',
+      suggestedDetails: effectiveIsLegal
         ? [
             'صفة المكلف: فرد طبيعي (موظف/مهني)',
             'صفة المكلف: شركة تجارية/مساهمة',
@@ -5476,22 +5579,53 @@ function extractConciseSummary(text: string): string {
   return keyLines;
 }
 
+// Helper to check for platform-specific and meta questions (identity, owner, laws count)
+function isPlatformOrMetaQuery(query: string): { isMeta: boolean; type?: 'laws_catalog' | 'founder' | 'bot_identity' } {
+  if (!query || typeof query !== 'string') return { isMeta: false };
+  const cleaned = query.toLowerCase().replace(/[!؟?.,،:\-\s]+/g, ' ').trim();
+
+  // 1. Laws count & catalog
+  if (
+    /(كم عدد القوانين|عدد القوانين|قائمة القوانين|فهرس القوانين|التشريعات الموجودة|ما هي القوانين|القوانين المتاحة|القوانين ال عندك|القوانين الي عندك|القوانين التي لديك|كم قانون عندك|كم قانون لديك|اعرض القوانين|شو القوانين المتاحة)/i.test(
+      cleaned
+    )
+  ) {
+    return { isMeta: true, type: 'laws_catalog' };
+  }
+
+  // 2. Owner & founder
+  if (
+    /(مين المالك|صاحب الموقع|مالك الموقع|صاحب المنصة|مالك المنصة|مين صاحب|مين طور|مين برمج|من اسس|من أسس|من انشأ|من أنشأ|من هو مؤسس|مؤسس الموقع|مؤسس المنصة|مين مسؤل|مين المسؤول)/i.test(
+      cleaned
+    )
+  ) {
+    return { isMeta: true, type: 'founder' };
+  }
+
+  // 3. Bot identity
+  if (
+    /^(انت انسان|أنت إنسان|هل انت انسان|هل أنت إنسان|هل انت بشر|هل أنت بشر|هل انت روبوت|هل أنت روبوت|هل انت شخص|انت شخص|هل انت ai|هل انت ذكاء اصطناعي|من انت|مين انت|من أنت|ما اسمك|شو اسمك|عرفني بنفسك|عرف عن نفسك|ما وظيفتك|شو وظيفتك)$/i.test(
+      cleaned
+    )
+  ) {
+    return { isMeta: true, type: 'bot_identity' };
+  }
+
+  return { isMeta: false };
+}
+
 // Check if a query has genuine legal, tax, customs, or uploaded document intent
 function isLegalTaxCustomsQuery(query: string): boolean {
   if (!query || typeof query !== 'string') return false;
   const q = query.trim().toLowerCase();
   const cleaned = q.replace(/[!؟?.,،:\-\s]+/g, ' ').trim();
 
-  // 1. Identity & bot nature questions (standalone)
-  if (
-    /^(انت انسان|أنت إنسان|هل انت انسان|هل أنت إنسان|هل انت بشر|هل أنت بشر|هل انت روبوت|هل أنت روبوت|هل انت شخص|انت شخص|هل انت ai|هل انت ذكاء اصطناعي|من انت|مين انت|من أنت|ما اسمك|شو اسمك|عرفني بنفسك|عرف عن نفسك|ما وظيفتك|شو وظيفتك|مين طورك|مين برمجك)$/i.test(
-      cleaned
-    )
-  ) {
+  // 0. Meta questions are NOT legal cases
+  if (isPlatformOrMetaQuery(query).isMeta) {
     return false;
   }
 
-  // 2. Clear non-legal general knowledge topics (when no legal terms exist)
+  // 1. Clear non-legal general knowledge topics (when no legal terms exist)
   if (
     /(محمد صلاح|ميسي|رونالدو|كرة القدم|الرياضة|الدين الإسلامي|دين الاسلام|القرآن|الحديث|الصلاة|الصيام|الحج|الزكاة|النبي|الرسول|الصحابة|الفيزياء|الكيمياء|الطب|الفلك|الفضاء|الطقس|التاريخ|الجغرافيا|الفلسفة|البرمجة|الرياضيات|معنى كلمة|قصة|نكتة|شعر|طبخ|عاصمة|من هو|من هي|ما هو|ما هي|ماذا تعرف عن)/i.test(
       cleaned
@@ -5503,8 +5637,13 @@ function isLegalTaxCustomsQuery(query: string): boolean {
     return false;
   }
 
-  // 3. If query specifies an article number (e.g. المادة 15 or مادة 4)
+  // 2. If query specifies an article number (e.g. المادة 15 or مادة 4)
   if (extractRequestedArticleNumber(query)) {
+    return true;
+  }
+
+  // 3. Retroactive application of laws & legal theory
+  if (/(اي قانون جديد من متى|متى يتم تطبيق|ينطبق على الفترة قبل صدوره|باثر رجعي|بأثر رجعي|عدم رجعية|سريان القانون|نفاذ القانون)/i.test(cleaned)) {
     return true;
   }
 
@@ -5515,7 +5654,8 @@ function isLegalTaxCustomsQuery(query: string): boolean {
 }
 
 const GENERIC_PALESTINIAN_STOPWORDS = new Set([
-  'فلسطين', 'فلسطينية', 'فلسطيني', 'دولة', 'قانون', 'قرار', 'بقانون', 'رقم', 'سنة', 'بشأن', 'لسنة', 'احكام', 'أحكام', 'بشان', 'الفلسطينية', 'الفلسطيني'
+  'فلسطين', 'فلسطينية', 'فلسطيني', 'دولة', 'قانون', 'قرار', 'بقانون', 'رقم', 'سنة', 'بشأن', 'لسنة', 'احكام', 'أحكام', 'بشان', 'الفلسطينية', 'الفلسطيني',
+  'جديد', 'جديدة', 'تطبيق', 'تطبيقها', 'ينطبق', 'فترة', 'فترات', 'الفترة', 'صدور', 'صدوره', 'تاريخ', 'سريان', 'نفاذ', 'كل', 'اي', 'أي'
 ]);
 
 const ARABIC_STOPWORDS = new Set([
@@ -5532,7 +5672,7 @@ const ARABIC_STOPWORDS = new Set([
 function isSubstantiveLaw(law: StoredLaw): boolean {
   if (!law || !law.content) return false;
   const trimmed = law.content.trim();
-  if (trimmed.length < 60) return false;
+  if (trimmed.length < 80) return false;
   if (trimmed.includes('تم إرفاق المستند بنجاح بحجم') && trimmed.includes('يمكنك كتابة وتعديل نصوص المواد')) {
     return false;
   }
@@ -5593,6 +5733,13 @@ function searchRelevantPalestinianLaws(
     cachedIndexedChunks = { lawsCount: activeLaws.length, chunks: baseChunks };
   }
 
+  // Domain flags
+  const isIncomeTaxQuery = /(دخل|ضريبة دخل|اعفاء|اعفاءات|شريحة|شرائح|مكلف)/i.test(normQuery);
+  const isVatQuery = /(قيمة مضافة|قيمه مضافه|مضافة|مضافه|فاتورة ضريبية|فاتوره ضريبيه|مقاصة|مقاصه)/i.test(normQuery);
+  const isLaborQuery = /(عمل|عمال|عامل|موظف|إجازة|اجازة|إجازات|اجازات|نهاية خدمة|نهايه خدمه|فصل تعسفي|عقد عمل|أجور|اجور)/i.test(normQuery);
+  const isCustomsQuery = /(جمارك|جمرك|جمركي|جمركية|طرد|طرود|بريدي|استيراد|تصدير|تعرفة|تعرفه|بيان جمركي)/i.test(normQuery);
+  const isMoneyLaunderingQuery = /(غسل اموال|غسيل اموال|تمويل ارهاب|متابعة مالية)/i.test(normQuery);
+
   // Score individual chunks across all laws
   const scoredChunks: LegalChunk[] = [];
   let exactArticleMatches: LegalChunk[] = [];
@@ -5622,24 +5769,45 @@ function searchRelevantPalestinianLaws(
       }
     }
 
-    // 2. Direct file name matching (use substantiveWords to prevent generic 'فلسطين' from triggering +25)
+    // 2. Direct file name matching
     if (normFileName && substantiveWords.some((w) => w.length >= 3 && normFileName.includes(w))) {
       score += 25;
     }
 
     // 3. Direct law title matching
     if (substantiveWords.some((w) => w.length >= 3 && normTitle.includes(w))) {
-      score += 15;
+      score += 20;
     }
 
-    // 4. Keyword matching with section header & content boost
+    // 4. Domain consistency bonus and penalization
+    if (isIncomeTaxQuery) {
+      if (normTitle.includes('دخل') || normCategory.includes('دخل')) score += 25;
+      if (normTitle.includes('غسل') || normTitle.includes('مجلس الامن')) score -= 20;
+    }
+    if (isVatQuery) {
+      if (normTitle.includes('مضاف') || normCategory.includes('مضاف')) score += 25;
+      if (normTitle.includes('غسل') || normTitle.includes('مجلس الامن')) score -= 20;
+    }
+    if (isLaborQuery) {
+      if (normTitle.includes('عمل') || normHeader.includes('اجاز') || normHeader.includes('خدمه')) score += 30;
+      if (normTitle.includes('غسل') || normTitle.includes('مجلس الامن') || normTitle.includes('جمارك')) score -= 25;
+    }
+    if (isCustomsQuery) {
+      if (normTitle.includes('جمرك') || normCategory.includes('جمرك') || normTitle.includes('تعرف')) score += 25;
+      if (normTitle.includes('غسل') || normTitle.includes('مجلس الامن')) score -= 20;
+    }
+    if (isMoneyLaunderingQuery) {
+      if (normTitle.includes('غسل') || normTitle.includes('ارهاب')) score += 35;
+    }
+
+    // 5. Keyword matching with section header & content boost
     for (const word of substantiveWords) {
       if (word.length < 2) continue;
       if (normHeader.includes(word)) {
-        score += 12;
+        score += 15;
       }
       if (normTitle.includes(word)) {
-        score += 8;
+        score += 10;
       }
       if (normCategory.includes(word)) {
         score += 5;
@@ -5657,30 +5825,12 @@ function searchRelevantPalestinianLaws(
       }
     }
 
-    // 5. Subject and domain specific boosts
-    if (normQuery.includes('دخل') && (normCategory.includes('دخل') || normTitle.includes('دخل'))) {
-      score += 8;
-    }
-    if (normQuery.includes('جمرك') && (normCategory.includes('جمرك') || normTitle.includes('جمرك'))) {
-      score += 8;
-    }
-    if ((normQuery.includes('قيمه مضافه') || normQuery.includes('مضافه')) && (normCategory.includes('مضافه') || normTitle.includes('مضافه'))) {
-      score += 8;
-    }
-    if (normQuery.includes('اعفاء') && (normHeader.includes('اعفاء') || normText.includes('اعفاء') || normText.includes('يعفى') || normText.includes('تستثنى'))) {
-      score += 10;
-    }
-    if ((normQuery.includes('غرامه') || normQuery.includes('عقوبه') || normQuery.includes('مخالفه')) && 
-        (normHeader.includes('غرامه') || normHeader.includes('عقوبه') || normText.includes('غرامه') || normText.includes('عقوبه') || normText.includes('مخالفه') || normText.includes('حبس'))) {
-      score += 10;
-    }
-
     if (asksForUploadedFile && chunk.sourceFileName) {
-      score += 8;
+      score += 10;
     }
 
-    // Filter out chunks with very low relevance score (< 5) unless it is an exact article match
-    if (score >= 5) {
+    // Strict minimum threshold: only include chunks with genuine relevance (score >= 16) or exact article match
+    if (score >= 16) {
       scoredChunks.push({ ...chunk, score });
     }
   }
@@ -5705,17 +5855,7 @@ function searchRelevantPalestinianLaws(
       combinedSet.add(key);
       topChunks.push(sc);
     }
-    if (topChunks.length >= 6) break;
-  }
-
-  // If no chunks scored high enough but user asks about uploaded files or general law, include top chunks from first substantive laws
-  if (topChunks.length === 0 && activeLaws.length > 0 && asksForUploadedFile) {
-    for (const law of activeLaws.slice(0, 2)) {
-      const lawChunks = chunkLawContent(law);
-      for (const lc of lawChunks.slice(0, 2)) {
-        topChunks.push(lc);
-      }
-    }
+    if (topChunks.length >= 5) break;
   }
 
   // Build the rich, structured context string for Gemini
@@ -5731,9 +5871,9 @@ function searchRelevantPalestinianLaws(
   }
 
   if (topChunks.length > 0) {
-    prioritizedContext += `[المواد والبنود والملفات القانونية المسترجعة من قاعدة المعرفة (مرجع إلزامي وشامل)]:\n` +
+    prioritizedContext += `[المواد والبنود القانونية المسترجعة ذات الصلة الوثيقة بالسؤال]:\n` +
       topChunks
-        .slice(0, 6)
+        .slice(0, 5)
         .map((c, idx) => {
           const timing = extractLawTiming(c.lawTitle, c.text);
           const sourceInfo = c.sourceFileName ? ` [الملف المصدر: ${c.sourceFileName}]` : '';
@@ -5743,9 +5883,9 @@ function searchRelevantPalestinianLaws(
   }
 
   // Compact catalog of available substantive Palestinian laws and files
-  const fullCatalog = `[فهرس التشريعات والملفات المتاحة في قاعدة المعرفة (${activeLaws.length} تشريع/ملف)]:\n` +
+  const fullCatalog = `[فهرس أبرز التشريعات والملفات المتاحة في قاعدة المعرفة (${activeLaws.length} تشريع/ملف)]:\n` +
     activeLaws
-      .slice(0, 40)
+      .slice(0, 30)
       .map((l, index) => `${index + 1}. ${l.title} (${l.category})${l.sourceFileName ? ` [ملف: ${l.sourceFileName}]` : ''}`)
       .join('\n');
 
@@ -5770,95 +5910,197 @@ function buildStructuredLegalContext(
   };
 }
 
-// Helper for local knowledge retrieval when API quota is constrained
+// Helper for comprehensive, accurate Palestinian knowledge retrieval
 function generateKnowledgeFallback(query: string, laws: StoredLaw[]): string {
   const trimmed = query.trim().toLowerCase();
   const cleaned = trimmed.replace(/[!؟?.,،:\-\s]+/g, ' ').trim();
   const words = cleaned.split(/\s+/).filter(Boolean);
 
-  // 1. Standalone Casual Greetings & Check-ins ONLY (1-3 words)
+  // 1. Meta Query Checks
+  const metaCheck = isPlatformOrMetaQuery(query);
+  if (metaCheck.isMeta && metaCheck.type === 'laws_catalog') {
+    const validLaws = (laws || []).filter(isSubstantiveLaw);
+    const count = validLaws.length > 0 ? validLaws.length : (laws || []).length;
+    return `تحتوي قاعدة بيانات «سَنَد» حالياً على **${count}** تشريعاً وقراراً بقانون وملفاً رسمياً معتمداً في دولة فلسطين، تغطي الضرائب (الدخل والقيمة المضافة)، الجمارك والمكوس والتعرفة والطرود، قانون العمل، مكافحة غسل الأموال، والقرارات المنشورة في الجريدة الرسمية. تفضل بسؤالي عن أي مادة أو نسبة وسأجيبك فوراً.`;
+  }
+
+  if (metaCheck.isMeta && metaCheck.type === 'founder') {
+    return `منصة ومستشار «سَنَد» تأسست وتُدار بإشراف **المستشار القانوني أ. محمد ناصر خليل** (مستشار السياسات الجمركية والتشريعات الضريبية في فلسطين) لتقديم الاستشارات القانونية والضريبية الموثقة.`;
+  }
+
+  if (metaCheck.isMeta && metaCheck.type === 'bot_identity') {
+    return `أنا «سَنَد»، المستشار القانوني والتشريعي الذكي لمنظومة القوانين والضرائب والجمارك في دولة فلسطين، ولست إنساناً بشرياً بل مساعدك الافتراضي الرقمي المتخصص. تفضل بطرح سؤالك وسأجيبك بكل دقة.`;
+  }
+
+  // 2. Standalone Casual Greetings & Check-ins ONLY (1-3 words)
   if (words.length <= 3) {
-    if (
-      /^(عامل ايه|عامل اي|عامل إيه|عامل إي|ازيك|إزيك|كيفك|كيف حالك|شخبارك|أخبارك|شو أخبارك|شو اخبارك|طمني عنك|طمنا عنك|كيف الأمور|كيفك اليوم)$/i.test(
-        cleaned
-      )
-    ) {
+    if (/^(عامل ايه|عامل اي|عامل إيه|عامل إي|ازيك|إزيك|كيفك|كيف حالك|شخبارك|أخبارك|شو أخبارك|شو اخبارك|طمني عنك|طمنا عنك|كيف الأمور|كيفك اليوم)$/i.test(cleaned)) {
       return `الحمد لله بألف خير ونعمة، شكراً لسؤالك ولطفك! أرجو أن تكون بأفضل حال وعافية دائماً.\n\nتفضل بأي استفسار وسأجيبك بكل سرور ودقة.`;
     }
-
-    if (
-      /^(سلام|السلام عليكم|سلام عليكم|مرحبا|مرحباً|أهلا|اهلا|صباح الخير|مساء الخير|هاي|hello|hi)$/i.test(cleaned)
-    ) {
+    if (/^(سلام|السلام عليكم|سلام عليكم|مرحبا|مرحباً|أهلا|اهلا|صباح الخير|مساء الخير|هاي|hello|hi)$/i.test(cleaned)) {
       return `وعليكم السلام ورحمة الله وبركاته! أهلاً وسهلاً بك. أنا «سَنَد» مستشارك القانوني والتشريعي الذكي، كيف أستطيع مساعدتك اليوم؟`;
     }
-
     if (/^(شكرا|شكراً|تسلم|مشكور|الله يبارك فيك|يعطيك العافية|يسلمو|بارك الله فيك)$/i.test(cleaned)) {
       return `العفو على الرحب والسعة دائماً! أنا في خدمتك في أي وقت لأي سؤال أو استفسار.`;
     }
-
-    // 2. Identity & "Are you human?" questions (standalone)
-    if (
-      /^(انت انسان|أنت إنسان|هل انت انسان|هل أنت إنسان|هل انت بشر|هل أنت بشر|هل انت روبوت|هل أنت روبوت|هل انت شخص|انت شخص|هل انت ai|هل انت ذكاء اصطناعي)$/i.test(
-        cleaned
-      )
-    ) {
-      return `لا، أنا لست إنساناً بشرياً، بل أنا «سَنَد»؛ شخصية افتراضية ومساعد رقمي ذكي تم تطويري لتقديم الدعم الشامل والإجابة على جميع أسئلتك واستفساراتك في القوانين والضرائب والجمارك وكافة المجالات بدقة وسهولة.`;
-    }
-
-    if (
-      /^(من انت|مين انت|من أنت|ما اسمك|شو اسمك|عرفني بنفسك|عرف عن نفسك|ما وظيفتك|شو وظيفتك|مين طورك)$/i.test(cleaned)
-    ) {
-      return `أنا «سَنَد»، شخصيتك الافتراضية الذكية ومستشارك التفاعلي في دولة فلسطين. أجمع بين القدرة على تقديم استشارات دقيقة وموثقة في القوانين والضرائب والجمارك، والإجابة على كافة الأسئلة المعرفية.`;
-    }
   }
 
-  // 3. Mohamed Salah (standalone/pure trivia)
+  // 3. Mohamed Salah
   if (/^(من هو محمد صلاح|محمد صلاح|معلومات عن محمد صلاح|فخر العرب)$/i.test(cleaned)) {
-    return `نعم بكل تأكيد! **محمد صلاح** هو قائد المنتخب المصري ونجم نادي ليفربول الإنجليزي، ويُعد واحداً من أبرز وأعظم أساطير كرة القدم في تاريخ العالم العربي والدوري الإنجليزي الممتاز.\n\n📌 **أبرز محطاته وإنجازاته:**\n• حقق مع ليفربول: دوري أبطال أوروبا، الدوري الإنجليزي الممتاز، كأس السوبر الأوروبي، وكأس العالم للأندية.\n• فاز بالحذاء الذهبي لهداف الدوري الإنجليزي عدة مواسم.\n• فاز بجائزة أفضل لاعب في إفريقيا (الكاف) مرتين.\n• الهداف التاريخي لنادي ليفربول في دوري أبطال أوروبا والبريميرليج.`;
+    return `نعم بكل تأكيد! **محمد صلاح** هو قائد المنتخب المصري ونجم نادي ليفربول الإنجليزي، ويُعد واحداً من أبرز وأعظم أساطير كرة القدم في تاريخ العالم العربي والدوري الإنجليزي الممتاز.\n\n📌 **أبرز محطاته وإنجازاته:**\n• حقق مع ليفربول: دوري أبطال أوروبا، الدوري الإنجليزي الممتاز، كأس السوبر الأوروبي، وكأس العالم للأندية.\n• فاز بالحذاء الذهبي لهداف الدوري الإنجليزي عدة مواسم.\n• فاز بجائزة أفضل لاعب في إفريقيا (الكاف) مرتين.`;
   }
 
-  // 4. Islamic religion (standalone/pure trivia)
+  // 4. Islamic religion
   if (/^(ما هو الدين الإسلامي|الدين الإسلامي|دين الاسلام|الاسلام|الإسلام|اركان الاسلام|أركان الإسلام)$/i.test(cleaned)) {
-    return `**الدين الإسلامي** هو الرسالة الخاتمة التي أرسل الله بها خاتم الأنبياء والمرسلين نبينا محمد ﷺ رحمةً للعالمين. وهو دين التوحيد القائم على إفراد الله سبحانه بالعبودية، والعدل والرحمة ومكارم الأخلاق.\n\n📌 **أركان الإسلام الخمسة:**\n1. **الشهادتان:** شهادة أن لا إله إلا الله، وأن محمداً رسول الله.\n2. **إقام الصلاة:** أداء الصلوات الخمس المفروضة في أوقاتها.\n3. **إيتاء الزكاة:** حق واجب في أموال الأغنياء يُدفع للفقراء والمستحقين.\n4. **صوم رمضان:** صيام شهر رمضان المبارك.\n5. **حج البيت:** قصد الكعبة المشرفة لأداء المناسك لمن استطاع إليه سبيلاً.\n\n📌 **أركان الإيمان الستة:**\nالإيمان بالله، وملائكته، وكتبه، ورسله، واليوم الآخر، والقدر خيره وشره.`;
+    return `**الدين الإسلامي** هو الرسالة الخاتمة التي أرسل الله بها نبينا محمد ﷺ رحمةً للعالمين، وهو دين التوحيد والعدل والرحمة ومكارم الأخلاق.\n\n📌 **أركان الإسلام الخمسة:** الشهادتان، إقام الصلاة، إيتاء الزكاة، صوم رمضان، وحج البيت لمن استطاع إليه سبيلاً.`;
   }
 
-  // 5. If this is NOT a legal query, provide a friendly, intelligent general assistant answer
-  if (!isLegalTaxCustomsQuery(query)) {
-    return `أهلاً بك! بصفتي شخصيتك الافتراضية ومساعدك الذكي «سَنَد»، يسعدني جداً الإجابة على أي سؤال أو استفسار عام في أي مجال (علوم، تاريخ، ثقافة، رياضة، لغات، أو نقاش يومي).\n\nتفضل بطرح سؤالك بمزيد من التفصيل وسأجيبك فوراً بكل وضوح وسلاسة دون أي تعقيد.`;
+  // 5. Retroactivity and Application of Laws in Palestine (مبدأ عدم رجعية القوانين)
+  if (/(اي قانون جديد من متى|متى يتم تطبيق|ينطبق على الفترة قبل صدوره|باثر رجعي|بأثر رجعي|عدم رجعية|سريان القانون|نفاذ القانون)/i.test(cleaned)) {
+    return `### ⚖️ الأثر القانوني لسريان القوانين وتطبيقها من حيث الزمان (فلسطين):
+
+📌 **القاعدة الأساسية (مبدأ عدم رجعية القوانين):**
+وفقاً لأحكام **القانون الأساسي الفلسطيني المعدل لسنة 2003م (المادة 15)** والقواعد الدستورية المستقرة:
+1. **تاريخ النفاذ:** يسري أي قانون أو قرار بقانون جديد من **تاريخ نشره في الجريدة الرسمية (الوقائع الفلسطينية)**، أو من التاريخ المحدد صراحةً في صلب القانون لنفاذه.
+2. **الأثر المباشر فقط:** تنطبق أحكام القانون الجديد على الوقائع والمعاملات والتصرفات اللاحقة لتاريخ نفاذه، **ولا يسري إطلاقاً على الوقائع أو الفترات السابقة لصدوره**.
+
+---
+
+📋 **الضوابط والتطبيقات العملية:**
+* **في المجال الضريبي والجمركي:**
+  - **مبدأ الشرعية الضريبية:** لا تفرض ضرائب أو رسوم أو غرامات إلا بقانون، ولا يجوز تطبيق تعديلات ضريبية أو فرض أعباء بأثر رجعي على فترات مالية سابقة لنفاذ التعديل، حفاظاً على استقرار المراكز القانونية للمكلفين.
+* **في المجال الجزائي والعقوبات:**
+  - لا جريمة ولا عقوبة إلا بنص قانوني نافذ وقت ارتكاب الفعل، والاستثناء الوحيد هو **«القانون الأصلح للمتهم»** إذا كان يخفف العقوبة أو يلغي التجريم.
+
+💡 **الخلاصة:** أي قانون جديد يطبق مستقبلاً من تاريخ نفاذه الرسمي ولا ينطبق على الفترة السابقة لصدوره.`;
   }
 
-  // 6. LEGAL / TAX / CUSTOMS / UPLOADED FILES QUERY: Search Knowledge Base
+  // 6. Value Added Tax (VAT) rate and regulations (ضريبة القيمة المضافة)
+  if (/(نسبة ضريبة القيمة المضافة|ضريبة القيمة المضافة|نسبة القيمة المضافة|ضريبة القيمه المضافه|كم ضريبة القيمة المضافة|فاتورة مقاصة|فواتير المقاصة)/i.test(cleaned)) {
+    return `### ⚖️ أحكام ونسبة ضريبة القيمة المضافة النافذة في دولة فلسطين:
+
+📌 **النسبة القانونية المعتمدة:**
+النسبة العامة لضريبة القيمة المضافة (VAT) في دولة فلسطين هي **16%**، وتُطبق على جميع مبيعات السلع والخدمات المحلية والمستوردة في محافظات الوطن.
+
+---
+
+📋 **الضوابط والشروط والتعاملات الخاصة:**
+1. **التوريدات المحلية:** تخضع لنسبة **16%** تضاف إلى القيمة الإجمالية للسلعة أو الخدمة بموجب فاتورة ضريبية رسمية.
+2. **الصادرات:** تخضع لنسبة **الصفر (0%)** تشجيعاً للمنتجات الوطنية والتصدير الخارجي.
+3. **فواتير المقاصة (مع الجانب الآخر):** تخضع المعاملات التجارية المتبادلة للتنسيق الضريبي عبر فواتير المقاصة (حيث تطبق نسبة 17% لتوحيد المقاصة والخصم المشترك وفق بروتوكول باريس الاقتصادي).
+4. **الخصم والاسترداد:** يحق للمكلف المسجل في ضريبة القيمة المضافة خصم ضريبة المدخلات (الضريبة التي دفعها على مشترياته ومصروفاته التشغيلية) من ضريبة المخرجات وتوريد الفارق لدائرة الضريبة شهرياً أو دورياً.
+
+💡 **المرجع الرسمي:** تعليمات وقرارات الإدارة العامة للجمارك والمكوس وضريبة القيمة المضافة بوزارة المالية الفلسطينية.`;
+  }
+
+  // 7. Income Tax exemptions and brackets (إعفاءات وشرائح ضريبة الدخل)
+  if (/(اعفاءات ضريبة الدخل|إعفاءات ضريبة الدخل|اعفاء ضريبة الدخل|شرائح ضريبة الدخل|شريحة ضريبة الدخل|حساب ضريبة الدخل|ضريبة الدخل للموظف|ضريبة الدخل للشركات)/i.test(cleaned)) {
+    return `### ⚖️ إعفاءات وشرائح ضريبة الدخل للأفراد والشركات في فلسطين:
+
+📌 **المرجع القانوني:** قرار بقانون رقم (8) لسنة 2011م بشأن ضريبة الدخل وتعديلاته.
+
+---
+
+📋 **أولاً: الإعفاءات المقررة للشخص الطبيعي (الموظف / المهني) - المادة (13):**
+1. **الإعفاء الأساسي:** يُمنح الشخص الطبيعي المقيم إعفاءً سنوياً أساسياً قدره **(36,000) ستة وثلاثون ألف شيكل سنوياً** (أي 3,000 شيكل شهرياً) من دخله الإجمالي.
+2. **المساهمات التقاعدية:** إعفاء كامل المساهمة الفعلية في صناديق التقاعد أو التأمين الصحي المعتمدة.
+3. **إعفاء السكن:** إعفاء شراء أو بناء سكن لمرة واحدة حتى 30,000 دينار أردني (أو ما يعادلها بالشيكل).
+4. **مكافأة نهاية الخدمة:** معفاة من ضريبة الدخل وفق الحدود القانونية المعتمدة.
+
+---
+
+📊 **ثانياً: الشرائح التصاعدية لضريبة دخل الأفراد (المادة 18) بعد طرح الإعفاءات:**
+• **الشريحة الأولى (من 1 إلى 40,000 شيكل سنوياً):** **5%**
+• **الشريحة الثانية (من 40,001 إلى 80,000 شيكل سنوياً):** **10%**
+• **الشريحة الثالثة (ما يزيد عن 80,000 شيكل سنوياً):** **15%**
+
+🏢 **ثالثاً: ضريبة دخل الشركات (الشخص المعنوي):**
+• النسبة الأساسية هي **15%** من الدخل الصافي الخاضع للضريبة (مع الاستفادة من حوافز قانون تشجيع الاستثمار الفلسطيني).`;
+  }
+
+  // 8. Palestinian Labor Law (قانون العمل الفلسطيني رقم 7 لسنة 2000م)
+  if (/(قانون العمل|اجازات الموظف|إجازات الموظف|شروط الاجازة|مكافأة نهاية الخدمة|مكافاه نهايه الخدمه|ساعات العمل في قانون العمل|الفصل التعسفي في قانون العمل)/i.test(cleaned)) {
+    return `### ⚖️ أحكام وحقوق العامل وفق قانون العمل الفلسطيني رقم (7) لسنة 2000م:
+
+📌 **المرجع التشريعي:** قانون العمل الفلسطيني رقم (7) لسنة 2000م وتعديلاته.
+
+---
+
+📋 **1. الإجازات المقررة للموظف:**
+• **الإجازة السنوية (المادة 74):** **14 يوماً مدفوعة الأجر** عن كل سنة عمل، وتصبح **21 يوماً** لمن أمضى 5 سنوات في المنشأة أو للعمال في الأعمال الخطرة والمضرة بالصحة.
+• **الإجازة المرضية (المادة 79):** **14 يوماً بأجر كامل** و**14 يوماً بنصف أجر** خلال السنة الواحدة بناءً على تقرير طبي معتمد.
+• **إجازة الأمومة (المادة 103):** **10 أسابيع (70 يوماً)** مدفوعة الأجر للمرأة العاملة.
+• **إجازة أداء فريضة الحج:** 3 أسابيع بأجر لمرة واحدة طوال فترة خدمته لمن أمضى 5 سنوات.
+
+---
+
+📋 **2. ساعات العمل ونهاية الخدمة:**
+• **ساعات العمل الرسمية (المادة 68):** **45 ساعة أسبوعياً** كحد أقصى موزعة على أيام الأسبوع.
+• **مكافأة نهاية الخدمة (المادة 42):** يستحق العامل عند انتهاء خدمته **أجر شهر عن كل سنة عمل** قضاها لدى صاحب العمل، وتُحسب كسور السنة بنسبة ما قضاه منها.
+• **فترة التجربة (المادة 34):** لا يجوز أن تزيد عن **3 أشهر**، ولا يجوز تشغيل العامل تحت التجربة لدى نفس صاحب العمل أكثر من مرة.`;
+  }
+
+  // 9. Customs & Postal Parcels (الجمارك والطرود البريدية)
+  if (/(جمارك|جمرك|طرد بريدي|طرود بريدية|شحنة شخصية|شحنات|بيان جمركي|رسوم جمركية|استيراد سيارات)/i.test(cleaned)) {
+    return `### ⚖️ أحكام الرسوم الجمركية والطرود البريدية في دولة فلسطين:
+
+📌 **المرجع التشريعي:** قانون الجمارك والمكوس رقم (1) لسنة 1962م وتعديلاته، ولائحة التعرفة الجمركية الفلسطينية.
+
+---
+
+📋 **نظام الطرود البريدية والشحنات الشخصية:**
+1. **الطرود حتى 150 دولار أمريكي:** معفاة من الرسوم الجمركية وضريبة القيمة المضافة، بشرط أن تكون للاستخدام الشخصي وغير التجاري.
+2. **الطرود من 150 إلى 500 دولار أمريكي:** تخضع لضريبة القيمة المضافة (16%) ورسوم جمركية مقطوعة ومخفضة.
+3. **الطرود التي تزيد عن 500 دولار أمريكي (أو ذات الطابع التجاري):** تخضع للإجراءات الجمركية الكاملة وفتح بيان جمركي رسمي وتطبيق التعرفة الجمركية بحسب بند التعرفة لكل صنف.
+
+💡 **المستندات المطلوبة:** الفاتورة الأصلية للمشتريات، بوليصة الشحن، وإثبات الهوية الشخصية للمستلم.`;
+  }
+
+  // 10. Specific Article Requested across laws
+  const requestedArticle = extractRequestedArticleNumber(query);
+  if (requestedArticle) {
+    const searchResult = searchRelevantPalestinianLaws(query, laws);
+    if (searchResult.topChunks.length > 0) {
+      let res = `### ⚖️ نصوص المادة رقم (${requestedArticle}) المستخرجة من التشريعات والملفات المعتمدة:\n\n`;
+      searchResult.topChunks.slice(0, 3).forEach((c, idx) => {
+        const timing = extractLawTiming(c.lawTitle, c.text);
+        res += `📌 **(${idx + 1}) التشريع:** ${c.lawTitle} (${timing})\n`;
+        res += `• **الموضع:** ${c.sectionHeader}\n`;
+        res += `• **النص المعتمد:**\n${c.text}\n\n`;
+      });
+      res += `💡 إذا كنت تقصد تشريعاً محدداً بعينه (مثل قانون ضريبة الدخل، قانون الجمارك، أو قانون العمل)، يرجى تحديد اسم القانون لأزودك بتفاصيله الدقيقة.`;
+      return res;
+    }
+  }
+
+  // 11. General Substantive RAG Search across Database
   const searchResult = searchRelevantPalestinianLaws(query, laws);
-
-  if (searchResult.exactArticleChunk || (searchResult.hasMatches && searchResult.topChunks.length > 0)) {
+  if (searchResult.hasMatches && searchResult.topChunks.length > 0) {
     const topChunk = searchResult.exactArticleChunk || searchResult.topChunks[0];
     const timing = extractLawTiming(topChunk.lawTitle, topChunk.text);
 
-    let result = `⚖️ **المرجع والأساس التشريعي المعتمد:**\n`;
-    result += `• **التشريع / الملف المصدر:** ${topChunk.lawTitle} (${timing})${topChunk.sourceFileName ? ` [اسم الملف: ${topChunk.sourceFileName}]` : ''}\n`;
-    result += `• **الموضع / المادة المعنية:** ${topChunk.sectionHeader}\n`;
+    let result = `### ⚖️ الإفادة القانونية المستندة إلى التشريعات المعتمدة (فلسطين):\n\n`;
+    result += `📌 **المرجع التشريعي المعتمد:**\n`;
+    result += `• **التشريع / الملف:** ${topChunk.lawTitle} (${timing})\n`;
+    result += `• **الموضع / المادة:** ${topChunk.sectionHeader}\n`;
     result += `• **التصنيف:** ${topChunk.category}\n\n`;
 
-    result += `💡 **الحكم والتكييف القانوني المفصل:**\n`;
+    result += `📋 **النص والحكم التشريعي:**\n`;
     result += `${topChunk.text}\n\n`;
 
-    result += `📋 **الضوابط والشروط والنسب المقررة:**\n`;
-    result += `• **سنة المعاملة والتطبيق:** تسري هذه الأحكام والبنود المذكورة وفقاً للوثيقة والملف المعتمد في النظام.\n`;
-    result += `• **صفة المكلف:** يرجى التمييز بين المعاملات الخاصة بالأفراد الطبيعيين وتلك الخاصة بالشركات والمؤسسات التجارية.\n`;
-    result += `• **المستندات المطلوبة:** يُشترط استيفاء الفواتير أو البيانات الجمركية/الضريبية الرسمية المعتمدة لدى الدائرة المختصة.\n\n`;
-
-    result += `📌 **التوجيهات والإرشادات للمكلف:**\n`;
-    result += `تم استخراج هذا النص بدقة وأمانة تشريعية كاملة من الملفات وقاعدة المعرفة المرفوعة في النظام.`;
-
+    result += `💡 **إرشادات وتوجيهات عملية:**\n`;
+    result += `تم استخراج هذا النص بدقة وأمانة تشريعية تامة من الوثائق والملفات الرسمية المعتمدة في النظام.`;
     return result;
   }
 
-  let promptForDetails = `📋 **لتحديد الحكم الدقيق والشامل وفق الملفات والقوانين المسجلة، يرجى تزويدي بالتفاصيل التالية:**\n`;
-  promptForDetails += `• **سنة المعاملة المالية أو التصريح:** (لتحديد القانون والتعديل الساري).\n`;
-  promptForDetails += `• **صفة المكلف:** (فرد طبيعي/موظف أم شركة تجارية/مساهمة).\n`;
-  promptForDetails += `• **المعاملة المستهدفة:** (استيراد/تصدير، ضريبة دخل، ضريبة قيمة مضافة، طرد بريدي، عقوبة/غرامة، أو اسم الملف المحدد).\n\n`;
-  promptForDetails += `⚖️ **إفادة استشارية أولية:** لم يتم العثور على مادة مطابقة تماماً بهذا اللفظ في قاعدة التشريعات والملفات المسجلة حالياً (${laws.length} تشريع/ملف). تفضل بتحديد المعطيات أعلاه أو مراجعة تبويب القوانين للتأكد من رفع الملف.`;
-  return promptForDetails;
+  // 12. Non-legal fallback
+  if (!isLegalTaxCustomsQuery(query)) {
+    return `أهلاً بك! بصفتي شخصيتك الافتراضية ومساعدك الذكي «سَنَد»، يسعدني جداً الإجابة على أي سؤال أو استفسار عام في أي مجال معرفي وثقافي بكل دقة وسلاسة.\n\nتفضل بطرح سؤالك وسأجيبك فوراً.`;
+  }
+
+  return `### ⚖️ استشارة قانونية وتشريعية (فلسطين):
+لم يتم العثور على مادة مطابقة تماماً بهذا اللفظ الحرفي في قاعدة التشريعات والملفات المسجلة حالياً (${laws.length} تشريع/ملف).
+يرجى توضيح سؤالك أو تحديد اسم القانون المنشود (مثل قانون ضريبة الدخل، قانون الجمارك، قانون العمل الفلسطيني) أو رقم المادة المطلوبة لأقوم باستخراجها لك فوراً بكل دقة.`;
 }
 
 
