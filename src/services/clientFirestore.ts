@@ -27,8 +27,8 @@ export function isClientQuotaExceeded(): boolean {
 }
 
 export function markClientQuotaExceeded() {
-  clientQuotaExceededUntil = Date.now() + 30 * 1000;
-  console.warn('[Client Firestore] Pausing direct client calls for 30s before auto-recovering.');
+  clientQuotaExceededUntil = Date.now() + 5 * 60 * 1000;
+  // Seamlessly rely on server API & local cached data without spamming console
 }
 
 export function handleClientFirestoreError(context: string, err: any) {
@@ -41,12 +41,13 @@ export function handleClientFirestoreError(context: string, err: any) {
     errMsg.includes('Quota limit exceeded') ||
     errMsg.includes('RESOURCE_EXHAUSTED') ||
     errMsg.includes('quota') ||
+    errMsg.includes('Free daily read units') ||
     err?.code === 'resource-exhausted'
   ) {
     markClientQuotaExceeded();
-  } else {
-    console.warn(`[Client Firestore] ${context}:`, err);
+    return;
   }
+  console.warn(`[Client Firestore] ${context}:`, errMsg);
 }
 
 export function getClientDb(forceBypassQuota = false) {
@@ -716,7 +717,7 @@ export async function directSaveBrandingToFirestore(branding: any): Promise<bool
     console.log('[Client Firestore] Branding saved directly to Firestore successfully');
     return true;
   } catch (err) {
-    console.error('[Client Firestore] Error saving branding directly:', err);
+    handleClientFirestoreError('directSaveBrandingToFirestore', err);
     return false;
   }
 }
@@ -734,7 +735,7 @@ export async function directSaveDefaultTrialDaysToFirestore(days: number): Promi
     console.log('[Client Firestore] Successfully saved defaultTrialDays to Firestore:', days);
     return true;
   } catch (err) {
-    console.error('[Client Firestore] Error saving defaultTrialDays directly:', err);
+    handleClientFirestoreError('directSaveDefaultTrialDaysToFirestore', err);
     return false;
   }
 }
@@ -752,7 +753,7 @@ export async function directSaveAutoApproveToFirestore(autoApprove: boolean): Pr
     console.log('[Client Firestore] Successfully saved autoApproveNewUsers to Firestore:', autoApprove);
     return true;
   } catch (err) {
-    console.error('[Client Firestore] Error saving autoApproveNewUsers directly:', err);
+    handleClientFirestoreError('directSaveAutoApproveToFirestore', err);
     return false;
   }
 }
@@ -779,7 +780,7 @@ export async function directFetchSettingsFromFirestore(): Promise<{ autoApprove?
     }
     return null;
   } catch (err) {
-    console.error('[Client Firestore] Error fetching settings directly:', err);
+    handleClientFirestoreError('directFetchSettingsFromFirestore', err);
     return null;
   }
 }
@@ -799,7 +800,7 @@ export async function directFetchBrandingFromFirestore(): Promise<any | null> {
     });
     return found;
   } catch (err) {
-    console.error('[Client Firestore] Error fetching branding directly:', err);
+    handleClientFirestoreError('directFetchBrandingFromFirestore', err);
     return null;
   }
 }
@@ -819,7 +820,7 @@ export async function directSavePlatformAboutToFirestore(data: any): Promise<boo
     console.log('[Client Firestore] Platform about saved directly');
     return true;
   } catch (err) {
-    console.error('[Client Firestore] Error saving platform about:', err);
+    handleClientFirestoreError('directSavePlatformAboutToFirestore', err);
     return false;
   }
 }
@@ -839,7 +840,7 @@ export async function directFetchPlatformAboutFromFirestore(): Promise<any | nul
     });
     return found;
   } catch (err) {
-    console.error('[Client Firestore] Error fetching platform about:', err);
+    handleClientFirestoreError('directFetchPlatformAboutFromFirestore', err);
     return null;
   }
 }
@@ -859,7 +860,7 @@ export async function directSaveContactInfoToFirestore(data: any): Promise<boole
     console.log('[Client Firestore] Contact info saved directly');
     return true;
   } catch (err) {
-    console.error('[Client Firestore] Error saving contact info:', err);
+    handleClientFirestoreError('directSaveContactInfoToFirestore', err);
     return false;
   }
 }
@@ -879,7 +880,7 @@ export async function directFetchContactInfoFromFirestore(): Promise<any | null>
     });
     return found;
   } catch (err) {
-    console.error('[Client Firestore] Error fetching contact info:', err);
+    handleClientFirestoreError('directFetchContactInfoFromFirestore', err);
     return null;
   }
 }
@@ -898,7 +899,7 @@ export async function directSavePartnerToFirestore(partner: any): Promise<boolea
     }, { merge: true });
     return true;
   } catch (err) {
-    console.error('[Client Firestore] Error saving partner directly:', err);
+    handleClientFirestoreError('directSavePartnerToFirestore', err);
     return false;
   }
 }
@@ -911,7 +912,7 @@ export async function directDeletePartnerFromFirestore(id: string): Promise<bool
     await deleteDoc(doc(db, 'partners', id));
     return true;
   } catch (err) {
-    console.error('[Client Firestore] Error deleting partner directly:', err);
+    handleClientFirestoreError('directDeletePartnerFromFirestore', err);
     return false;
   }
 }
@@ -929,7 +930,7 @@ export async function directFetchPartnersFromFirestore(): Promise<any[] | null> 
     });
     return items;
   } catch (err) {
-    console.error('[Client Firestore] Error fetching partners directly:', err);
+    handleClientFirestoreError('directFetchPartnersFromFirestore', err);
     return null;
   }
 }
@@ -948,7 +949,7 @@ export async function directSaveRelatedSiteToFirestore(site: any): Promise<boole
     }, { merge: true });
     return true;
   } catch (err) {
-    console.error('[Client Firestore] Error saving related site directly:', err);
+    handleClientFirestoreError('directSaveRelatedSiteToFirestore', err);
     return false;
   }
 }
@@ -961,7 +962,7 @@ export async function directDeleteRelatedSiteFromFirestore(id: string): Promise<
     await deleteDoc(doc(db, 'related_sites', id));
     return true;
   } catch (err) {
-    console.error('[Client Firestore] Error deleting related site directly:', err);
+    handleClientFirestoreError('directDeleteRelatedSiteFromFirestore', err);
     return false;
   }
 }
@@ -979,7 +980,7 @@ export async function directFetchRelatedSitesFromFirestore(): Promise<any[] | nu
     });
     return items;
   } catch (err) {
-    console.error('[Client Firestore] Error fetching related sites directly:', err);
+    handleClientFirestoreError('directFetchRelatedSitesFromFirestore', err);
     return null;
   }
 }
@@ -998,7 +999,7 @@ export async function directSaveSupervisorToFirestore(supervisor: any): Promise<
     }, { merge: true });
     return true;
   } catch (err) {
-    console.error('[Client Firestore] Error saving supervisor directly:', err);
+    handleClientFirestoreError('directSaveSupervisorToFirestore', err);
     return false;
   }
 }
@@ -1011,7 +1012,7 @@ export async function directDeleteSupervisorFromFirestore(id: string): Promise<b
     await deleteDoc(doc(db, 'supervisors', id));
     return true;
   } catch (err) {
-    console.error('[Client Firestore] Error deleting supervisor directly:', err);
+    handleClientFirestoreError('directDeleteSupervisorFromFirestore', err);
     return false;
   }
 }
@@ -1029,7 +1030,7 @@ export async function directFetchSupervisorsFromFirestore(): Promise<any[] | nul
     });
     return items;
   } catch (err) {
-    console.error('[Client Firestore] Error fetching supervisors directly:', err);
+    handleClientFirestoreError('directFetchSupervisorsFromFirestore', err);
     return null;
   }
 }
@@ -1119,7 +1120,7 @@ export async function directFetchUsersFromFirestore(): Promise<User[] | null> {
     console.log(`[Client Firestore] Loaded ${items.length} users directly from Cloud Firestore.`);
     return items;
   } catch (err) {
-    console.error('[Client Firestore] Error fetching users directly:', err);
+    handleClientFirestoreError('directFetchUsersFromFirestore', err);
     return null;
   }
 }
@@ -1150,7 +1151,7 @@ export async function directUpdateUserStatusInFirestore(
     console.log(`[Client Firestore] Updated status for ${userId} to ${status}`);
     return true;
   } catch (err) {
-    console.error('[Client Firestore] Error updating user status directly:', err);
+    handleClientFirestoreError('directUpdateUserStatusInFirestore', err);
     return false;
   }
 }
@@ -1181,7 +1182,7 @@ export async function directUpdateUserTrialInFirestore(
     console.log(`[Client Firestore] Extended trial for ${userId} by ${additionalDays} days`);
     return true;
   } catch (err) {
-    console.error('[Client Firestore] Error extending user trial directly:', err);
+    handleClientFirestoreError('directUpdateUserTrialInFirestore', err);
     return false;
   }
 }
@@ -1213,7 +1214,7 @@ export async function directUpdateUserSubscriptionInFirestore(
     console.log(`[Client Firestore] Updated subscription for ${userId}: isSubscribed=${isSubscribed}`);
     return true;
   } catch (err) {
-    console.error('[Client Firestore] Error updating subscription directly:', err);
+    handleClientFirestoreError('directUpdateUserSubscriptionInFirestore', err);
     return false;
   }
 }
@@ -1242,7 +1243,7 @@ export async function directToggleFreezeUserInFirestore(
     console.log(`[Client Firestore] Toggled freeze for ${userId}: freeze=${freeze}`);
     return true;
   } catch (err) {
-    console.error('[Client Firestore] Error toggling freeze directly:', err);
+    handleClientFirestoreError('directToggleFreezeUserInFirestore', err);
     return false;
   }
 }
@@ -1281,13 +1282,10 @@ export async function directAutoApproveAllPendingInFirestore(defaultDays: number
     console.log(`[Client Firestore] Bulk auto-approved ${count} pending users.`);
     return { success: true, count };
   } catch (err) {
-    console.error('[Client Firestore] Error bulk auto-approving directly:', err);
+    handleClientFirestoreError('directAutoApproveAllPendingInFirestore', err);
     return { success: false, count: 0 };
   }
 }
-
-
-
 
 export async function directDeleteUserFromFirestore(
   userId: string
@@ -1298,7 +1296,7 @@ export async function directDeleteUserFromFirestore(
     console.log(`[Client Firestore] Successfully deleted user directly: ${userId}`);
     return true;
   } catch (err) {
-    console.error('[Client Firestore] Error deleting user directly:', err);
+    handleClientFirestoreError('directDeleteUserFromFirestore', err);
     return false;
   }
 }
@@ -1341,7 +1339,7 @@ export async function directFetchLawRequestsFromFirestore(): Promise<LawRequest[
     });
     return items;
   } catch (err) {
-    console.error('[Client Firestore] Error fetching law requests directly:', err);
+    handleClientFirestoreError('directFetchLawRequestsFromFirestore', err);
     return [];
   }
 }
@@ -1377,7 +1375,7 @@ export async function directSaveLawRequestToFirestore(request: LawRequest): Prom
     console.log(`[Client Firestore] Successfully saved law request directly: ${request.id}`);
     return true;
   } catch (err) {
-    console.error('[Client Firestore] Error saving law request directly:', err);
+    handleClientFirestoreError('directSaveLawRequestToFirestore', err);
     return false;
   }
 }
@@ -1408,7 +1406,7 @@ export async function directUpdateLawRequestStatusInFirestore(
     console.log(`[Client Firestore] Updated law request ${requestId} status to ${status}`);
     return true;
   } catch (err) {
-    console.error('[Client Firestore] Error updating law request status directly:', err);
+    handleClientFirestoreError('directUpdateLawRequestStatusInFirestore', err);
     return false;
   }
 }
@@ -1426,7 +1424,7 @@ export async function directDeleteLawRequestFromFirestore(requestId: string): Pr
     console.log(`[Client Firestore] Successfully deleted law request directly: ${requestId}`);
     return true;
   } catch (err) {
-    console.error('[Client Firestore] Error deleting law request directly:', err);
+    handleClientFirestoreError('directDeleteLawRequestFromFirestore', err);
     return false;
   }
 }
@@ -1448,7 +1446,7 @@ export async function directFetchSubscriptionPlansFromFirestore(): Promise<Subsc
     items.sort((a, b) => (a.order || 0) - (b.order || 0));
     return items;
   } catch (err) {
-    console.error('[Client Firestore] Error fetching subscription plans directly:', err);
+    handleClientFirestoreError('directFetchSubscriptionPlansFromFirestore', err);
     return null;
   }
 }
@@ -1468,7 +1466,7 @@ export async function directSaveSubscriptionPlanToFirestore(plan: SubscriptionPl
     }, { merge: true });
     return true;
   } catch (err) {
-    console.error('[Client Firestore] Error saving subscription plan directly:', err);
+    handleClientFirestoreError('directSaveSubscriptionPlanToFirestore', err);
     return false;
   }
 }
@@ -1500,7 +1498,7 @@ export async function directDeleteSubscriptionPlanFromFirestore(id: string): Pro
 
     return true;
   } catch (err) {
-    console.error('[Client Firestore] Error deleting subscription plan directly:', err);
+    handleClientFirestoreError('directDeleteSubscriptionPlanFromFirestore', err);
     return false;
   }
 }
