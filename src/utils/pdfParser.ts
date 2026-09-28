@@ -364,14 +364,81 @@ export async function extractTextFromPDF(
     };
   }
 
-  // Step 2: Multimodal Server AI Vision Parser (for scanned/image-based PDFs)
+  // Step 2: Scanned PDF Extraction with Tesseract.js OCR (Canvas Rendering per page) + Hybrid Server AI Vision
   safeProgress({
     currentPage: 1,
     totalPages: 1,
-    percent: Math.max(currentMaxPercent, 35),
-    statusText: 'المستند ممسوح ضوئياً، جاري استخراج كافة النصوص والمواد بالذكاء الاصطناعي...',
+    percent: Math.max(currentMaxPercent, 25),
+    statusText: 'المستند ممسوح ضوئياً، جاري تشغيل Tesseract OCR لقراءة الصفحات والمواد حرفياً...',
   });
 
+  try {
+    const { performTesseractOcrOnPdf } = await import('./tesseractOcr');
+    const tessResult = await performTesseractOcrOnPdf(file, (p) => {
+      safeProgress({
+        currentPage: p.currentPage || 1,
+        totalPages: p.totalPages || 1,
+        percent: Math.max(currentMaxPercent, p.percent),
+        statusText: p.statusText,
+      });
+    });
+
+    if (tessResult && tessResult.text && tessResult.text.trim().length > 30) {
+      const fullOcrText = normalizeAndFixArabicText(tessResult.text);
+      const localMeta = detectLawMetadataLocally(fullOcrText, file.name);
+
+      let structuredTitle = localMeta.title;
+      let structuredCategory = localMeta.category;
+      let structuredSummary = localMeta.summary;
+
+      // Fast non-blocking AI metadata detection
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 3500);
+
+        const res = await fetch('/api/admin/structure-law-text', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: fullOcrText.slice(0, 15000),
+            fileName: file.name,
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timer);
+
+        if (res.ok) {
+          const aiData = await res.json();
+          if (aiData.title) structuredTitle = sanitizeLawTitle(aiData.title);
+          if (aiData.category) structuredCategory = aiData.category;
+          if (aiData.summary) structuredSummary = aiData.summary;
+        }
+      } catch {}
+
+      safeProgress({
+        currentPage: tessResult.numPages,
+        totalPages: tessResult.numPages,
+        percent: 100,
+        statusText: 'اكتمل استخراج كافة نصوص ومواد القانون الممسوح بنجاح بنسبة 100%',
+      });
+
+      return {
+        text: fullOcrText,
+        numPages: tessResult.numPages || 1,
+        fileName: file.name,
+        fileSizeBytes: file.size,
+        fileSizeFormatted,
+        suggestedTitle: structuredTitle,
+        suggestedCategory: structuredCategory,
+        summary: structuredSummary,
+        method: 'tesseract_canvas_ocr',
+      };
+    }
+  } catch (tessErr) {
+    console.warn('[PDFParser] Tesseract client OCR note, trying server vision:', tessErr);
+  }
+
+  // Step 3: Multimodal Server AI Vision Parser fallback
   if (file.size <= 30 * 1024 * 1024) {
     let base64Data = '';
     try {
@@ -381,22 +448,9 @@ export async function extractTextFromPDF(
     }
 
     if (base64Data) {
-      let currentProgress = Math.max(currentMaxPercent, 40);
-      const progressTimer = setInterval(() => {
-        if (currentProgress < 90) {
-          currentProgress += 10;
-          safeProgress({
-            currentPage: 1,
-            totalPages: 1,
-            percent: currentProgress,
-            statusText: 'جاري استخراج كافة المواد والقرارات والبنود حرفياً...',
-          });
-        }
-      }, 500);
-
       try {
         const controller = new AbortController();
-        const timeoutTimer = setTimeout(() => controller.abort(), 25000);
+        const timeoutTimer = setTimeout(() => controller.abort(), 20000);
 
         const res = await fetch('/api/admin/parse-pdf', {
           method: 'POST',
@@ -406,14 +460,13 @@ export async function extractTextFromPDF(
         });
 
         clearTimeout(timeoutTimer);
-        clearInterval(progressTimer);
 
         if (res.ok) {
           const serverResult = await res.json();
           const rawExtracted = serverResult.content || serverResult.text || '';
           const extractedText = normalizeAndFixArabicText(rawExtracted);
 
-          if (extractedText && extractedText.trim().length > 15) {
+          if (extractedText && extractedText.trim().length > 20) {
             safeProgress({
               currentPage: serverResult.numPages || 1,
               totalPages: serverResult.numPages || 1,
@@ -438,19 +491,18 @@ export async function extractTextFromPDF(
           }
         }
       } catch (err: any) {
-        clearInterval(progressTimer);
         console.warn('[PDFParser] Server parsing attempt note:', err);
       }
     }
   }
 
-  // Step 3: Fast draft fallback with complete metadata
+  // Step 4: Fast draft fallback with complete metadata
   const localMeta = detectLawMetadataLocally('', file.name);
   safeProgress({
     currentPage: 1,
     totalPages: 1,
     percent: 100,
-    statusText: 'تم تجهيز الملف، يمكنك كتابة وتعديل نصوص المواد القانونية وحفظها.',
+    statusText: 'تم تجهيز مسودة المستند بنجاح',
   });
 
   return {

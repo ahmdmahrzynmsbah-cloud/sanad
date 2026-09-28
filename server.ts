@@ -3983,80 +3983,87 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
         { category: 'HARM_CATEGORY_CIVIC_INTEGRITY' as any, threshold: 'BLOCK_NONE' as any },
       ];
 
-      try {
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: contentsPayload,
-          config: {
-            systemInstruction:
-              'أنت مستشار قانوني وتشريعي فلسطيني رفيع المستوى، متخصص في استخراج وتوثيق نصوص القوانين والمراسيم والقرارات الفلسطينية الرسمية والممسوحة ضوئياً كلمة بكلمة ومادة بمادة بنسبة 100% حرفياً.',
-            maxOutputTokens: 32768,
-            temperature: 0.05,
-            safetySettings: legalSafetySettings,
-          },
-        });
+      const candidateVisionModels = ['gemini-2.5-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash'];
 
-        if (response?.text) {
-          const parsed = extractLegalDocumentFromModelOutput(response.text, cleanTitle, 'جمارك');
-          if (parsed && parsed.content && parsed.content.length > 20) {
-            // CRITICAL: If direct text was extracted from PDF, preserve 100% of normalizedLocalText!
-            const finalDocContent = hasSufficientDirectText && normalizedLocalText.length >= parsed.content.length
-              ? normalizedLocalText
-              : normalizeAndFixArabicText(parsed.content).trim();
-
-            extractedData = {
-              title: (parsed.title || cleanTitle).trim(),
-              category: (parsed.category || 'جمارك').trim(),
-              content: finalDocContent,
-              summary: (parsed.summary || '').trim(),
-            };
-            usedModel = 'gemini-2.5-flash';
-            console.log(`[AI-PDF] Successfully extracted legal text (${extractedData.content.length} chars)`);
-          }
-        }
-      } catch (geminiErr: any) {
-        console.warn('[AI-PDF] Primary Gemini extraction attempt warning:', geminiErr?.message || geminiErr);
-      }
-
-      // Fast retry with direct verbatim prompt if first attempt didn't produce full content
-      if (!extractedData || !extractedData.content || extractedData.content.length < 30) {
+      for (const modelName of candidateVisionModels) {
         try {
-          console.log('[AI-PDF] Running direct verbatim fallback extraction...');
-          const directRes = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: [
-              {
-                inlineData: {
-                  mimeType: effectiveMimeType,
-                  data: base64Data,
-                },
-              },
-              {
-                text: 'اقرأ واستخرج كافة نصوص ومواد وبنود وقرارات هذا المستند القانوني بالكامل كلمة بكلمة ومادة بمادة بنسبة 100% حرفياً دون حذف أي كلمة أو مادة، واذكر في البداية عنوان التشريع الكامل.',
-              },
-            ],
+          const response = await ai.models.generateContent({
+            model: modelName,
+            contents: contentsPayload,
             config: {
+              systemInstruction:
+                'أنت مستشار قانوني وتشريعي فلسطيني رفيع المستوى، متخصص في استخراج وتوثيق نصوص القوانين والمراسيم والقرارات الفلسطينية الرسمية والممسوحة ضوئياً كلمة بكلمة ومادة بمادة بنسبة 100% حرفياً دون أي اختصار.',
               maxOutputTokens: 32768,
               temperature: 0.05,
               safetySettings: legalSafetySettings,
             },
           });
 
-          if (directRes?.text && directRes.text.trim().length > 30) {
-            const directParsed = extractLegalDocumentFromModelOutput(directRes.text, cleanTitle, 'جمارك');
-            if (directParsed && directParsed.content) {
+          if (response?.text) {
+            const parsed = extractLegalDocumentFromModelOutput(response.text, cleanTitle, 'جمارك');
+            if (parsed && parsed.content && parsed.content.length > 20) {
+              const finalDocContent = hasSufficientDirectText && normalizedLocalText.length >= parsed.content.length
+                ? normalizedLocalText
+                : normalizeAndFixArabicText(parsed.content).trim();
+
               extractedData = {
-                title: directParsed.title || cleanTitle,
-                category: directParsed.category || 'جمارك',
-                content: normalizeAndFixArabicText(directParsed.content).trim(),
-                summary: `تشريع قانوني تم استخراجه بالكامل من ملف "${fileName || cleanTitle}".`,
+                title: (parsed.title || cleanTitle).trim(),
+                category: (parsed.category || 'جمارك').trim(),
+                content: finalDocContent,
+                summary: (parsed.summary || '').trim(),
               };
-              usedModel = 'gemini-2.5-flash-verbatim';
-              console.log(`[AI-PDF] Direct verbatim extraction succeeded (${extractedData.content.length} chars)`);
+              usedModel = modelName;
+              console.log(`[AI-PDF] Successfully extracted legal text with ${modelName} (${extractedData.content.length} chars)`);
+              break;
             }
           }
-        } catch (directErr) {
-          console.warn('[AI-PDF] Direct verbatim fallback warning:', directErr);
+        } catch (modelErr: any) {
+          console.warn(`[AI-PDF] Model ${modelName} extraction attempt warning:`, modelErr?.message || modelErr);
+        }
+      }
+
+      // Fast retry with direct verbatim prompt if first pass didn't produce full content
+      if (!extractedData || !extractedData.content || extractedData.content.length < 30) {
+        for (const modelName of ['gemini-2.5-flash', 'gemini-3.1-flash-lite']) {
+          try {
+            console.log(`[AI-PDF] Running direct verbatim fallback extraction with ${modelName}...`);
+            const directRes = await ai.models.generateContent({
+              model: modelName,
+              contents: [
+                {
+                  inlineData: {
+                    mimeType: effectiveMimeType,
+                    data: base64Data,
+                  },
+                },
+                {
+                  text: 'اقرأ واستخرج كافة نصوص ومواد وبنود وقرارات هذا المستند القانوني بالكامل كلمة بكلمة ومادة بمادة بنسبة 100% حرفياً دون حذف أي كلمة أو مادة، واذكر في البداية عنوان التشريع الكامل.',
+                },
+              ],
+              config: {
+                maxOutputTokens: 32768,
+                temperature: 0.05,
+                safetySettings: legalSafetySettings,
+              },
+            });
+
+            if (directRes?.text && directRes.text.trim().length > 30) {
+              const directParsed = extractLegalDocumentFromModelOutput(directRes.text, cleanTitle, 'جمارك');
+              if (directParsed && directParsed.content) {
+                extractedData = {
+                  title: directParsed.title || cleanTitle,
+                  category: directParsed.category || 'جمارك',
+                  content: normalizeAndFixArabicText(directParsed.content).trim(),
+                  summary: `تشريع قانوني تم استخراجه بالكامل من ملف "${fileName || cleanTitle}".`,
+                };
+                usedModel = `${modelName}-verbatim`;
+                console.log(`[AI-PDF] Direct verbatim extraction succeeded (${extractedData.content.length} chars)`);
+                break;
+              }
+            }
+          } catch (directErr) {
+            console.warn(`[AI-PDF] Direct verbatim fallback with ${modelName} warning:`, directErr);
+          }
         }
       }
     } catch (aiInitErr) {

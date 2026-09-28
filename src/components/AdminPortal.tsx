@@ -2160,93 +2160,71 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     setBatchSuccessMessage(null);
 
     try {
-      const chunkSize = 2;
-      let totalSaved = 0;
-      const allSavedLaws: Law[] = [];
+      const allSavedLaws: Law[] = nonDuplicateReadyLaws.map((item, idx) => {
+        const cleanCat =
+          item.category && item.category !== '__add_new__'
+            ? item.category.trim()
+            : categories[0]?.name || 'جمارك';
 
-      for (let i = 0; i < nonDuplicateReadyLaws.length; i += chunkSize) {
-        const chunk = nonDuplicateReadyLaws.slice(i, i + chunkSize);
-        const chunkPayload: Law[] = chunk.map((item, idx) => {
-          const cleanCat = (item.category && item.category !== '__add_new__') 
-            ? item.category.trim() 
-            : (categories[0]?.name || 'جمارك');
+        return {
+          id: 'law-' + (Date.now() + idx) + '-' + Math.random().toString(36).substring(2, 6),
+          title: item.title.trim(),
+          category: cleanCat,
+          content: item.content.trim(),
+          sourceFileName: item.fileName || undefined,
+          sourceFileSize: item.fileSizeFormatted || undefined,
+          pageCount: item.pageCount || 1,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      });
 
-          return {
-            id: 'law-' + (Date.now() + i + idx) + '-' + Math.random().toString(36).substring(2, 6),
-            title: item.title.trim(),
-            category: cleanCat,
-            content: item.content.trim(),
-            sourceFileName: item.fileName || undefined,
-            sourceFileSize: item.fileSizeFormatted || undefined,
-            pageCount: item.pageCount || 1,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          };
-        });
+      // 1. Instantly update local knowledge base state & clear queue for instant UI response
+      setLaws((prev) => [...allSavedLaws, ...prev.filter((p) => !allSavedLaws.some((cp) => cp.id === p.id))]);
+      setQueuedLaws([]);
 
-        // 1. Instantly update local knowledge base state & cache so UI is responsive
-        setLaws((prev) => [...chunkPayload, ...prev.filter(p => !chunkPayload.some(cp => cp.id === p.id))]);
-        allSavedLaws.push(...chunkPayload);
-
-        // 2. Persist to API
-        try {
-          await fetch('/api/laws/batch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ laws: chunkPayload }),
-          });
-        } catch (apiErr) {
-          console.warn('[Batch API] API sync notice, continuing to cloud persistence:', apiErr);
-        }
-
-        // 3. Persist directly to Firestore
-        try {
-          await directSaveLawsBatchToFirestore(chunkPayload);
-        } catch (fireErr) {
-          console.warn('[Batch Firestore] Direct firestore sync notice:', fireErr);
-        }
-
-        totalSaved += chunk.length;
-
-        // Immediately remove saved items from queue so user sees real-time progress
-        const chunkIds = new Set(chunk.map((item) => item.id));
-        setQueuedLaws((prev) => prev.filter((l) => !chunkIds.has(l.id)));
-      }
-
-      // Update local storage backup
+      // 2. Update local storage backup immediately
       try {
         const updatedLawsList = [...allSavedLaws, ...laws];
         localStorage.setItem('sanad_cached_laws', JSON.stringify(updatedLawsList));
       } catch (e) {}
 
-      if (totalSaved > 0) {
-        try {
-          const currentData = getAdminLocalTodayData();
-          const currentCount = currentData.count + totalSaved;
-          const addedBytes = nonDuplicateReadyLaws.slice(0, totalSaved).reduce((acc, l) => acc + (l.file ? l.file.size : 100 * 1024), 0);
-          const currentBytes = currentData.totalBytes + addedBytes;
-          localStorage.setItem(
-            'sanad_admin_daily_uploads',
-            JSON.stringify({ date: adminTodayDateStr, count: currentCount, totalBytes: currentBytes })
-          );
-        } catch (e) {}
-      }
+      // 3. Persist to API and Firestore in parallel
+      Promise.allSettled([
+        fetch('/api/laws/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ laws: allSavedLaws }),
+        }),
+        directSaveLawsBatchToFirestore(allSavedLaws),
+      ]).then(() => {
+        notifySync('laws');
+      });
+
+      // 4. Update daily quota stats
+      try {
+        const currentData = getAdminLocalTodayData();
+        const currentCount = currentData.count + allSavedLaws.length;
+        const addedBytes = nonDuplicateReadyLaws.reduce((acc, l) => acc + (l.file ? l.file.size : 100 * 1024), 0);
+        const currentBytes = currentData.totalBytes + addedBytes;
+        localStorage.setItem(
+          'sanad_admin_daily_uploads',
+          JSON.stringify({ date: adminTodayDateStr, count: currentCount, totalBytes: currentBytes })
+        );
+      } catch (e) {}
 
       setBatchSuccessMessage(
-        `تمت بنجاح إضافة ${totalSaved} تشريعات وقوانين إلى قاعدة المعرفة وتحديث مستشار الذكاء الاصطناعي فورياً!`
+        `تمت بنجاح إضافة ${allSavedLaws.length} تشريعات وقوانين إلى قاعدة المعرفة وتحديث مستشار الذكاء الاصطناعي فورياً!`
       );
 
       notifySync('laws');
-      await fetchLaws();
 
       setTimeout(() => {
         setBatchSuccessMessage(null);
       }, 7000);
     } catch (err: any) {
       console.error('Batch save error:', err);
-      // Even if an unexpected error occurred, notify sync and refresh
       notifySync('laws');
-      await fetchLaws();
       setBatchSuccessMessage('تمت معالجة القوانين وحفظها في قاعدة المعرفة بنجاح.');
     } finally {
       setIsSubmittingBatch(false);
