@@ -3983,7 +3983,7 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
         { category: 'HARM_CATEGORY_CIVIC_INTEGRITY' as any, threshold: 'BLOCK_NONE' as any },
       ];
 
-      const candidateVisionModels = ['gemini-2.5-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash'];
+      const candidateVisionModels = ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-2.5-flash', 'gemini-3.8-flash'];
 
       for (const modelName of candidateVisionModels) {
         try {
