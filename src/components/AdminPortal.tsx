@@ -750,10 +750,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   };
 
   // Ultra-fast consolidated initial data load (Single round-trip)
-  const loadAllAdminData = async () => {
-    setUsersLoading(true);
-    setLawsLoading(true);
-    setCategoriesLoading(true);
+  const loadAllAdminData = async (isSilent = false) => {
+    if (!isSilent) {
+      setUsersLoading(true);
+      setLawsLoading(true);
+      setCategoriesLoading(true);
+    }
     try {
       const res = await fetch(`/api/admin/init?t=${Date.now()}`);
       if (res.ok) {
@@ -849,9 +851,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         fetchPendingLawRequestsCount(),
       ]);
     } finally {
-      setUsersLoading(false);
-      setLawsLoading(false);
-      setCategoriesLoading(false);
+      if (!isSilent) {
+        setUsersLoading(false);
+        setLawsLoading(false);
+        setCategoriesLoading(false);
+      }
     }
   };
 
@@ -1191,7 +1195,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   }, []);
 
   useSync(['users', 'laws', 'categories', 'system_settings', 'supervisors', 'related_sites', 'partners', 'subscription_plans', 'law_requests', 'platform_about', 'contact_info', 'all'], () => {
-    loadAllAdminData();
+    loadAllAdminData(true);
   });
 
   const handleFullSync = async () => {
@@ -1773,12 +1777,24 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
 
     for (const file of files) {
       const lowerName = file.name.toLowerCase();
-      const isValidExt = lowerName.endsWith('.pdf') || lowerName.endsWith('.docx') || lowerName.endsWith('.doc') || lowerName.endsWith('.pptx') || lowerName.endsWith('.ppt');
-      const isValidType = file.type === 'application/pdf' || 
-                          file.type === 'application/msword' || 
-                          file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-                          file.type === 'application/vnd.ms-powerpoint' ||
-                          file.type === 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+      const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|webp|bmp|tiff?)$/i.test(lowerName);
+      const isText = lowerName.endsWith('.txt') || file.type === 'text/plain';
+      const isValidExt =
+        lowerName.endsWith('.pdf') ||
+        lowerName.endsWith('.docx') ||
+        lowerName.endsWith('.doc') ||
+        lowerName.endsWith('.pptx') ||
+        lowerName.endsWith('.ppt') ||
+        isText ||
+        isImage;
+      const isValidType =
+        isImage ||
+        isText ||
+        file.type === 'application/pdf' ||
+        file.type === 'application/msword' ||
+        file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+        file.type === 'application/vnd.ms-powerpoint' ||
+        file.type === 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 
       if (!isValidExt && !isValidType) {
         invalidCount++;
@@ -1851,7 +1867,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         );
       }
     } else if (invalidCount > 0) {
-      setBatchErrorMessage(`تم تخطي ${invalidCount} ملفات لأنها بصيغة غير مدعومة (فقط PDF، Word، PPT).`);
+      setBatchErrorMessage(`تم تخطي ${invalidCount} ملفات لأنها بصيغة غير مدعومة (فقط PDF، Word، صور وسكانر OCR، نصوص).`);
     } else if (sizeErrorCount > 0) {
       setBatchErrorMessage(`تم رصد ${sizeErrorCount} ملفات تتجاوز حجم ${ADMIN_MAX_FILE_SIZE_MB} ميجابايت المسموح للملف الواحد.`);
     }

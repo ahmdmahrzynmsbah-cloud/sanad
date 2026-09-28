@@ -217,18 +217,20 @@ export const SubmitLawModal: React.FC<SubmitLawModalProps> = ({
     if (!file) return;
 
     const lowerName = file.name.toLowerCase();
+    const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|webp|bmp|tiff?)$/i.test(lowerName);
     const isValidExt =
       lowerName.endsWith('.pdf') ||
       lowerName.endsWith('.docx') ||
       lowerName.endsWith('.doc') ||
       lowerName.endsWith('.pptx') ||
       lowerName.endsWith('.ppt') ||
-      lowerName.endsWith('.txt');
+      lowerName.endsWith('.txt') ||
+      isImage;
 
     if (!isValidExt) {
       setFeedback({
         type: 'error',
-        message: 'الصيغة غير مدعومة. يرجى اختيار ملف PDF أو Word أو نصي (TXT).',
+        message: 'الصيغة غير مدعومة. يرجى اختيار ملف PDF، Word، صورة (PNG, JPG)، أو نصي (TXT).',
       });
       return;
     }
@@ -261,14 +263,16 @@ export const SubmitLawModal: React.FC<SubmitLawModalProps> = ({
     setSelectedFile(file);
     setIsParsingFile(true);
     setFeedback(null);
-    setParsingProgress({ currentPage: 0, totalPages: 1, percent: 15, statusText: 'جاري فتح وقراءة محتوى الملف...' });
+    let maxProgress = 15;
+    setParsingProgress({ currentPage: 0, totalPages: 1, percent: 15, statusText: 'جاري فتح وقراءة محتوى الملف واستخراج نصوصه الكاملة...' });
 
     try {
       const result = await extractTextFromAnyDocument(file, (prog) => {
-        setParsingProgress((prev) => ({
+        maxProgress = Math.max(maxProgress, prog.percent);
+        setParsingProgress({
           ...prog,
-          percent: Math.max(prev?.percent || 0, prog.percent),
-        }));
+          percent: maxProgress,
+        });
       });
 
       const extractedTitle = sanitizeLawTitle(result.suggestedTitle || file.name);

@@ -3737,54 +3737,106 @@ app.delete('/api/admin/users/:id', async (req, res) => {
 // --- Laws Management Endpoints ---
 
 // Helper to parse or repair JSON legal responses even if truncated by length
-function parseOrRepairLegalJson(rawText: string, defaultTitle: string, defaultCategory: string) {
+// Universal Legal Document Text & Metadata Extractor
+function extractLegalDocumentFromModelOutput(rawText: string, defaultTitle: string, defaultCategory: string) {
   if (!rawText || typeof rawText !== 'string') return null;
-  let text = rawText.trim();
-  text = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+  const text = rawText.trim();
 
+  // 1. Try clean JSON extraction
+  const cleanJsonText = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
   try {
-    const parsed = JSON.parse(text);
+    const parsed = JSON.parse(cleanJsonText);
     if (parsed && typeof parsed === 'object') {
-      return {
-        title: (parsed.title || defaultTitle).trim(),
-        category: (parsed.category || defaultCategory).trim(),
-        content: (parsed.content || '').trim(),
-        summary: (parsed.summary || '').trim(),
-      };
+      const content = (parsed.content || parsed.text || '').trim();
+      if (content.length > 10) {
+        return {
+          title: (parsed.title || defaultTitle).trim(),
+          category: (parsed.category || defaultCategory).trim(),
+          content,
+          summary: (parsed.summary || '').trim(),
+        };
+      }
     }
-  } catch {
-    // Regex repair if JSON was cut off or had trailing chars
-    const contentMatch = text.match(/"content"\s*:\s*"([\s\S]*)/);
-    const titleMatch = text.match(/"title"\s*:\s*"([^"]+)"/);
-    const categoryMatch = text.match(/"category"\s*:\s*"([^"]+)"/);
-    const summaryMatch = text.match(/"summary"\s*:\s*"([^"]+)"/);
+  } catch {}
 
-    let content = '';
-    if (contentMatch) {
-      content = contentMatch[1]
-        .replace(/"\s*\}?\s*$/, '')
-        .replace(/\\n/g, '\n')
-        .replace(/\\"/g, '"')
-        .replace(/\\t/g, ' ')
-        .replace(/\\r/g, '')
-        .trim();
-    }
-    if (!content && text.length > 50 && !text.startsWith('{')) {
-      content = text;
-    }
-    if (content || titleMatch) {
+  // 2. Try Delimited block extraction: [TITLE], [CATEGORY], [SUMMARY], [CONTENT]
+  const titleMatch = text.match(/\[TITLE\]\s*([\s\S]*?)(?=\[(?:CATEGORY|SUMMARY|CONTENT)\]|$)/i);
+  const categoryMatch = text.match(/\[CATEGORY\]\s*([\s\S]*?)(?=\[(?:TITLE|SUMMARY|CONTENT)\]|$)/i);
+  const summaryMatch = text.match(/\[SUMMARY\]\s*([\s\S]*?)(?=\[(?:TITLE|CATEGORY|CONTENT)\]|$)/i);
+  const contentMatch = text.match(/\[CONTENT\]\s*([\s\S]*)$/i);
+
+  if (contentMatch && contentMatch[1].trim().length > 10) {
+    return {
+      title: titleMatch ? titleMatch[1].trim() : defaultTitle,
+      category: categoryMatch ? categoryMatch[1].trim() : defaultCategory,
+      summary: summaryMatch ? summaryMatch[1].trim() : '',
+      content: contentMatch[1].trim(),
+    };
+  }
+
+  // 3. Regex repair if JSON was truncated by length
+  const jsonContentMatch = text.match(/"content"\s*:\s*"([\s\S]*)/);
+  if (jsonContentMatch) {
+    const repairedContent = jsonContentMatch[1]
+      .replace(/"\s*\}?\s*$/, '')
+      .replace(/\\n/g, '\n')
+      .replace(/\\"/g, '"')
+      .replace(/\\t/g, ' ')
+      .replace(/\\r/g, '')
+      .trim();
+    if (repairedContent.length > 20) {
+      const jsonTitleMatch = text.match(/"title"\s*:\s*"([^"]+)"/);
+      const jsonCatMatch = text.match(/"category"\s*:\s*"([^"]+)"/);
+      const jsonSumMatch = text.match(/"summary"\s*:\s*"([^"]+)"/);
       return {
-        title: titleMatch ? titleMatch[1].trim() : defaultTitle,
-        category: categoryMatch ? categoryMatch[1].trim() : defaultCategory,
-        summary: summaryMatch ? summaryMatch[1].trim() : '',
-        content: content || text,
+        title: jsonTitleMatch ? jsonTitleMatch[1].trim() : defaultTitle,
+        category: jsonCatMatch ? jsonCatMatch[1].trim() : defaultCategory,
+        summary: jsonSumMatch ? jsonSumMatch[1].trim() : '',
+        content: repairedContent,
       };
     }
   }
-  return null;
+
+  // 4. Markdown / Natural Text Parser - NEVER discard extracted text!
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  let title = defaultTitle;
+  let category = defaultCategory;
+
+  for (const line of lines.slice(0, 10)) {
+    const cleanLine = line.replace(/^[#*>\-\s]+/, '').replace(/^العنوان[:\s]*/, '').trim();
+    if (
+      cleanLine.length >= 6 &&
+      cleanLine.length <= 150 &&
+      (cleanLine.includes('قانون') ||
+        cleanLine.includes('قرار بقانون') ||
+        cleanLine.includes('قرار رقم') ||
+        cleanLine.includes('نظام رقم') ||
+        cleanLine.includes('تعليمات') ||
+        cleanLine.includes('مرسوم'))
+    ) {
+      title = cleanLine;
+      break;
+    }
+  }
+
+  const lower = text.toLowerCase();
+  if (lower.includes('ضريبة دخل') || lower.includes('ضريبة الدخل') || lower.includes('الدخل الخاضع')) {
+    category = 'ضريبة دخل';
+  } else if (lower.includes('قيمة مضافة') || lower.includes('القيمة المضافة') || lower.includes('فواتير ضريبية')) {
+    category = 'ضريبة القيمة المضافة';
+  } else if (lower.includes('رسوم') || lower.includes('طوابع') || lower.includes('مكوس')) {
+    category = 'رسوم ومكوس';
+  }
+
+  return {
+    title,
+    category,
+    summary: `تشريع قانوني تم استخراجه بنجاح من وثيقة (${title})`,
+    content: text,
+  };
 }
 
-// PDF Parsing & AI Legal Extraction endpoint powered directly by Gemini and local PDFParse engine
+// PDF & Image Parsing & AI Legal Extraction endpoint powered directly by Gemini Multimodal Vision & local PDF engine
 app.post('/api/admin/parse-pdf', async (req, res) => {
   try {
     const { base64Data, fileName, mimeType: providedMime } = req.body;
@@ -3803,80 +3855,88 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
 
     const buffer = Buffer.from(base64Data, 'base64');
 
-    // 1. Direct, robust text extraction via PDFParse (works offline and parses all text streams)
+    // 1. Direct text extraction via local PDFParse engine for text-based PDFs
     let localPdfText = '';
     let estimatedPages = 1;
-    try {
-      let PDFParseClass: any = null;
+    if (!isImageFile) {
       try {
-        const imported: any = await import('pdf-parse');
-        PDFParseClass = imported?.PDFParse || imported?.default || imported;
-      } catch (impErr) {
-        console.warn('PDFParse dynamic import failed:', impErr);
-      }
-      if (PDFParseClass) {
-        const parser: any = new PDFParseClass({ data: buffer });
-        await parser.load();
-        const rawParsedText: any = await parser.getText();
-        const info: any = await parser.getInfo().catch(() => null);
-        await parser.destroy().catch(() => {});
-        if (rawParsedText) {
-          if (rawParsedText.pages && Array.isArray(rawParsedText.pages)) {
-            const pageTexts = rawParsedText.pages
-              .map((p: any) => (p.text || '').trim())
-              .filter(Boolean);
-            if (pageTexts.length > 0) {
-              localPdfText = pageTexts.join('\n\n');
+        let PDFParseClass: any = null;
+        try {
+          const imported: any = await import('pdf-parse');
+          PDFParseClass = imported?.PDFParse || imported?.default || imported;
+        } catch {}
+        if (PDFParseClass) {
+          const parser: any = new PDFParseClass({ data: buffer });
+          await parser.load();
+          const rawParsedText: any = await parser.getText();
+          const info: any = await parser.getInfo().catch(() => null);
+          await parser.destroy().catch(() => {});
+          if (rawParsedText) {
+            if (rawParsedText.pages && Array.isArray(rawParsedText.pages)) {
+              const pageTexts = rawParsedText.pages
+                .map((p: any) => (p.text || '').trim())
+                .filter(Boolean);
+              if (pageTexts.length > 0) {
+                localPdfText = pageTexts.join('\n\n');
+              }
+            }
+            if (!localPdfText && typeof rawParsedText === 'string') {
+              localPdfText = rawParsedText.trim();
+            } else if (!localPdfText && typeof rawParsedText.text === 'string') {
+              localPdfText = rawParsedText.text.trim();
             }
           }
-          if (!localPdfText && typeof rawParsedText === 'string') {
-            localPdfText = rawParsedText.trim();
-          } else if (!localPdfText && typeof rawParsedText.text === 'string') {
-            localPdfText = rawParsedText.text.trim();
+          if (info && info.total) {
+            estimatedPages = info.total;
+          } else if (rawParsedText && rawParsedText.total) {
+            estimatedPages = rawParsedText.total;
           }
         }
-        if (info && info.total) {
-          estimatedPages = info.total;
-        } else if (rawParsedText && rawParsedText.total) {
-          estimatedPages = rawParsedText.total;
-        }
+      } catch (parserErr) {
+        console.warn('[AI-PDF] PDFParse local parse note:', parserErr);
       }
-    } catch (parserErr) {
-      console.warn('[AI-PDF] PDFParse direct buffer parse warning:', parserErr);
+
+      if (estimatedPages === 1) {
+        try {
+          const matches = buffer.toString('binary').match(/\/Type\s*\/Page[^s]/g);
+          if (matches && matches.length > 0) {
+            estimatedPages = matches.length;
+          }
+        } catch {}
+      }
     }
 
-    if (estimatedPages === 1) {
-      try {
-        const matches = buffer.toString('binary').match(/\/Type\s*\/Page[^s]/g);
-        if (matches && matches.length > 0) {
-          estimatedPages = matches.length;
-        }
-      } catch {}
-    }
+    const normalizedLocalText = normalizeAndFixArabicText(localPdfText);
+    const hasSufficientDirectText = normalizedLocalText.length >= 100 && (normalizedLocalText.match(/[\u0600-\u06FF]+/g) || []).length >= 15;
 
-    // 2. Structured AI extraction via Gemini
-    const prompt = `أنت مستشار قانوني وتشريعي فلسطيني رفيع المستوى، مطلوب منك قراءة هذا الملف أو المستند واستخراج نصوصه القانونية بالكامل مئة بالمئة حرفياً دون نقصان.
+    // 2. High-precision AI Legal extraction using Gemini 2.5 Flash
+    const prompt = `أنت مستشار وخبير قانوني وتشريعي فلسطيني رفيع المستوى في القوانين الجمركية والضريبية.
+مهمتك استخراج نصوص كافة المواد والفقرات والبنود والقرارات من هذا المستند بالكامل بنسبة 100% حرفياً كلمة بكلمة ومادة بمادة وبنداً ببند دون أي حذف أو اختصار أو تلخيص على الإطلاق.
 
-تعليمات مشددة جداً:
-1. استخرج النص الكامل لكافة المواد والبنود والقرارات والفقرات والديباجة حرفياً كلمة بكلمة ومادة بمادة (المادة (1): ... \\nالمادة (2): ...).
-2. ممنوع منعاً باتاً تلخيص أو اختصار أو حذف أي مادة أو بند قانوني.
-3. إذا كانت النصوص تحتوي على كلمات أو حروف معكوسة أو مفككة أو مشوهة بسبب تصدير الـ PDF، قم بتصحيحها فوراً وإعادتها إلى الكتابة العربية الصحيحة المتصلة والسليمة مئة بالمئة.
-4. استخرج العنوان الرسمي الدقيق للقانون أو المرسوم أو القرار.
+تعليمات صارمة لا تقبل الاستثناء:
+1. استخرج النص الكامل لكافة المواد القانونية حرفياً كلمة بكلمة مادة بمادة (المادة (1): ... \\nالمادة (2): ... \\nالمادة (3): ... وهكذا حتى نهاية المستند).
+2. ممنوع منعاً باتاً تلخيص أو اختصار أو إغفال أي مادة أو بند أو جدول أو ديباجة.
+3. إذا كانت النصوص تحتوي على كلمات أو حروف معكوسة أو مفككة أو مشوهة بسبب تصدير الـ PDF أو المسح الضوئي، قم بتصحيحها فوراً وإعادتها إلى الكتابة العربية الصحيحة المتصلة والسليمة مئة بالمئة.
+4. استخرج العنوان الرسمي الدقيق للقانون أو القرار أو المرسوم.
 5. حدد التصنيف التشريعي الأنسب ("جمارك"، "ضريبة دخل"، "ضريبة القيمة المضافة"، "رسوم ومكوس").
 
-المطلوب إرجاع كائن JSON حصراً بالصيغة التالية:
-{
-  "title": "العنوان الرسمي الكامل للتشريع",
-  "category": "التصنيف",
-  "summary": "نبذة موجزة وشاملة عن نطاق وتطبيق التشريع",
-  "content": "النص الكامل والشامل لكافة المواد والبنود القانونية مادة بمادة وبنداً ببند حرفياً دون أي اختصار"
-}`;
+قم بتنسيق الإجابة حصراً باستخدام الوسوم التالية:
+[TITLE]
+العنوان الرسمي الكامل للقانون أو التشريع
 
-    const modelsToTry = [
-      'gemini-2.5-flash',
-      'gemini-3.8-flash',
-      'gemini-flash-latest',
-    ];
+[CATEGORY]
+التصنيف التشريعي الأنسب (جمارك / ضريبة دخل / ضريبة القيمة المضافة / رسوم ومكوس)
+
+[SUMMARY]
+نبذة تشريعية موجزة وشاملة عن نطاق وتطبيق التشريع
+
+[CONTENT]
+المادة (1):
+النص الكامل حرفياً...
+
+المادة (2):
+النص الكامل حرفياً...
+(كافة المواد والفقرات كاملة دون أي اختصار)`;
 
     let extractedData: {
       title: string;
@@ -3886,118 +3946,68 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
     } | null = null;
     let usedModel: string = '';
 
-    const normalizedLocalText = normalizeAndFixArabicText(localPdfText);
-    const hasDirectText = normalizedLocalText.length > 80;
-
     try {
       const ai = getGemini();
 
-      for (const model of modelsToTry) {
-        try {
-          console.log(`[AI-PDF] Extracting legal document via Gemini model: ${model} (directText: ${hasDirectText})`);
-          
-          let contentsPayload: any;
-          if (hasDirectText) {
-            const safeText = normalizedLocalText.length > 100000 
-              ? normalizedLocalText.slice(0, 100000) + '\n[...تم اختصار باقي المرفقات القانونية...]' 
-              : normalizedLocalText;
-            contentsPayload = [
-              {
-                text: `${prompt}\n\nالنصوص القانونية المستخرجة من المستند:\n"""\n${safeText}\n"""`,
-              },
-            ];
-          } else {
-            contentsPayload = [
-              {
-                inlineData: {
-                  mimeType: effectiveMimeType,
-                  data: base64Data,
-                },
-              },
-              {
-                text: prompt,
-              },
-            ];
-          }
-
-          let response = null;
-          let retryCount = 0;
-          while (retryCount < 2) {
-            try {
-              response = await ai.models.generateContent({
-                model,
-                contents: contentsPayload,
-                config: {
-                  systemInstruction:
-                    'أنت مستشار قانوني وتشريعي فلسطيني رفيع المستوى، متخصص في استخراج وتوثيق نصوص القوانين والمراسيم والقرارات الفلسطينية الرسمية والممسوحة ضوئياً كلمة بكلمة ومادة بمادة.',
-                  maxOutputTokens: 32768,
-                  temperature: 0.1,
-                  responseMimeType: 'application/json',
-                  responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                      title: {
-                        type: Type.STRING,
-                        description: 'عنوان القانون أو التشريع الرسمي المستخرج بالكامل.',
-                      },
-                      category: {
-                        type: Type.STRING,
-                        description: 'التصنيف التشريعي الأنسب (جمارك، ضريبة دخل، ضريبة القيمة المضافة، رسوم ومكوس، إلخ).',
-                      },
-                      content: {
-                        type: Type.STRING,
-                        description:
-                          'النص الكامل والشامل لكافة المواد والبنود والفقرات والقرارات القانونية حرفياً كلمة بكلمة ومادة بمادة وبنداً ببند دون أي اختصار.',
-                      },
-                      summary: {
-                        type: Type.STRING,
-                        description: 'ملخص موجز لنطاق وأهداف التشريع.',
-                      },
-                    },
-                    required: ['title', 'category', 'content'],
-                  },
-                },
-              });
-              break;
-            } catch (err: any) {
-              const isTransient =
-                err?.status === 503 ||
-                err?.message?.includes('503') ||
-                err?.message?.includes('UNAVAILABLE') ||
-                err?.message?.includes('high demand');
-              if (isTransient && retryCount === 0) {
-                console.log(`[AI-PDF] Model ${model} 503 spike, waiting 800ms to retry...`);
-                await new Promise((resolve) => setTimeout(resolve, 800));
-                retryCount++;
-                continue;
-              }
-              throw err;
-            }
-          }
-
-          if (response?.text) {
-            const parsed = parseOrRepairLegalJson(response.text, cleanTitle, 'جمارك');
-            if (parsed && parsed.content && parsed.content.length > 20) {
-              extractedData = {
-                title: (parsed.title || cleanTitle).trim(),
-                category: (parsed.category || 'جمارك').trim(),
-                content: normalizeAndFixArabicText(parsed.content).trim(),
-                summary: (parsed.summary || '').trim(),
-              };
-              usedModel = model;
-              console.log(`[AI-PDF] Successfully extracted using ${model}: ${extractedData.title} (${extractedData.content.length} chars)`);
-              break;
-            }
-          }
-        } catch (err: any) {
-          console.warn(`[AI-PDF] Gemini call failed with model ${model}:`, err?.message || err);
-        }
+      let contentsPayload: any;
+      if (hasSufficientDirectText) {
+        const safeText = normalizedLocalText.length > 80000
+          ? normalizedLocalText.slice(0, 80000)
+          : normalizedLocalText;
+        contentsPayload = [
+          {
+            text: `${prompt}\n\nالنصوص القانونية المستخرجة من المستند:\n"""\n${safeText}\n"""`,
+          },
+        ];
+      } else {
+        contentsPayload = [
+          {
+            inlineData: {
+              mimeType: effectiveMimeType,
+              data: base64Data,
+            },
+          },
+          {
+            text: prompt,
+          },
+        ];
       }
 
-      // If JSON structured output failed across all models, try direct verbatim text extraction
-      if (!extractedData || !extractedData.content || extractedData.content.length < 20) {
-        console.log('[AI-PDF] Attempting direct text extraction fallback with gemini-2.5-flash...');
+      console.log(`[AI-PDF] Extracting legal document via Gemini 2.5 Flash (hasDirectText: ${hasSufficientDirectText}, mime: ${effectiveMimeType}, size: ${Math.round(buffer.length / 1024)}KB)`);
+
+      try {
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: contentsPayload,
+          config: {
+            systemInstruction:
+              'أنت مستشار قانوني وتشريعي فلسطيني رفيع المستوى، متخصص في استخراج وتوثيق نصوص القوانين والمراسيم والقرارات الفلسطينية الرسمية والممسوحة ضوئياً كلمة بكلمة ومادة بمادة بنسبة 100% حرفياً.',
+            maxOutputTokens: 32768,
+            temperature: 0.05,
+          },
+        });
+
+        if (response?.text) {
+          const parsed = extractLegalDocumentFromModelOutput(response.text, cleanTitle, 'جمارك');
+          if (parsed && parsed.content && parsed.content.length > 20) {
+            extractedData = {
+              title: (parsed.title || cleanTitle).trim(),
+              category: (parsed.category || 'جمارك').trim(),
+              content: normalizeAndFixArabicText(parsed.content).trim(),
+              summary: (parsed.summary || '').trim(),
+            };
+            usedModel = 'gemini-2.5-flash';
+            console.log(`[AI-PDF] Successfully extracted legal text (${extractedData.content.length} chars)`);
+          }
+        }
+      } catch (geminiErr: any) {
+        console.warn('[AI-PDF] Primary Gemini extraction attempt warning:', geminiErr?.message || geminiErr);
+      }
+
+      // Fast retry with direct verbatim prompt if first attempt didn't produce full content
+      if (!extractedData || !extractedData.content || extractedData.content.length < 30) {
         try {
+          console.log('[AI-PDF] Running direct verbatim fallback extraction...');
           const directRes = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: [
@@ -4008,40 +4018,43 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
                 },
               },
               {
-                text: 'اقرأ واستخرج كافة نصوص ومواد وبنود هذا المستند القانوني بالكامل باللغة العربية حرفياً دون حذف أي كلمة أو مادة، واذكر في البداية عنوان التشريع.',
+                text: 'اقرأ واستخرج كافة نصوص ومواد وبنود وقرارات هذا المستند القانوني بالكامل كلمة بكلمة ومادة بمادة بنسبة 100% حرفياً دون حذف أي كلمة أو مادة، واذكر في البداية عنوان التشريع الكامل.',
               },
             ],
             config: {
               maxOutputTokens: 32768,
-              temperature: 0.1,
+              temperature: 0.05,
             },
           });
+
           if (directRes?.text && directRes.text.trim().length > 30) {
-            const directText = normalizeAndFixArabicText(directRes.text.trim());
-            extractedData = {
-              title: cleanTitle,
-              category: 'جمارك',
-              content: directText,
-              summary: `تشريع قانوني تم استخراجه بنجاح من ملف ${fileName || cleanTitle}.`,
-            };
-            usedModel = 'gemini-2.5-flash-direct';
-            console.log(`[AI-PDF] Direct text extraction succeeded (${directText.length} chars)`);
+            const directParsed = extractLegalDocumentFromModelOutput(directRes.text, cleanTitle, 'جمارك');
+            if (directParsed && directParsed.content) {
+              extractedData = {
+                title: directParsed.title || cleanTitle,
+                category: directParsed.category || 'جمارك',
+                content: normalizeAndFixArabicText(directParsed.content).trim(),
+                summary: `تشريع قانوني تم استخراجه بالكامل من ملف "${fileName || cleanTitle}".`,
+              };
+              usedModel = 'gemini-2.5-flash-verbatim';
+              console.log(`[AI-PDF] Direct verbatim extraction succeeded (${extractedData.content.length} chars)`);
+            }
           }
         } catch (directErr) {
-          console.warn('[AI-PDF] Direct text fallback note:', directErr);
+          console.warn('[AI-PDF] Direct verbatim fallback warning:', directErr);
         }
       }
     } catch (aiInitErr) {
       console.warn('[AI-PDF] Gemini client initialization error:', aiInitErr);
     }
 
-    // 3. Resilient fallback to local extracted text if Gemini quota/503 prevented AI extraction
+    // 3. Fallback to local parsed text if available
     if (!extractedData || !extractedData.content || extractedData.content.length < 20) {
-      if (localPdfText && localPdfText.length > 20) {
+      if (normalizedLocalText && normalizedLocalText.length > 20) {
         console.log('[AI-PDF] Using local extracted text fallback...');
-        const lines = localPdfText.split('\n').map((l) => l.trim()).filter(Boolean);
+        const lines = normalizedLocalText.split('\n').map((l) => l.trim()).filter(Boolean);
         let detectedTitle = cleanTitle;
-        for (const line of lines.slice(0, 8)) {
+        for (const line of lines.slice(0, 10)) {
           if (
             line.length > 5 &&
             line.length < 120 &&
@@ -4053,7 +4066,7 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
         }
 
         let detectedCategory = 'جمارك';
-        const lowerText = localPdfText.toLowerCase();
+        const lowerText = normalizedLocalText.toLowerCase();
         if (lowerText.includes('ضريبة دخل') || lowerText.includes('الدخل الخاضع') || lowerText.includes('ضريبة الدخل')) {
           detectedCategory = 'ضريبة دخل';
         } else if (lowerText.includes('قيمة مضافة') || lowerText.includes('القيمة المضافة') || lowerText.includes('فواتير ضريبية')) {
@@ -4065,40 +4078,24 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
         extractedData = {
           title: detectedTitle,
           category: detectedCategory,
-          content: localPdfText,
-          summary: `تم استخراج نصوص هذا التشريع (${detectedTitle}) بنجاح من الملف المرفق.`,
+          content: normalizedLocalText,
+          summary: `تشريع تم استخراجه بنجاح من ملف "${fileName || cleanTitle}".`,
         };
       }
     }
 
-    if (!extractedData || (!extractedData.content && !extractedData.title)) {
-      const fallbackContent = localPdfText && localPdfText.length > 5
-        ? localPdfText
-        : `[مستند: ${cleanTitle}]\n\nتم استلام الملف بنجاح. يرجى مراجعة نصوص المواد القانونية أدناه.`;
-
-      let detectedCategory = 'جمارك';
-      const lowerName = cleanTitle.toLowerCase();
-      if (lowerName.includes('دخل') || lowerName.includes('ضريبة')) {
-        detectedCategory = 'ضريبة دخل';
-      } else if (lowerName.includes('مضافة') || lowerName.includes('قيمة')) {
-        detectedCategory = 'ضريبة القيمة المضافة';
-      } else if (lowerName.includes('رسوم') || lowerName.includes('طوابع') || lowerName.includes('مكوس')) {
-        detectedCategory = 'رسوم ومكوس';
-      }
-
-      extractedData = {
+    if (!extractedData || !extractedData.content || extractedData.content.length < 10) {
+      return res.status(422).json({
+        error: 'تعذر استخراج نصوص واضحة من هذا الملف. يرجى التأكد من وضوح المستند أو اختيار ملف آخر.',
         title: cleanTitle,
-        category: detectedCategory,
-        content: fallbackContent,
-        summary: `تشريع قانوني تم تجهيزه من ملف "${fileName || cleanTitle}".`,
-      };
+      });
     }
 
     return res.json({
       title: extractedData.title || cleanTitle,
       category: extractedData.category || 'جمارك',
       content: extractedData.content || '',
-      summary: extractedData.summary || '',
+      summary: extractedData.summary || `تشريع تم استخراجه بنجاح من ملف "${fileName || cleanTitle}".`,
       numPages: estimatedPages,
       suggestedTitle: extractedData.title || cleanTitle,
       suggestedCategory: extractedData.category || 'جمارك',
@@ -4108,22 +4105,8 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
     });
   } catch (err: any) {
     console.error('Server PDF parsing error:', err);
-    const cleanTitle = (req.body?.fileName || 'تشريع جديد')
-      .replace(/\.pdf$/i, '')
-      .replace(/[-_]+/g, ' ')
-      .trim();
-
-    return res.json({
-      title: cleanTitle,
-      category: 'جمارك',
-      content: `[مستند: ${cleanTitle}]\n\nتم رفع هذا الملف بنجاح. يمكنك إدخال وتعديل مواده القانونية هنا.`,
-      summary: `تشريع قانوني تم إدراجه من الملف: ${cleanTitle}`,
-      numPages: 1,
-      suggestedTitle: cleanTitle,
-      suggestedCategory: 'جمارك',
-      text: `[مستند: ${cleanTitle}]\n\nتم رفع هذا الملف بنجاح. يمكنك إدخال وتعديل مواده القانونية هنا.`,
-      method: 'resilient_fallback',
-      model: 'local',
+    return res.status(500).json({
+      error: 'حدث خطأ أثناء معالجة المستند: ' + (err?.message || 'خطأ غير متوقع'),
     });
   }
 });
@@ -4265,7 +4248,7 @@ ${sampleText}
         }
 
         if (response?.text) {
-          const parsed = parseOrRepairLegalJson(response.text, detectedTitle, detectedCategory);
+          const parsed = extractLegalDocumentFromModelOutput(response.text, detectedTitle, detectedCategory);
           if (parsed && parsed.content && parsed.content.length > 20) {
             const cleanedContent = normalizeAndFixArabicText(parsed.content);
             return res.json({
