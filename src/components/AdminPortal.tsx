@@ -2024,8 +2024,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
           )
         );
       } finally {
-        // Safe 600ms pacing delay between batch files to prevent rate limits and ensure smooth processing
-        await new Promise((resolve) => setTimeout(resolve, 600));
+        // Fast 50ms pacing delay between batch files for immediate processing
+        await new Promise((resolve) => setTimeout(resolve, 50));
         isProcessingQueue.current = false;
       }
     };

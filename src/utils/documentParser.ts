@@ -262,26 +262,30 @@ export async function extractTextFromAnyDocument(
         let structuredTitle = localMeta.title;
         let structuredCategory = localMeta.category;
         let structuredSummary = localMeta.summary;
-        let finalContent = text;
+        // CRITICAL: Preserve 100% of the extracted document text!
+        const finalContent = text;
 
-        // Try AI enrichment if available
+        // Fast non-blocking AI enrichment for title and category (3s timeout)
         try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 3000);
+
           const res = await fetch('/api/admin/structure-law-text', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              text: text.slice(0, 30000),
+              text: text.slice(0, 15000),
               fileName,
             }),
+            signal: controller.signal,
           });
+          clearTimeout(timer);
+
           if (res.ok) {
             const data = await res.json();
             if (data.title) structuredTitle = sanitizeLawTitle(data.title);
             if (data.category) structuredCategory = data.category;
             if (data.summary) structuredSummary = data.summary;
-            if (data.content && data.content.trim().length > 30) {
-              finalContent = normalizeAndFixArabicText(data.content.trim());
-            }
           }
         } catch {}
 
@@ -344,26 +348,30 @@ export async function extractTextFromAnyDocument(
         let structuredTitle = localMeta.title;
         let structuredCategory = localMeta.category;
         let structuredSummary = localMeta.summary;
-        let finalContent = text;
+        // CRITICAL: Preserve 100% of the presentation text!
+        const finalContent = text;
 
-        // Try AI enrichment if available
+        // Fast non-blocking AI enrichment for title and category (3s timeout)
         try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 3000);
+
           const res = await fetch('/api/admin/structure-law-text', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              text: text.slice(0, 30000),
+              text: text.slice(0, 15000),
               fileName,
             }),
+            signal: controller.signal,
           });
+          clearTimeout(timer);
+
           if (res.ok) {
             const data = await res.json();
             if (data.title) structuredTitle = sanitizeLawTitle(data.title);
             if (data.category) structuredCategory = data.category;
             if (data.summary) structuredSummary = data.summary;
-            if (data.content && data.content.trim().length > 30) {
-              finalContent = normalizeAndFixArabicText(data.content.trim());
-            }
           }
         } catch {}
 

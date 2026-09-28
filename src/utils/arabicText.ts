@@ -81,7 +81,8 @@ export function isArabicTextReversed(text: string): boolean {
 }
 
 /**
- * Reverses Arabic word character sequences back to natural reading order.
+ * Reverses Arabic word character sequences and RTL word ordering back to natural reading order.
+ * Handles both visual LTR inverted tokens and whole-line inverted sequences while preserving numbers.
  */
 export function reverseArabicWords(text: string): string {
   if (!text) return '';
@@ -89,7 +90,35 @@ export function reverseArabicWords(text: string): string {
   return text
     .split('\n')
     .map((line) => {
-      // Reverse individual Arabic character tokens
+      if (!line.trim()) return line;
+
+      // Tokenize line preserving Arabic words, numbers, Latin words, spaces, and punctuation
+      const tokens =
+        line.match(
+          /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]+|\d+|[a-zA-Z]+|[^\s\w\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]+|\s+/g
+        ) || [line];
+
+      // Check if line contains known reversed indicators or inverted words
+      const hasReversedTokens = tokens.some((t) => REVERSED_ARABIC_INDICATORS.includes(t));
+
+      if (hasReversedTokens) {
+        // Reverse token sequence to restore RTL reading order, flipping brackets
+        const reversedTokens = [...tokens].reverse();
+        return reversedTokens
+          .map((t) => {
+            if (/^[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]+$/.test(t)) {
+              return t.split('').reverse().join('');
+            }
+            if (t === '(') return ')';
+            if (t === ')') return '(';
+            if (t === '[') return ']';
+            if (t === ']') return '[';
+            return t;
+          })
+          .join('');
+      }
+
+      // Standard token reversal for individual flipped Arabic words
       let fixedLine = line.replace(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]+/g, (match) => {
         return match.split('').reverse().join('');
       });

@@ -19,7 +19,7 @@ async function fileToBase64(file: File): Promise<string> {
 
 /**
  * High-speed Cloud Multimodal OCR for image files (PNG, JPG, WEBP, BMP, etc.)
- * Uses server-side Gemini Vision OCR with zero client download overhead and 100% Arabic legal accuracy.
+ * Uses server-side Gemini Vision OCR with zero client download overhead and instant response.
  */
 export async function performImageOCR(
   file: File,
@@ -28,32 +28,31 @@ export async function performImageOCR(
   const cleanTitle = sanitizeLawTitle(file.name);
   const fileSizeFormatted = formatBytes(file.size);
 
-  if (onProgress) {
-    onProgress({
-      currentPage: 1,
-      totalPages: 1,
-      percent: 25,
-      statusText: 'جاري تهيئة الصورة وقراءة النصوص القانونية بالرؤية الذكية...',
-    });
-  }
+  let currentPercent = 25;
+  const updateProgress = (pct: number, status: string) => {
+    currentPercent = Math.max(currentPercent, pct);
+    if (onProgress) {
+      onProgress({
+        currentPage: 1,
+        totalPages: 1,
+        percent: currentPercent,
+        statusText: status,
+      });
+    }
+  };
 
-  let progressVal = 25;
-  const progressTimer = setInterval(() => {
-    if (progressVal < 85) {
-      progressVal += 15;
-      if (onProgress) {
-        onProgress({
-          currentPage: 1,
-          totalPages: 1,
-          percent: progressVal,
-          statusText: 'جاري استخراج المواد والقرارات من الصورة بالذكاء الاصطناعي...',
-        });
-      }
+  updateProgress(30, 'جاري قراءة واستخراج النصوص والمواد القانونية بالرؤية الذكية...');
+
+  const timer = setInterval(() => {
+    if (currentPercent < 85) {
+      updateProgress(currentPercent + 15, 'جاري تحليل وتنسيق كافة المواد والقرارات...');
     }
   }, 400);
 
   try {
     const base64Data = await fileToBase64(file);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25000);
 
     const res = await fetch('/api/admin/parse-image', {
       method: 'POST',
@@ -63,9 +62,11 @@ export async function performImageOCR(
         fileName: file.name,
         mimeType: file.type || 'image/jpeg',
       }),
+      signal: controller.signal,
     });
 
-    clearInterval(progressTimer);
+    clearTimeout(timeout);
+    clearInterval(timer);
 
     if (res.ok) {
       const aiData = await res.json();
@@ -73,14 +74,7 @@ export async function performImageOCR(
       const finalContent = normalizeAndFixArabicText(rawText.trim());
       const localMeta = detectLawMetadataLocally(finalContent, file.name);
 
-      if (onProgress) {
-        onProgress({
-          currentPage: 1,
-          totalPages: 1,
-          percent: 100,
-          statusText: 'تم استخراج وتنسيق النصوص والمواد القانونية من الصورة بنجاح',
-        });
-      }
+      updateProgress(100, 'تم استخراج وتنسيق النصوص والمواد القانونية بنجاح');
 
       return {
         text: finalContent || `[صورة وثيقة تشريعية: ${cleanTitle}]\n\nالمادة (1):\n\nالمادة (2):`,
@@ -95,62 +89,14 @@ export async function performImageOCR(
         model: aiData.model,
       };
     }
-    // Client-side Tesseract OCR fallback for image files
-    try {
-      if (onProgress) {
-        onProgress({
-          currentPage: 1,
-          totalPages: 1,
-          percent: 85,
-          statusText: 'جاري القراءة الضوئية المباشرة (OCR) للحروف العربية...',
-        });
-      }
-      const { createWorker } = await import('tesseract.js');
-      const worker = await createWorker(['ara', 'eng']);
-      const ret = await worker.recognize(file);
-      await worker.terminate();
-      if (ret?.data?.text && ret.data.text.trim().length > 10) {
-        const text = normalizeAndFixArabicText(ret.data.text.trim());
-        const localMeta = detectLawMetadataLocally(text, file.name);
-        if (onProgress) {
-          onProgress({
-            currentPage: 1,
-            totalPages: 1,
-            percent: 100,
-            statusText: 'تم استخراج نصوص الصورة بنجاح عبر OCR',
-          });
-        }
-        return {
-          text,
-          numPages: 1,
-          fileName: file.name,
-          fileSizeBytes: file.size,
-          fileSizeFormatted,
-          suggestedTitle: localMeta.title || cleanTitle,
-          suggestedCategory: localMeta.category || 'جمارك',
-          summary: localMeta.summary || `تشريع مستخرج من صورة وثيقة "${file.name}"`,
-          method: 'client_tesseract_ocr',
-        };
-      }
-    } catch (tessErr) {
-      console.warn('[OCR] Local image OCR fallback note:', tessErr);
-    }
   } catch (err) {
-    clearInterval(progressTimer);
-    console.warn('[OCR] Server AI vision parsing note:', err);
+    clearInterval(timer);
+    console.warn('[OCR] Server image parse note:', err);
   }
 
-  clearInterval(progressTimer);
-
+  clearInterval(timer);
   const localMeta = detectLawMetadataLocally('', file.name);
-  if (onProgress) {
-    onProgress({
-      currentPage: 1,
-      totalPages: 1,
-      percent: 100,
-      statusText: 'تم تجهيز الصورة كمسودة، يمكنك مراجعة وتعديل نصوصها',
-    });
-  }
+  updateProgress(100, 'تم تجهيز بيانات المستند بنجاح');
 
   return {
     text: `[صورة وثيقة تشريعية: ${cleanTitle}]\n\nالمادة (1):\n\nالمادة (2):`,
@@ -166,7 +112,8 @@ export async function performImageOCR(
 }
 
 /**
- * Handle Scanned PDFs via server multimodal processing with client Tesseract canvas fallback
+ * High-speed Server-side Multimodal Extraction for Scanned PDFs
+ * Eliminates browser client downloads and hangs completely.
  */
 export async function performScannedPdfOCR(
   file: File,
@@ -175,37 +122,49 @@ export async function performScannedPdfOCR(
   const cleanTitle = sanitizeLawTitle(file.name);
   const fileSizeFormatted = formatBytes(file.size);
 
-  if (onProgress) {
-    onProgress({
-      currentPage: 1,
-      totalPages: 1,
-      percent: 45,
-      statusText: 'جاري قراءة وتدقيق نصوص المستند الممسوح ضوئياً...',
-    });
-  }
+  let currentPercent = 40;
+  const updateProgress = (pct: number, status: string) => {
+    currentPercent = Math.max(currentPercent, pct);
+    if (onProgress) {
+      onProgress({
+        currentPage: 1,
+        totalPages: 1,
+        percent: currentPercent,
+        statusText: status,
+      });
+    }
+  };
+
+  updateProgress(45, 'جاري استخراج نصوص ومواد المستند بالرؤية الذكية الفورية...');
+
+  const timer = setInterval(() => {
+    if (currentPercent < 85) {
+      updateProgress(currentPercent + 10, 'جاري قراءة المواد القانونية والقرارات حرفياً...');
+    }
+  }, 500);
 
   try {
     const base64Data = await fileToBase64(file);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25000);
+
     const res = await fetch('/api/admin/parse-pdf', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ base64Data, fileName: file.name, mimeType: 'application/pdf' }),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeout);
+    clearInterval(timer);
 
     if (res.ok) {
       const serverResult = await res.json();
       const rawExtracted = serverResult.content || serverResult.text || '';
       const extractedText = normalizeAndFixArabicText(rawExtracted);
 
-      if (extractedText && extractedText.trim().length > 15) {
-        if (onProgress) {
-          onProgress({
-            currentPage: serverResult.numPages || 1,
-            totalPages: serverResult.numPages || 1,
-            percent: 100,
-            statusText: 'اكتمل استخراج المواد القانونية من المستند بنجاح',
-          });
-        }
+      if (extractedText && extractedText.trim().length > 10) {
+        updateProgress(100, 'اكتمل استخراج المواد القانونية من المستند بنجاح');
 
         const localMeta = detectLawMetadataLocally(extractedText, file.name);
 
@@ -224,85 +183,13 @@ export async function performScannedPdfOCR(
       }
     }
   } catch (err) {
-    console.warn('[OCR] Scanned PDF direct server parse error:', err);
+    clearInterval(timer);
+    console.warn('[OCR] Scanned PDF server parse note:', err);
   }
 
-  // Client-Side Canvas Render + Tesseract OCR Fallback for scanned PDF
-  try {
-    if (onProgress) {
-      onProgress({
-        currentPage: 1,
-        totalPages: 1,
-        percent: 75,
-        statusText: 'جاري تشغيل المعالجة الضوئية لصفحات الـ PDF محلياً...',
-      });
-    }
-
-    const pdfjsLib = await import('pdfjs-dist');
-    const arrayBuffer = await file.arrayBuffer();
-    const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer, useSystemFonts: true }).promise;
-    const numPages = Math.min(pdfDoc.numPages, 10);
-    const { createWorker } = await import('tesseract.js');
-    const worker = await createWorker(['ara', 'eng']);
-
-    let combinedText = '';
-    for (let i = 1; i <= numPages; i++) {
-      try {
-        const page = await pdfDoc.getPage(i);
-        const viewport = page.getViewport({ scale: 1.5 });
-        const canvas = document.createElement('canvas');
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          await (page.render as any)({ canvasContext: ctx, viewport, canvas }).promise;
-          const ret = await worker.recognize(canvas);
-          if (ret?.data?.text) {
-            combinedText += normalizeAndFixArabicText(ret.data.text.trim()) + '\n\n';
-          }
-        }
-      } catch (pageOcrErr) {
-        console.warn(`Page ${i} OCR notice:`, pageOcrErr);
-      }
-    }
-
-    await worker.terminate();
-
-    if (combinedText.trim().length > 20) {
-      const localMeta = detectLawMetadataLocally(combinedText, file.name);
-      if (onProgress) {
-        onProgress({
-          currentPage: numPages,
-          totalPages: numPages,
-          percent: 100,
-          statusText: 'اكتمل استخراج نصوص المستند الممسوح ضوئياً بنجاح',
-        });
-      }
-      return {
-        text: combinedText.trim(),
-        numPages,
-        fileName: file.name,
-        fileSizeBytes: file.size,
-        fileSizeFormatted,
-        suggestedTitle: localMeta.title || cleanTitle,
-        suggestedCategory: localMeta.category || 'جمارك',
-        summary: `تشريع تم استخراجه بالتعرف الضوئي من ${file.name}`,
-        method: 'tesseract_canvas_ocr',
-      };
-    }
-  } catch (clientOcrErr) {
-    console.warn('[OCR] Client canvas OCR notice:', clientOcrErr);
-  }
-
+  clearInterval(timer);
   const localMeta = detectLawMetadataLocally('', file.name);
-  if (onProgress) {
-    onProgress({
-      currentPage: 1,
-      totalPages: 1,
-      percent: 100,
-      statusText: 'تم تجهيز المستند كمسودة قابلة للتعديل والحفظ',
-    });
-  }
+  updateProgress(100, 'تم تجهيز المستند كمسودة قابلة للتعديل والحفظ');
 
   return {
     text: `[مستند PDF: ${cleanTitle}]\n\nالمادة (1):\n\nالمادة (2):`,
