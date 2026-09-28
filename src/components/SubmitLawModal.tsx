@@ -265,7 +265,10 @@ export const SubmitLawModal: React.FC<SubmitLawModalProps> = ({
 
     try {
       const result = await extractTextFromAnyDocument(file, (prog) => {
-        setParsingProgress(prog);
+        setParsingProgress((prev) => ({
+          ...prog,
+          percent: Math.max(prev?.percent || 0, prog.percent),
+        }));
       });
 
       const extractedTitle = sanitizeLawTitle(result.suggestedTitle || file.name);

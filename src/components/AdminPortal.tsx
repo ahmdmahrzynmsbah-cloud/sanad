@@ -1897,7 +1897,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
           setQueuedLaws((prev) =>
             prev.map((item) =>
               item.id === targetId
-                ? { ...item, progressPercent: prog.percent, statusText: prog.statusText }
+                ? {
+                    ...item,
+                    progressPercent: Math.max(item.progressPercent || 0, prog.percent),
+                    statusText: prog.statusText || item.statusText,
+                  }
                 : item
             )
           );

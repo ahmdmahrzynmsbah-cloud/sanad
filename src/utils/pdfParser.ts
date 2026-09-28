@@ -337,17 +337,17 @@ export async function extractTextFromPDF(
     };
   }
 
-  // Step 2: Fallback to Server-Side AI Vision Parser for scanned/image PDFs
+  // Step 2: Server-Side AI Vision Parser for scanned/image PDFs
   if (onProgress) {
     onProgress({
       currentPage: 1,
       totalPages: 1,
       percent: 30,
-      statusText: 'المستند ممسوح ضوئياً، جاري المعالجة البصرية بالذكاء الاصطناعي ومحرك OCR...',
+      statusText: 'جاري فحص وقراءة نصوص الوثيقة بالذكاء الاصطناعي...',
     });
   }
 
-  // If file is within cloud payload capacity, attempt Server AI Multimodal extraction
+  // If file is within cloud payload capacity, perform fast server multimodal extraction
   if (file.size <= 25 * 1024 * 1024) {
     let base64Data = '';
     try {
@@ -357,25 +357,24 @@ export async function extractTextFromPDF(
     }
 
     if (base64Data) {
-      let progressInterval: any = null;
-      if (onProgress) {
-        let curr = 35;
-        progressInterval = setInterval(() => {
-          if (curr < 85) {
-            curr += 5;
+      let progressVal = 35;
+      const progressTimer = setInterval(() => {
+        if (progressVal < 85) {
+          progressVal += 10;
+          if (onProgress) {
             onProgress({
               currentPage: 1,
               totalPages: 1,
-              percent: curr,
-              statusText: 'جاري استخراج وقراءة المواد والقرارات بواسطة الذكاء الاصطناعي الفائق...',
+              percent: progressVal,
+              statusText: 'جاري استخراج المواد والقرارات وتنسيقها بالذكاء الاصطناعي...',
             });
           }
-        }, 700);
-      }
+        }
+      }, 500);
 
       try {
         const controller = new AbortController();
-        const timeoutTimer = setTimeout(() => controller.abort(), 25000);
+        const timeoutTimer = setTimeout(() => controller.abort(), 45000);
 
         const res = await fetch('/api/admin/parse-pdf', {
           method: 'POST',
@@ -385,14 +384,14 @@ export async function extractTextFromPDF(
         });
 
         clearTimeout(timeoutTimer);
-        if (progressInterval) clearInterval(progressInterval);
+        clearInterval(progressTimer);
 
         if (res.ok) {
           const serverResult = await res.json();
           const rawExtracted = serverResult.content || serverResult.text || '';
           const extractedText = normalizeAndFixArabicText(rawExtracted);
 
-          if (extractedText && extractedText.trim().length > 30) {
+          if (extractedText && extractedText.trim().length > 15) {
             if (onProgress) {
               onProgress({
                 currentPage: serverResult.numPages || 1,
@@ -410,49 +409,29 @@ export async function extractTextFromPDF(
               fileName: file.name,
               fileSizeBytes: file.size,
               fileSizeFormatted,
-              suggestedTitle: serverResult.title || serverResult.suggestedTitle || localMeta.title || cleanName,
-              suggestedCategory: serverResult.category || serverResult.suggestedCategory || localMeta.category || 'جمارك',
+              suggestedTitle: serverResult.title ? sanitizeLawTitle(serverResult.title) : localMeta.title || cleanName,
+              suggestedCategory: serverResult.category || localMeta.category || 'جمارك',
               summary: serverResult.summary || localMeta.summary || '',
-              method: serverResult.method || 'gemini_vision_ai',
+              method: 'gemini_vision_ai',
               model: serverResult.model,
             };
           }
         }
       } catch (err: any) {
-        if (progressInterval) clearInterval(progressInterval);
-        console.warn('[PDFParser] Server parsing attempt bypassed or timed out, trying OCR canvas engine:', err);
+        clearInterval(progressTimer);
+        console.warn('[PDFParser] Server parsing attempt note:', err);
       }
     }
   }
 
-  // Step 3: Run High-Precision Canvas Tesseract OCR for scanned PDF pages
-  try {
-    if (onProgress) {
-      onProgress({
-        currentPage: 1,
-        totalPages: 1,
-        percent: 50,
-        statusText: 'تشغيل محرك التعرف الضوئي المتقدم (OCR) لقراءة صفحات المستند الممسوحة ضوئياً...',
-      });
-    }
-
-    const { performScannedPdfOCR } = await import('./ocrParser');
-    const ocrResult = await performScannedPdfOCR(file, onProgress);
-    if (ocrResult && ocrResult.text && ocrResult.text.length > 50 && !ocrResult.text.startsWith('[مستند PDF:')) {
-      return ocrResult;
-    }
-  } catch (ocrErr) {
-    console.warn('[PDFParser] Scanned PDF OCR step note:', ocrErr);
-  }
-
-  // Step 4: Final graceful metadata fallback
+  // Step 3: Final graceful metadata fallback - instant readiness
   const localMeta = detectLawMetadataLocally('', file.name);
   if (onProgress) {
     onProgress({
       currentPage: 1,
       totalPages: 1,
       percent: 100,
-      statusText: 'تم تجهيز الملف بنجاح، يمكنك إدخال وتعديل مواده القانونية هنا.',
+      statusText: 'تم تجهيز الملف كمسودة، يمكنك مراجعة وتعديل نصوصه وحفظه.',
     });
   }
 
