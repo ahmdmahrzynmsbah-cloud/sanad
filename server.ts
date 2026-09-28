@@ -4897,7 +4897,7 @@ app.get('/api/system/status', (req, res) => {
 // --- Chat Endpoint for Approved Users ---
 
 app.post('/api/chat', async (req, res) => {
-  const { message, username, userId } = req.body;
+  const { message, username, userId, attachedDocumentText, attachedDocumentName } = req.body;
 
   if (!message || typeof message !== 'string') {
     return res.status(400).json({ error: 'نص السؤال مطلوب' });
@@ -5092,11 +5092,18 @@ app.post('/api/chat', async (req, res) => {
   // 1. Organize knowledge base with smart RAG search: search Palestinian knowledge base & uploaded law files
   const laws = db.laws || [];
   const searchResult = searchRelevantPalestinianLaws(message, laws);
-  const prioritizedContext = searchResult?.prioritizedContext || '';
+  let prioritizedContext = searchResult?.prioritizedContext || '';
   const fullCatalog = searchResult?.fullCatalog || '';
 
-  // Effective legal status: if isLegal is true OR high-scoring search matches were found
-  const effectiveIsLegal = isLegal || (searchResult?.hasMatches && searchResult.topChunks.length > 0);
+  // If the user attached a document extracted with Tesseract OCR or PDF parser, prioritize it at the very top of context
+  const hasAttachedDoc = Boolean(attachedDocumentText && typeof attachedDocumentText === 'string' && attachedDocumentText.trim().length > 0);
+  if (hasAttachedDoc) {
+    const docHeader = `=== [المستند المرفوع من المستخدم والمستخرج بالكامل (${attachedDocumentName || 'مستند مرفق'})]: ===\n${attachedDocumentText.trim()}\n=======================================================\n\n`;
+    prioritizedContext = docHeader + prioritizedContext;
+  }
+
+  // Effective legal status: if isLegal is true OR high-scoring search matches were found OR user attached a document
+  const effectiveIsLegal = isLegal || hasAttachedDoc || (searchResult?.hasMatches && searchResult.topChunks.length > 0);
 
   const citations: any[] = (effectiveIsLegal && searchResult?.topChunks)
     ? searchResult.topChunks.slice(0, 4).map((c, idx) => ({
@@ -5112,6 +5119,20 @@ app.post('/api/chat', async (req, res) => {
         matchScore: c.score,
       }))
     : [];
+
+  if (hasAttachedDoc) {
+    citations.unshift({
+      id: `cit-attached-${Date.now()}`,
+      lawId: 'attached-doc',
+      lawTitle: attachedDocumentName || 'المستند المرفوع (مستخرج بنظام Tesseract OCR)',
+      sectionHeader: 'محتوى المستند المرفق بالكامل',
+      sourceFileName: attachedDocumentName || 'مستند المستخدم',
+      category: 'مستند ممسوح/مرفق',
+      originalText: attachedDocumentText.slice(0, 1500),
+      snippet: attachedDocumentText.length > 300 ? attachedDocumentText.substring(0, 290).trim() + '...' : attachedDocumentText,
+      matchScore: 100,
+    });
+  }
 
   // 2. Strictly enforced legal knowledge base prompt matching user requirements
   const systemInstruction = `<role>

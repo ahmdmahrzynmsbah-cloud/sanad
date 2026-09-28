@@ -105,6 +105,17 @@ export interface CitationSource {
   matchScore?: number;
 }
 
+export interface AttachedDocumentInfo {
+  fileName: string;
+  fileSizeFormatted: string;
+  numPages: number;
+  wordCount: number;
+  isOcr: boolean;
+  method?: string;
+  extractedSnippet?: string;
+  fullExtractedText?: string;
+}
+
 export interface ChatMessage {
   id: string;
   sender: 'user' | 'bot';
@@ -115,6 +126,7 @@ export interface ChatMessage {
   isLegal?: boolean;
   queryType?: 'legal' | 'general';
   suggestedDetails?: string[];
+  attachedDoc?: AttachedDocumentInfo;
 }
 
 export interface Conversation {

@@ -21,9 +21,18 @@ import {
   HelpCircle,
   MessageSquare,
   Home,
+  Paperclip,
+  Image as ImageIcon,
+  Eye,
+  X,
+  Loader2,
+  ScanText,
+  CheckCircle2,
+  AlertCircle,
+  FileSearch,
 } from 'lucide-react';
 import Markdown from 'react-markdown';
-import { User, ChatMessage, Conversation, SystemBranding, Law, CitationSource } from '../types';
+import { User, ChatMessage, Conversation, SystemBranding, Law, CitationSource, AttachedDocumentInfo } from '../types';
 import { ChatSidebar } from './ChatSidebar';
 import { SanadServicesSidebar } from './SanadServicesSidebar';
 import { UserUploadQuotaBadge } from './UserUploadQuotaBadge';
@@ -31,6 +40,8 @@ import { SourceCitationBox } from './SourceCitationBox';
 import { useSync } from '../utils/sync';
 import { directFetchLawsFromFirestore } from '../services/clientFirestore';
 import { generateClientKnowledgeFallback, isLegalTaxCustomsQuery, findCitationsForQuery, parseCitationsFromResponseText } from '../utils/localLegalSearch';
+import { processChatUploadedDocument } from '../utils/tesseractOcr';
+import { formatBytes } from '../utils/pdfParser';
 
 interface ChatPortalProps {
   currentUser: User;
@@ -181,6 +192,92 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // Document Attachment & Tesseract OCR State
+  interface AttachedFileState {
+    file: File;
+    fileName: string;
+    fileSizeFormatted: string;
+    extractedText: string;
+    numPages: number;
+    wordCount: number;
+    isOcr: boolean;
+    method: string;
+    status: 'extracting' | 'ready' | 'error';
+    progressPercent: number;
+    progressText: string;
+    errorMessage?: string;
+  }
+
+  const [attachedFile, setAttachedFile] = useState<AttachedFileState | null>(null);
+  const [previewDocTextModal, setPreviewDocTextModal] = useState<AttachedDocumentInfo | null>(null);
+  const [copiedModalText, setCopiedModalText] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleFileSelected = async (file: File) => {
+    if (!file) return;
+
+    const lowerName = file.name.toLowerCase();
+    const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|webp|bmp)$/i.test(lowerName);
+    const isPdf = file.type === 'application/pdf' || lowerName.endsWith('.pdf');
+
+    setAttachedFile({
+      file,
+      fileName: file.name,
+      fileSizeFormatted: formatBytes(file.size),
+      extractedText: '',
+      numPages: 1,
+      wordCount: 0,
+      isOcr: isImage || isPdf,
+      method: isImage ? 'tesseract_ocr' : isPdf ? 'tesseract_ocr' : 'file_parser',
+      status: 'extracting',
+      progressPercent: 12,
+      progressText: isImage
+        ? 'جاري تشغيل محرك Tesseract OCR للتعرف الضوئي على المستند المصور...'
+        : isPdf
+        ? 'جاري فحص ملف الـ PDF وتشغيل Tesseract OCR للصفحات الممسوحة...'
+        : 'جاري استخراج وقراءة محتوى المستند بالكامل...',
+    });
+
+    try {
+      const result = await processChatUploadedDocument(file, (p) => {
+        setAttachedFile((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            progressPercent: p.percent,
+            progressText: p.statusText,
+            numPages: p.totalPages || prev.numPages,
+          };
+        });
+      });
+
+      setAttachedFile({
+        file,
+        fileName: result.fileName,
+        fileSizeFormatted: result.fileSizeFormatted,
+        extractedText: result.text,
+        numPages: result.numPages,
+        wordCount: result.wordCount,
+        isOcr: result.isOcr,
+        method: result.method,
+        status: 'ready',
+        progressPercent: 100,
+        progressText: 'اكتمل استخراج النصوص بواسطة Tesseract بنجاح',
+      });
+    } catch (err: any) {
+      console.error('[Chat OCR] File processing error:', err);
+      setAttachedFile((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          status: 'error',
+          progressPercent: 100,
+          errorMessage: 'تعذر استخراج النص تلقائياً من المستند. يرجى التأكد من صلاحية الملف والمحاولة مجدداً.',
+        };
+      });
+    }
+  };
 
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
     if (messagesContainerRef.current) {
@@ -374,19 +471,49 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
 
   // Send message
   const handleSendMessage = async (textToSend?: string) => {
-    const query = (textToSend || inputPrompt).trim();
-    if (!query || loading) return;
+    const rawQuery = (textToSend || inputPrompt).trim();
+    if (loading) return;
+
+    let query = rawQuery;
+    let currentAttachedDoc: AttachedDocumentInfo | undefined = undefined;
+    let attachedDocTextToSend = '';
+    let attachedDocNameToSend = '';
+
+    if (attachedFile && attachedFile.status === 'ready' && attachedFile.extractedText) {
+      currentAttachedDoc = {
+        fileName: attachedFile.fileName,
+        fileSizeFormatted: attachedFile.fileSizeFormatted,
+        numPages: attachedFile.numPages,
+        wordCount: attachedFile.wordCount,
+        isOcr: attachedFile.isOcr,
+        method: attachedFile.method,
+        extractedSnippet:
+          attachedFile.extractedText.slice(0, 280) +
+          (attachedFile.extractedText.length > 280 ? '...' : ''),
+        fullExtractedText: attachedFile.extractedText,
+      };
+      attachedDocTextToSend = attachedFile.extractedText;
+      attachedDocNameToSend = attachedFile.fileName;
+
+      if (!query) {
+        query = `يرجى قراءة وتحليل هذا المستند المرفق بالكامل (${attachedFile.fileName})، واستخراج كافة مواده وبنوده وتقديم ملخص تحليلي وافٍ ودقيق لأهم أحكامه.`;
+      }
+    }
+
+    if (!query) return;
 
     const userMessage: ChatMessage = {
       id: 'msg-' + Date.now(),
       sender: 'user',
       text: query,
       timestamp: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+      attachedDoc: currentAttachedDoc,
     };
 
     const updatedMessagesWithUser = [...messages, userMessage];
     setMessages(updatedMessagesWithUser);
     setInputPrompt('');
+    setAttachedFile(null);
     setLoading(true);
 
     const nowIso = new Date().toISOString();
@@ -436,6 +563,8 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
           conversationHistory: updatedMessagesWithUser.slice(-10),
           userId: currentUser.id,
           username: currentUser.username,
+          attachedDocumentText: attachedDocTextToSend || undefined,
+          attachedDocumentName: attachedDocNameToSend || undefined,
         }),
       });
 
@@ -769,6 +898,41 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
                 {/* Message Content */}
                 {msg.sender === 'user' ? (
                   <div>
+                    {msg.attachedDoc && (
+                      <div className="mb-2 p-2.5 rounded-xl bg-white/95 border border-emerald-300 text-xs text-emerald-950 shadow-2xs">
+                        <div className="flex items-center justify-between gap-2 mb-1.5 pb-1.5 border-b border-emerald-100">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {msg.attachedDoc.fileName.toLowerCase().match(/\.(png|jpe?g|webp|bmp)$/i) ? (
+                              <ImageIcon className="w-4 h-4 text-emerald-700 shrink-0" />
+                            ) : (
+                              <FileText className="w-4 h-4 text-emerald-700 shrink-0" />
+                            )}
+                            <span className="font-bold truncate max-w-[200px] sm:max-w-xs">{msg.attachedDoc.fileName}</span>
+                            <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-mono font-semibold">
+                              {msg.attachedDoc.isOcr ? 'Tesseract OCR' : 'مستند'}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-zinc-500 font-mono shrink-0">
+                            {msg.attachedDoc.fileSizeFormatted}
+                          </span>
+                        </div>
+                        {msg.attachedDoc.extractedSnippet && (
+                          <p className="text-[11px] text-zinc-600 bg-zinc-50/90 p-1.5 rounded-lg border border-zinc-200/60 font-mono line-clamp-2 leading-relaxed text-right">
+                            {msg.attachedDoc.extractedSnippet}
+                          </p>
+                        )}
+                        {msg.attachedDoc.fullExtractedText && (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewDocTextModal(msg.attachedDoc || null)}
+                            className="mt-1.5 text-[11px] text-emerald-800 hover:text-emerald-950 font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>عرض النص المستخرج كاملاً ({msg.attachedDoc.numPages} {msg.attachedDoc.numPages === 1 ? 'صفحة' : 'صفحات'} • {msg.attachedDoc.wordCount} كلمة)</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
                     <p className="whitespace-pre-wrap font-medium text-emerald-950">{msg.text}</p>
                     <div className="text-[10px] text-emerald-700/70 text-left mt-1 font-mono">
                       {msg.timestamp}
@@ -976,7 +1140,121 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
         </div>
 
         {/* Modern Responsive Input Bar */}
-        <div className="bg-white border border-slate-300 sm:border-slate-800/80 rounded-2xl sm:rounded-2xl p-1.5 sm:p-2 shadow-md sm:shadow-sm shrink-0 transition-all focus-within:border-emerald-700 focus-within:ring-2 focus-within:ring-emerald-700/20">
+        <div
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            const file = e.dataTransfer.files?.[0];
+            if (file) handleFileSelected(file);
+          }}
+          className="bg-white border border-slate-300 sm:border-slate-800/80 rounded-2xl sm:rounded-2xl p-2 sm:p-2.5 shadow-md sm:shadow-sm shrink-0 transition-all focus-within:border-emerald-700 focus-within:ring-2 focus-within:ring-emerald-700/20 flex flex-col gap-2"
+        >
+          {/* Active Attachment Extraction / Ready Status Bar */}
+          {attachedFile && (
+            <div className="animate-fadeIn">
+              {attachedFile.status === 'extracting' && (
+                <div className="p-2.5 rounded-xl bg-gradient-to-l from-amber-50 to-emerald-50/50 border border-amber-300/80 text-amber-950 text-xs flex flex-col gap-1.5 shadow-2xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Loader2 className="w-4 h-4 text-amber-600 animate-spin shrink-0" />
+                      <span className="font-bold flex items-center gap-1 shrink-0 text-amber-900">
+                        <ScanText className="w-3.5 h-3.5 text-amber-700" />
+                        معالج Tesseract OCR:
+                      </span>
+                      <span className="font-mono text-zinc-800 truncate max-w-[160px] sm:max-w-xs">{attachedFile.fileName}</span>
+                    </div>
+                    <span className="font-bold font-mono text-amber-800 shrink-0">{attachedFile.progressPercent}%</span>
+                  </div>
+                  <div className="w-full bg-amber-200/60 rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className="bg-gradient-to-r from-amber-500 via-emerald-600 to-emerald-700 h-1.5 transition-all duration-300 rounded-full"
+                      style={{ width: `${attachedFile.progressPercent}%` }}
+                    />
+                  </div>
+                  <div className="text-[11px] text-amber-900/90 flex items-center justify-between font-medium">
+                    <span className="truncate">{attachedFile.progressText}</span>
+                    <span className="shrink-0 font-mono text-[10px] text-zinc-500">{attachedFile.fileSizeFormatted}</span>
+                  </div>
+                </div>
+              )}
+
+              {attachedFile.status === 'ready' && (
+                <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-950 text-xs flex items-center justify-between gap-2 shadow-2xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-800 text-amber-300 flex items-center justify-center shrink-0 shadow-2xs">
+                      {attachedFile.file.type.startsWith('image/') ? (
+                        <ImageIcon className="w-4 h-4" />
+                      ) : (
+                        <FileText className="w-4 h-4" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold truncate max-w-[180px] sm:max-w-xs">{attachedFile.fileName}</span>
+                        <span className="bg-emerald-200/90 text-emerald-950 text-[10px] px-1.5 py-0.2 rounded-md font-bold font-mono">
+                          {attachedFile.isOcr ? 'Tesseract OCR' : 'نص رقمي'}
+                        </span>
+                        <span className="text-[10px] text-emerald-700 font-mono">
+                          ({attachedFile.wordCount} كلمة • {attachedFile.numPages} {attachedFile.numPages === 1 ? 'صفحة' : 'صفحات'})
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-emerald-800 flex items-center gap-1 font-medium mt-0.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>تم استخراج النص بالكامل وهو جاهز للإرسال والتحليل الذكي</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPreviewDocTextModal({
+                          fileName: attachedFile.fileName,
+                          fileSizeFormatted: attachedFile.fileSizeFormatted,
+                          numPages: attachedFile.numPages,
+                          wordCount: attachedFile.wordCount,
+                          isOcr: attachedFile.isOcr,
+                          method: attachedFile.method,
+                          fullExtractedText: attachedFile.extractedText,
+                        })
+                      }
+                      className="px-2.5 py-1 bg-white hover:bg-emerald-100 border border-emerald-300 rounded-lg text-emerald-900 text-[11px] font-bold transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                      title="معاينة النص المستخرج"
+                    >
+                      <Eye className="w-3.5 h-3.5 text-emerald-700" />
+                      <span className="hidden xs:inline">معاينة النص</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAttachedFile(null)}
+                      className="p-1.5 hover:bg-emerald-200/70 text-emerald-800 rounded-lg transition-colors cursor-pointer"
+                      title="إزالة المرفق"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {attachedFile.status === 'error' && (
+                <div className="p-2 rounded-xl bg-red-50 border border-red-200 text-red-900 text-xs flex items-center justify-between gap-2 shadow-2xs">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                    <span>{attachedFile.errorMessage || 'حدث خطأ أثناء قراءة المستند.'}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAttachedFile(null)}
+                    className="p-1 text-red-700 hover:text-red-900 rounded cursor-pointer"
+                    title="إغلاق"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -984,20 +1262,56 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
             }}
             className="flex items-center gap-1.5 sm:gap-2"
           >
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              accept=".pdf,image/*,.docx,.doc,.txt"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  handleFileSelected(file);
+                }
+                e.target.value = '';
+              }}
+            />
+
+            {/* Paperclip attachment button */}
+            <button
+              type="button"
+              id="chat-attach-file-btn"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={loading || attachedFile?.status === 'extracting'}
+              title="إرفاق ملف PDF ممسوح ضوئياً أو صورة مستند (استخراج بنظام Tesseract OCR)"
+              className="h-11 w-11 flex items-center justify-center rounded-xl border border-zinc-200 hover:border-emerald-600 hover:bg-emerald-50/70 text-zinc-600 hover:text-emerald-900 transition-all cursor-pointer shrink-0 disabled:opacity-40 disabled:cursor-not-allowed shadow-2xs"
+            >
+              <Paperclip className="w-4 h-4" />
+            </button>
+
             <input
               ref={inputRef}
               id="chat-query-input"
               type="text"
               value={inputPrompt}
               onChange={(e) => setInputPrompt(e.target.value)}
-              disabled={loading}
-              placeholder="اكتب استفسارك الجمركي أو الضريبي هنا..."
-              className="flex-1 px-3 sm:px-4 py-2 text-sm sm:text-sm text-slate-900 bg-transparent focus:outline-none placeholder-slate-400 min-h-[44px]"
+              disabled={loading || attachedFile?.status === 'extracting'}
+              placeholder={
+                attachedFile?.status === 'ready'
+                  ? `اطرح استفسارك حول ${attachedFile.fileName} أو اضغط إرسال لتحليل شامل...`
+                  : 'اكتب استفسارك الجمركي أو الضريبي هنا، أو أرفق مستنداً/صورة...'
+              }
+              className="flex-1 px-3 sm:px-4 py-2 text-xs sm:text-sm text-slate-900 bg-transparent focus:outline-none placeholder-slate-400 min-h-[44px]"
             />
+
             <button
               id="chat-send-btn"
               type="submit"
-              disabled={loading || !inputPrompt.trim()}
+              disabled={
+                loading ||
+                attachedFile?.status === 'extracting' ||
+                (!inputPrompt.trim() && (!attachedFile || attachedFile.status !== 'ready'))
+              }
               title="إرسال الاستفسار (Enter)"
               className="h-11 px-4 sm:px-5 bg-gradient-to-r from-emerald-800 to-[#103025] hover:from-emerald-700 hover:to-emerald-900 active:scale-95 text-white text-xs sm:text-sm font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:from-slate-400 disabled:to-slate-500 shrink-0 cursor-pointer min-w-[44px]"
             >
@@ -1015,6 +1329,117 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
         isCollapsed={isServicesCollapsed}
         onToggleCollapse={() => setIsServicesCollapsed((prev) => !prev)}
       />
+
+      {/* Full Extracted Text Preview Modal (Tesseract OCR / Document Inspector) */}
+      {previewDocTextModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 animate-fadeIn">
+          <div className="bg-white rounded-2xl border border-zinc-300 shadow-2xl max-w-3xl w-full max-h-[88vh] flex flex-col overflow-hidden animate-scaleUp">
+            {/* Modal Header */}
+            <div className="px-4 sm:px-6 py-3.5 bg-gradient-to-r from-emerald-950 via-[#0f2d24] to-emerald-900 text-white flex items-center justify-between gap-3 border-b border-emerald-800 shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-emerald-800/80 text-amber-300 border border-emerald-600/50 flex items-center justify-center shrink-0">
+                  <ScanText className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-sm sm:text-base truncate">{previewDocTextModal.fileName}</h3>
+                    <span className="bg-amber-500/20 text-amber-300 border border-amber-400/30 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                      {previewDocTextModal.isOcr ? 'Tesseract OCR' : 'نص مستخرج'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-emerald-200/80">
+                    النص الكامل المستخرج بدقة عالية قبل الإرسال للذكاء الاصطناعي
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setPreviewDocTextModal(null);
+                  setCopiedModalText(false);
+                }}
+                className="p-1.5 rounded-xl hover:bg-white/10 text-emerald-100 hover:text-white transition-colors cursor-pointer"
+                title="إغلاق"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Stats Toolbar */}
+            <div className="px-4 sm:px-6 py-2 bg-emerald-50/50 border-b border-emerald-100 flex flex-wrap items-center justify-between gap-2 text-xs text-emerald-950 shrink-0">
+              <div className="flex items-center gap-3 text-[11px] font-medium">
+                <span className="flex items-center gap-1">
+                  <strong className="font-bold text-emerald-900">{previewDocTextModal.numPages}</strong> صفحة
+                </span>
+                <span>•</span>
+                <span className="flex items-center gap-1">
+                  <strong className="font-bold text-emerald-900">{previewDocTextModal.wordCount}</strong> كلمة
+                </span>
+                <span>•</span>
+                <span className="flex items-center gap-1 font-mono">
+                  {previewDocTextModal.fullExtractedText?.length || 0} حرف
+                </span>
+                {previewDocTextModal.fileSizeFormatted && (
+                  <>
+                    <span>•</span>
+                    <span className="font-mono">{previewDocTextModal.fileSizeFormatted}</span>
+                  </>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (previewDocTextModal.fullExtractedText) {
+                    navigator.clipboard.writeText(previewDocTextModal.fullExtractedText);
+                    setCopiedModalText(true);
+                    setTimeout(() => setCopiedModalText(false), 2000);
+                  }
+                }}
+                className="px-3 py-1 bg-white hover:bg-emerald-100/60 border border-emerald-300 rounded-lg text-emerald-900 text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
+              >
+                {copiedModalText ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>تم النسخ بنجاح!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>نسخ النص الكامل</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Modal Content Scroll Area */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-zinc-50/50">
+              <div className="bg-white rounded-xl border border-zinc-200 p-4 shadow-2xs">
+                <pre className="whitespace-pre-wrap font-sans text-xs sm:text-sm text-zinc-900 leading-relaxed text-right select-text font-normal">
+                  {previewDocTextModal.fullExtractedText || 'لا يوجد نص مستخرج.'}
+                </pre>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-4 sm:px-6 py-3 bg-white border-t border-zinc-200 flex items-center justify-between shrink-0">
+              <span className="text-[11px] text-zinc-500">
+                يتم إرسال هذا النص الكامل إلى المستشار الذكي لضمان استخلاص أدق التفاصيل القانونية.
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setPreviewDocTextModal(null);
+                  setCopiedModalText(false);
+                }}
+                className="px-4 py-2 bg-emerald-900 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-2xs"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
