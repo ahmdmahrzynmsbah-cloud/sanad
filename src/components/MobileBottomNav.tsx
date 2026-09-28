@@ -46,13 +46,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   };
 
   const handleChatNav = () => {
-    if (currentUser && currentUser.status === 'approved') {
-      handleNav('chat');
-    } else if (currentUser) {
-      handleNav('chat');
-    } else {
-      onOpenAuth('login');
-    }
+    handleNav('chat');
   };
 
   const handleUserNav = () => {

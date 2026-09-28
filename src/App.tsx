@@ -89,7 +89,15 @@ export default function App() {
     activeViewRef.current = activeView;
   }, [activeView]);
 
-  const [lawsCount, setLawsCount] = useState<number>(3);
+  const [lawsCount, setLawsCount] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('pal_laws_count');
+      const parsed = saved ? parseInt(saved, 10) : 0;
+      return parsed > 0 ? parsed : 149;
+    } catch {
+      return 149;
+    }
+  });
   const [showWelcomeModal, setShowWelcomeModal] = useState<boolean>(() => {
     return localStorage.getItem('sanad_welcome_seen') !== 'true';
   });
@@ -115,7 +123,7 @@ export default function App() {
     try {
       const res = await fetch(`/api/laws?_t=${Date.now()}`, { cache: 'no-store' });
       const data = await res.json();
-      if (res.ok && data.laws) {
+      if (res.ok && Array.isArray(data.laws) && data.laws.length > 0) {
         loadedCount = data.laws.length;
       }
     } catch (err) {
@@ -134,7 +142,14 @@ export default function App() {
       }
     }
 
-    setLawsCount(loadedCount);
+    if (loadedCount > 0) {
+      setLawsCount(loadedCount);
+      try {
+        localStorage.setItem('pal_laws_count', String(loadedCount));
+      } catch {}
+    } else {
+      setLawsCount((prev) => (prev > 0 ? prev : 149));
+    }
   }, []);
 
   // Fetch System Branding

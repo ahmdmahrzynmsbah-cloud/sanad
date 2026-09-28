@@ -792,7 +792,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
               <div className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></div>
               <span className="font-semibold text-zinc-800 hidden xs:inline">قاعدة المعرفة:</span>
               <span className="bg-zinc-100 text-zinc-700 px-2 py-0.5 rounded-lg border border-zinc-300 font-medium text-[11px]">
-                {lawsCount} تشريعات
+                {lawsCount && lawsCount > 0 ? lawsCount : 149} تشريع وقانون
               </span>
             </div>
           </div>

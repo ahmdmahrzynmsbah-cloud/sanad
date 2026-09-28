@@ -3983,7 +3983,7 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
         { category: 'HARM_CATEGORY_CIVIC_INTEGRITY' as any, threshold: 'BLOCK_NONE' as any },
       ];
 
-      const candidateVisionModels = ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-2.5-flash', 'gemini-3.8-flash'];
+      const candidateVisionModels = ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-flash-latest'];
 
       for (const modelName of candidateVisionModels) {
         try {
@@ -4024,7 +4024,7 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
 
       // Fast retry with direct verbatim prompt if first pass didn't produce full content
       if (!extractedData || !extractedData.content || extractedData.content.length < 30) {
-        for (const modelName of ['gemini-2.5-flash', 'gemini-3.1-flash-lite']) {
+        for (const modelName of ['gemini-2.5-flash', 'gemini-3.8-flash']) {
           try {
             console.log(`[AI-PDF] Running direct verbatim fallback extraction with ${modelName}...`);
             const directRes = await ai.models.generateContent({
@@ -4238,7 +4238,8 @@ ${sampleText}
 
       const modelsToTry = [
         'gemini-2.5-flash',
-        'gemini-2.5-pro',
+        'gemini-3.8-flash',
+        'gemini-flash-latest',
       ];
 
       for (const model of modelsToTry) {
@@ -5201,8 +5202,9 @@ app.post('/api/chat', async (req, res) => {
     prioritizedContext = docHeader + prioritizedContext;
   }
 
-  // Effective legal status: if isLegal is true OR high-scoring search matches were found OR user attached a document
-  const effectiveIsLegal = isLegal || hasAttachedDoc || (searchResult?.hasMatches && searchResult.topChunks.length > 0);
+  // Effective legal status: if isLegal is true OR high-scoring search matches (score >= 45) were found OR user attached a document
+  const isSearchLegalMatch = Boolean(searchResult?.hasMatches && searchResult.topChunks.length > 0 && searchResult.topChunks[0].score >= 45);
+  const effectiveIsLegal = isLegal || hasAttachedDoc || isSearchLegalMatch;
 
   const citations: any[] = (effectiveIsLegal && searchResult?.topChunks)
     ? searchResult.topChunks.slice(0, 4).map((c, idx) => ({
@@ -5233,8 +5235,8 @@ app.post('/api/chat', async (req, res) => {
     });
   }
 
-  // 2. Strictly enforced legal knowledge base prompt with Grounded RAG Constitution
-  const systemInstruction = `<rag_system_constitution>
+  // 2. Select system instruction & prompt structure based on query classification
+  const legalSystemInstruction = `<rag_system_constitution>
 أنت المستشار القانوني والتشريعي الفلسطيني الرسمي المعتمد «سَنَد».
 أنت تعمل حصراً ومباشرة بنظام التوليد المعزز بالاسترجاع الموثق (Strict Grounded RAG).
 
@@ -5261,6 +5263,18 @@ app.post('/api/chat', async (req, res) => {
 
 ${prioritizedContext ? `\n<retrieved_knowledge_base>\n${prioritizedContext}\n</retrieved_knowledge_base>\n` : ''}`;
 
+  const generalSystemInstruction = `<role>
+أنت «سَنَد»، المستشار الذكي والمساعد المعرفي الرقمي المعتمد في دولة فلسطين.
+مهمتك الإجابة على استفسارات المستخدم العامة، العلمية، الحسابية، التقنية، اللغوية، والثقافية بدقة تامة وشرح مبسط وواضح باللغة العربية الفصحى.
+</role>
+
+<instructions>
+- قدم إجابة مفصلة، دقيقة، ومباشرة مع خطوات حسابية أو أمثلة توضيحية كاملة متى ما تطلب السؤال ذلك.
+- حافظ على أسلوب راقٍ، مهني، ومفيد.
+</instructions>`;
+
+  const systemInstruction = effectiveIsLegal ? legalSystemInstruction : generalSystemInstruction;
+
   try {
     const ai = getGemini();
     const candidateConfigs = [
@@ -5279,22 +5293,6 @@ ${prioritizedContext ? `\n<retrieved_knowledge_base>\n${prioritizedContext}\n</r
           temperature: 0.0,
         },
         timeoutMs: 15000,
-      },
-      {
-        model: 'gemini-3.1-flash-lite',
-        config: {
-          systemInstruction,
-          temperature: 0.0,
-        },
-        timeoutMs: 15000,
-      },
-      {
-        model: 'gemini-2.5-pro',
-        config: {
-          systemInstruction,
-          temperature: 0.0,
-        },
-        timeoutMs: 20000,
       },
       {
         model: 'gemini-flash-latest',
@@ -5332,11 +5330,13 @@ ${prioritizedContext ? `\n<retrieved_knowledge_base>\n${prioritizedContext}\n</r
       multiTurnContents.shift();
     }
 
-    const strictPrompt = `${message}
+    const strictPrompt = effectiveIsLegal
+      ? `${message}
 
 [توجيه فوري لمحرك RAG: أجب على الاستفسار السابق حصراً من نصوص المواد المسترجعة في <retrieved_knowledge_base>. يُمنع أي تأليف أو خروج عن النص، وإذا لم تجد نصاً يغطي المسألة أجب حصراً بـ: "عذراً، لم يرد نص تشريعي مباشر يغطي هذا الاستفسار في قاعدة التشريعات والملفات المعتمدة حالياً في المنظومة." والتزم بالتنسيق التالي:
 🎯 **الجواب المباشر:** [الإجابة المباشرة المستندة حصراً إلى النص]
-⚖️ **السند القانوني:** [المادة (رقم) من (اسم القانون/المستند)]]`;
+⚖️ **السند القانوني:** [المادة (رقم) من (اسم القانون/المستند)]]`
+      : message;
 
     // Ensure conversation ends with current user message
     if (
@@ -5905,12 +5905,12 @@ function isLegalTaxCustomsQuery(query: string): boolean {
     return false;
   }
 
-  // 1. Clear non-legal general knowledge topics (when no legal terms exist)
+  // 1. Clear non-legal general knowledge, technical, computing, and mathematical topics
   if (
-    /(محمد صلاح|ميسي|رونالدو|كرة القدم|الرياضة|الدين الإسلامي|دين الاسلام|القرآن|الحديث|الصلاة|الصيام|الحج|الزكاة|النبي|الرسول|الصحابة|الفيزياء|الكيمياء|الطب|الفلك|الفضاء|الطقس|التاريخ|الجغرافيا|الفلسفة|البرمجة|الرياضيات|معنى كلمة|قصة|نكتة|شعر|طبخ|عاصمة|من هو|من هي)/i.test(
+    /(سداسي عشر|سداسي عشري|hexadecimal|ثنائي|binary|عشري|decimal|نظام عددي|التحويل من|تحويل من|تحويل الأعداد|برمجة|كود|خوارزمية|جافا سكريبت|بايثون|html|css|react|فيزياء|كيمياء|رياضيات|معادلة|تكامل|تفاضل|طبخ|وصفة|كرة القدم|رياضة|محمد صلاح|ميسي|رونالدو|الدين الإسلامي|دين الاسلام|القرآن|الحديث|الصلاة|الصيام|الحج|الزكاة|النبي|الرسول|الصحابة|الطب|الفلك|الفضاء|الطقس|التاريخ|الجغرافيا|الفلسفة|معنى كلمة|قصة|نكتة|شعر|عاصمة|من هو|من هي|ما هو|ما هي|ماذا تعرف عن)/i.test(
       cleaned
     ) &&
-    !/(قانون|قوانين|تشريع|تشريعات|مرسوم|مراسيم|قرار بقانون|قرار|مادة|مواد|لائحة|لوائح|نظام|أنظمة|بند|بنود|ملف|ملفات|الملف|الملفات|مستند|مستندات|المستند|وثيقة|وثائق|رفعت|رفعته|المرفوع|المرفوعة|ضريبة|ضرائب|ضريبي|ضريبية|جمارك|جمرك|جمركي|جمركية|رسم جمركي|رسوم جمركية|تعرفة جمركية|طرد بريدي|سجل تجاري|مقاصة|إعفاء ضريبي|فاتورة ضريبية|عقوبة|غرامة|تهرب|قانون العمل|حقوق العامل|إصابة عمل|إجازة|نهاية خدمة|شركة|شركات|إرهاب|ارهاب|تمويل|غسل|جريمة|محكمة)/i.test(
+    !/(ضريبة|ضرائب|ضريبي|ضريبية|جمارك|جمرك|جمركي|بيان جمركي|رسوم جمركية|تعرفة جمركية|طرد بريدي|دخل كلي|ضريبة دخل|قيمة مضافة|مكوس|إعفاء ضريبي|إعفاء|إعفاءات|فاتورة ضريبية|مقاصة|قانون العمل|حقوق العامل|حقوق العمال|إصابة عمل|أجور العمال|أجر العامل|نهاية خدمة|مكافأة|إجازة|إجازات|فصل تعسفي|عقد عمل|ساعات العمل|تأسيس شركة|سجل تجاري|غسل أموال|غسيل أموال|تمويل إرهاب|سلطة النقد|مدفوعات|محكمة|دعوى|قرار بقانون)/i.test(
       cleaned
     )
   ) {
@@ -5927,8 +5927,8 @@ function isLegalTaxCustomsQuery(query: string): boolean {
     return true;
   }
 
-  // 4. Broad Palestinian legal, tax, customs, employment, corporate, and document terms (Contextualized - "عامل" alone is not matched)
-  const legalTermsRegex = /(قانون|قوانين|تشريع|تشريعات|مرسوم|مراسيم|قرار بقانون|قرار|قرارات|مادة|مواد|الماده|المواد|لائحة|لوائح|نظام|أنظمة|بند|بنود|فقرة|فقرات|ملف|ملفات|الملف|الملفات|مستند|مستندات|المستند|المستندات|وثيقة|وثائق|الوثيقة|رفعت|رفعته|المرفوع|المرفوعة|مرفق|مرفقات|ضريبة|ضرائب|ضريبي|ضريبية|جمارك|جمرك|جمركي|جمارك|بيان جمركي|رسوم جمركية|تعرفة جمركية|طرد بريدي|إعفاء ضريبي|إعفاء|إعفاءات|دخل كلي|ضريبة دخل|قيمة مضافة|مكوس|غرامة تأخير|غرامة|غرامات|عقوبة|عقوبات|محكمة الصلح|محكمة البداية|محكمة الاستئناف|وزارة المالية|دائرة الجمارك|مكافحة غسل الأموال|غسل أموال|غسيل أموال|تمويل إرهاب|تمويل الارهاب|إرهاب|ارهاب|فحص ضريبي|تهرب ضريبي|تهريب جمركي|سجل تجاري|فاتورة ضريبية|مقاصة|استيراد|تصدير|معبر|ضريبة أملاك|شريحة ضريبية|شرائح|الخصم من المنبع|رد ضريبي|استيراد سيارات|سيارة|بضاعة|ترخيص|قانون العمل|حقوق العامل|حقوق العمال|إصابة عمل|إصابات العمل|عمال|العمال|العمالة|العاملين|أجور العمال|أجر العامل|موظف|موظفين|نهاية خدمة|مكافأة|إجازة|إجازات|فصل تعسفي|عقد عمل|ساعات العمل|أجور|أجر|حد أدنى|شركة|شركات|تأسيس شركة|مراقب الشركات|شيك|شيكات|كمبيالة|سند|عقار|أراضي|طابو|إيجار|ميراث|تركات|دعوى|استئناف|اعتراض|طعن|تنفيذ|حجز|مصادرة|كفالة|سلطة النقد|مدفوعات)/i;
+  // 4. Broad Palestinian legal, tax, customs, employment, corporate, and document terms
+  const legalTermsRegex = /(قانون|قوانين|تشريع|تشريعات|مرسوم|مراسيم|قرار بقانون|قرارات بقوانين|قرارات وزراء|مادة|مواد|الماده|المواد|لائحة تنفيذية|لوائح تنفيذية|أنظمة تنفيذية|نظام تنفيذي|بند قانوني|بنود قانونية|ملف|ملفات|الملف|الملفات|مستند|مستندات|المستند|المستندات|وثيقة|وثائق|الوثيقة|رفعت|رفعته|المرفوع|المرفوعة|مرفق|مرفقات|ضريبة|ضرائب|ضريبي|ضريبية|جمارك|جمرك|جمركي|بيان جمركي|رسوم جمركية|تعرفة جمركية|طرد بريدي|إعفاء ضريبي|إعفاء|إعفاءات|دخل كلي|ضريبة دخل|قيمة مضافة|مكوس|غرامة تأخير|غرامة|غرامات|عقوبة|عقوبات|محكمة الصلح|محكمة البداية|محكمة الاستئناف|وزارة المالية|دائرة الجمارك|مكافحة غسل الأموال|غسل أموال|غسيل أموال|تمويل إرهاب|تمويل الارهاب|إرهاب|ارهاب|فحص ضريبي|تهرب ضريبي|تهريب جمركي|سجل تجاري|فاتورة ضريبية|مقاصة|استيراد|تصدير|معبر|ضريبة أملاك|شريحة ضريبية|شرائح|الخصم من المنبع|رد ضريبي|استيراد سيارات|سيارة|بضاعة|ترخيص|قانون العمل|حقوق العامل|حقوق العمال|إصابة عمل|إصابات العمل|عمال|العمال|العمالة|العاملين|أجور العمال|أجر العامل|موظف|موظفين|نهاية خدمة|مكافأة|إجازة|إجازات|فصل تعسفي|عقد عمل|ساعات العمل|أجور|أجر|حد أدنى|شركة|شركات|تأسيس شركة|مراقب الشركات|شيك|شيكات|كمبيالة|طابو|إيجار|ميراث|تركات|دعوى|استئناف|اعتراض|طعن|تنفيذ|حجز|مصادرة|كفالة|سلطة النقد|مدفوعات)/i;
 
   return legalTermsRegex.test(q);
 }
