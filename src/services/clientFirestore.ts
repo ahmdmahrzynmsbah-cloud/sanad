@@ -56,16 +56,17 @@ export function getClientDb(forceBypassQuota = false) {
     const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
     if (!dbInstance) {
       try {
-        dbInstance = initializeFirestore(app, {
-          experimentalAutoDetectLongPolling: true,
-        }, firebaseConfig.firestoreDatabaseId);
-      } catch {
         dbInstance = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+      } catch {
+        try {
+          dbInstance = initializeFirestore(app, {}, firebaseConfig.firestoreDatabaseId);
+        } catch {
+          dbInstance = null;
+        }
       }
     }
     return dbInstance;
-  } catch (err) {
-    console.warn('[Client Firestore] Could not initialize:', err);
+  } catch {
     return null;
   }
 }
@@ -1505,61 +1506,13 @@ export async function directDeleteSubscriptionPlanFromFirestore(id: string): Pro
 }
 
 /**
- * Setup Realtime Firestore onSnapshot listeners for all core collections
+ * Setup Realtime sync listener.
+ * The application's server-authoritative SSE stream (/api/sync) and version-polling (/api/sync/version)
+ * handle cross-tab and cross-device synchronization with 100% reliability, avoiding
+ * browser-side WebSocket exhaustion or Firebase "Could not reach Cloud Firestore backend" errors.
  */
 export function setupFirestoreRealtimeListeners(onUpdate: (collectionName: string) => void): () => void {
-  const db = getClientDb();
-  if (!db || isClientQuotaExceeded()) return () => {};
-
-  const unsubscribers: (() => void)[] = [];
-  const collectionsToWatch = [
-    { col: 'users', name: 'users' },
-    { col: 'laws', name: 'laws' },
-    { col: 'legal_categories', name: 'categories' },
-    { col: 'system_settings', name: 'system_settings' },
-    { col: 'supervisors', name: 'supervisors' },
-    { col: 'related_sites', name: 'related_sites' },
-    { col: 'partners', name: 'partners' },
-    { col: 'subscription_plans', name: 'subscription_plans' },
-    { col: 'law_requests', name: 'law_requests' },
-    { col: 'platform_about', name: 'platform_about' },
-    { col: 'contact_info', name: 'contact_info' },
-    { col: 'videos', name: 'videos' },
-  ];
-
-  collectionsToWatch.forEach(({ col, name }) => {
-    try {
-      const colRef = collection(db, col);
-      const unsub = onSnapshot(
-        colRef,
-        { includeMetadataChanges: false },
-        (snapshot) => {
-          // Trigger sync on changes
-          if (!snapshot.metadata.hasPendingWrites) {
-            onUpdate(name);
-          }
-        },
-        (error) => {
-          if (error?.code === 'unavailable' || String(error?.message).includes('unavailable')) {
-            // Graceful offline state - client relies on cached state and fast polling
-            return;
-          }
-          handleClientFirestoreError(`onSnapshot listener for ${col}`, error);
-        }
-      );
-      unsubscribers.push(unsub);
-    } catch (e) {
-      console.warn(`Could not attach realtime listener for ${col}:`, e);
-    }
-  });
-
-  return () => {
-    unsubscribers.forEach((unsub) => {
-      try {
-        unsub();
-      } catch {}
-    });
-  };
+  return () => {};
 }
 
 

@@ -186,7 +186,9 @@ export async function extractTextFromPptx(
 
 /**
  * Universal document text extractor supporting:
- * - PDF (.pdf)
+ * - PDF (.pdf) with digital extraction, de-reversal, and scanned OCR fallback
+ * - Images (.png, .jpg, .jpeg, .webp, .bmp) via advanced OCR & Gemini Vision
+ * - Plain text (.txt)
  * - Microsoft Word (.docx, .doc)
  * - Microsoft PowerPoint (.pptx, .ppt)
  */
@@ -201,6 +203,44 @@ export async function extractTextFromAnyDocument(
 
   const isWord = lowerName.endsWith('.docx') || lowerName.endsWith('.doc');
   const isPpt = lowerName.endsWith('.pptx') || lowerName.endsWith('.ppt');
+  const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|webp|bmp|tiff?)$/i.test(lowerName);
+  const isTxt = lowerName.endsWith('.txt');
+
+  // Handle Images with Advanced OCR & Gemini Vision
+  if (isImage) {
+    const { performImageOCR } = await import('./ocrParser');
+    return performImageOCR(file, onProgress);
+  }
+
+  // Handle Plain Text Files
+  if (isTxt) {
+    try {
+      const rawText = await file.text();
+      const text = normalizeAndFixArabicText(rawText);
+      const localMeta = detectLawMetadataLocally(text, fileName);
+      if (onProgress) {
+        onProgress({
+          currentPage: 1,
+          totalPages: 1,
+          percent: 100,
+          statusText: 'تمت قراءة الملف النصي بنجاح',
+        });
+      }
+      return {
+        text,
+        numPages: 1,
+        fileName,
+        fileSizeBytes: file.size,
+        fileSizeFormatted,
+        suggestedTitle: localMeta.title || cleanName,
+        suggestedCategory: localMeta.category || 'جمارك',
+        summary: localMeta.summary || `تشريع مستخرج من ملف نصي ${fileName}`,
+        method: 'client_pdfjs',
+      };
+    } catch (txtErr) {
+      console.warn('Plain text read error:', txtErr);
+    }
+  }
 
   // Handle Word Documents
   if (isWord) {

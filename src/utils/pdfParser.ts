@@ -33,7 +33,15 @@ export interface PDFExtractionResult {
   suggestedTitle: string;
   suggestedCategory: string;
   summary?: string;
-  method: 'client_pdfjs' | 'gemini_ai' | 'fallback_parser' | 'resilient_fallback';
+  method:
+    | 'client_pdfjs'
+    | 'gemini_ai'
+    | 'fallback_parser'
+    | 'resilient_fallback'
+    | 'gemini_vision_ai'
+    | 'gemini_vision_ocr'
+    | 'client_tesseract_ocr'
+    | 'tesseract_canvas_ocr';
   model?: string;
 }
 
@@ -329,137 +337,134 @@ export async function extractTextFromPDF(
     };
   }
 
-  // Step 2: Fallback to Server-Side AI Parser for scanned/image PDFs
+  // Step 2: Fallback to Server-Side AI Vision Parser for scanned/image PDFs
   if (onProgress) {
     onProgress({
       currentPage: 1,
       totalPages: 1,
       percent: 30,
-      statusText: 'المستند ممسوح ضوئياً، جاري الإرسال للمعالجة البصرية بالذكاء الاصطناعي...',
+      statusText: 'المستند ممسوح ضوئياً، جاري المعالجة البصرية بالذكاء الاصطناعي ومحرك OCR...',
     });
   }
 
-  // File size validation for base64 transmission (Vercel payload constraint is ~4.5MB, base64 expands ~33%)
-  if (file.size > 3.5 * 1024 * 1024) {
-    const localMeta = detectLawMetadataLocally('', file.name);
-    return {
-      text: `[مستند PDF: ${cleanName}]\n\nتم إرفاق المستند بحجم (${fileSizeFormatted}). نظراً لأن حجم الملف الممسوح ضوئياً يتجاوز الحد الأقصى للمعالجة السحابية المباشرة، يمكنك تحرير نصوص المواد القانونية هنا مباشرة ثم النقر على حفظ.`,
-      numPages: 1,
-      fileName: file.name,
-      fileSizeBytes: file.size,
-      fileSizeFormatted,
-      suggestedTitle: localMeta.title || cleanName,
-      suggestedCategory: localMeta.category || 'جمارك',
-      summary: localMeta.summary || `تشريع تم إدراجه من ملف ${file.name}`,
-      method: 'resilient_fallback',
-    };
-  }
-
-  let base64Data = '';
-  try {
-    base64Data = await fileToBase64(file);
-  } catch {
-    const localMeta = detectLawMetadataLocally('', file.name);
-    return {
-      text: `[مستند PDF: ${cleanName}]\n\nتم إرفاق المستند بنجاح بحجم (${fileSizeFormatted}). يمكنك كتابة وتعديل نصوص المواد القانونية هنا مباشرة.`,
-      numPages: 1,
-      fileName: file.name,
-      fileSizeBytes: file.size,
-      fileSizeFormatted,
-      suggestedTitle: localMeta.title || cleanName,
-      suggestedCategory: localMeta.category || 'جمارك',
-      summary: localMeta.summary || `تشريع تم إدراجه من ملف ${file.name}`,
-      method: 'resilient_fallback',
-    };
-  }
-
-  let progressInterval: any = null;
-  if (onProgress) {
-    let curr = 35;
-    progressInterval = setInterval(() => {
-      if (curr < 90) {
-        curr += 5;
-        onProgress({
-          currentPage: 1,
-          totalPages: 1,
-          percent: curr,
-          statusText: 'جاري استخراج المواد والقرارات بواسطة الذكاء الاصطناعي...',
-        });
-      }
-    }, 700);
-  }
-
-  try {
-    const controller = new AbortController();
-    const timeoutTimer = setTimeout(() => controller.abort(), 20000);
-
-    const res = await fetch('/api/admin/parse-pdf', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ base64Data, fileName: file.name }),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutTimer);
-    if (progressInterval) clearInterval(progressInterval);
-
-    if (!res.ok) {
-      console.warn('[PDFParser] Server parsing response not ok:', res.status);
-      const localMeta = detectLawMetadataLocally('', file.name);
-      return {
-        text: `[مستند PDF: ${cleanName}]\n\nتم إرفاق المستند بنجاح بحجم (${fileSizeFormatted}). يمكنك كتابة وتعديل نصوص المواد القانونية هنا ثم حفظها في قاعدة المعرفة.`,
-        numPages: 1,
-        fileName: file.name,
-        fileSizeBytes: file.size,
-        fileSizeFormatted,
-        suggestedTitle: localMeta.title || cleanName,
-        suggestedCategory: localMeta.category || 'جمارك',
-        summary: localMeta.summary || `تشريع تم إدراجه من ملف ${file.name}`,
-        method: 'resilient_fallback',
-      };
+  // If file is within cloud payload capacity, attempt Server AI Multimodal extraction
+  if (file.size <= 25 * 1024 * 1024) {
+    let base64Data = '';
+    try {
+      base64Data = await fileToBase64(file);
+    } catch {
+      base64Data = '';
     }
 
-    const serverResult = await res.json();
-    const rawExtracted = serverResult.content || serverResult.text || '';
-    const extractedText = normalizeAndFixArabicText(rawExtracted);
+    if (base64Data) {
+      let progressInterval: any = null;
+      if (onProgress) {
+        let curr = 35;
+        progressInterval = setInterval(() => {
+          if (curr < 85) {
+            curr += 5;
+            onProgress({
+              currentPage: 1,
+              totalPages: 1,
+              percent: curr,
+              statusText: 'جاري استخراج وقراءة المواد والقرارات بواسطة الذكاء الاصطناعي الفائق...',
+            });
+          }
+        }, 700);
+      }
 
+      try {
+        const controller = new AbortController();
+        const timeoutTimer = setTimeout(() => controller.abort(), 25000);
+
+        const res = await fetch('/api/admin/parse-pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ base64Data, fileName: file.name, mimeType: 'application/pdf' }),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutTimer);
+        if (progressInterval) clearInterval(progressInterval);
+
+        if (res.ok) {
+          const serverResult = await res.json();
+          const rawExtracted = serverResult.content || serverResult.text || '';
+          const extractedText = normalizeAndFixArabicText(rawExtracted);
+
+          if (extractedText && extractedText.trim().length > 30) {
+            if (onProgress) {
+              onProgress({
+                currentPage: serverResult.numPages || 1,
+                totalPages: serverResult.numPages || 1,
+                percent: 100,
+                statusText: 'اكتمل استخراج المواد القانونية وتنسيقها بنجاح',
+              });
+            }
+
+            const localMeta = detectLawMetadataLocally(extractedText, file.name);
+
+            return {
+              text: extractedText,
+              numPages: serverResult.numPages || 1,
+              fileName: file.name,
+              fileSizeBytes: file.size,
+              fileSizeFormatted,
+              suggestedTitle: serverResult.title || serverResult.suggestedTitle || localMeta.title || cleanName,
+              suggestedCategory: serverResult.category || serverResult.suggestedCategory || localMeta.category || 'جمارك',
+              summary: serverResult.summary || localMeta.summary || '',
+              method: serverResult.method || 'gemini_vision_ai',
+              model: serverResult.model,
+            };
+          }
+        }
+      } catch (err: any) {
+        if (progressInterval) clearInterval(progressInterval);
+        console.warn('[PDFParser] Server parsing attempt bypassed or timed out, trying OCR canvas engine:', err);
+      }
+    }
+  }
+
+  // Step 3: Run High-Precision Canvas Tesseract OCR for scanned PDF pages
+  try {
     if (onProgress) {
       onProgress({
-        currentPage: serverResult.numPages || 1,
-        totalPages: serverResult.numPages || 1,
-        percent: 100,
-        statusText: 'اكتمل استخراج المواد القانونية وتعبئة البيانات بنجاح',
+        currentPage: 1,
+        totalPages: 1,
+        percent: 50,
+        statusText: 'تشغيل محرك التعرف الضوئي المتقدم (OCR) لقراءة صفحات المستند الممسوحة ضوئياً...',
       });
     }
 
-    const localMeta = detectLawMetadataLocally(extractedText, file.name);
-
-    return {
-      text: extractedText || `[مستند PDF: ${cleanName}]\n\nتم تجهيز الملف بنجاح. يمكنك إدخال وتعديل مواده القانونية هنا.`,
-      numPages: serverResult.numPages || 1,
-      fileName: file.name,
-      fileSizeBytes: file.size,
-      fileSizeFormatted,
-      suggestedTitle: serverResult.title || serverResult.suggestedTitle || localMeta.title || cleanName,
-      suggestedCategory: serverResult.category || serverResult.suggestedCategory || localMeta.category || 'جمارك',
-      summary: serverResult.summary || localMeta.summary || '',
-      method: serverResult.method || 'gemini_ai',
-      model: serverResult.model,
-    };
-  } catch (err: any) {
-    if (progressInterval) clearInterval(progressInterval);
-    console.warn('[PDFParser] Server parsing error caught, using resilient local metadata:', err);
-    const localMeta = detectLawMetadataLocally('', file.name);
-    return {
-      text: `[مستند PDF: ${cleanName}]\n\nتم إرفاق المستند بنجاح بحجم (${fileSizeFormatted}). يمكنك كتابة وتعديل نصوص المواد القانونية هنا مباشرة ثم حفظها في قاعدة المعرفة.`,
-      numPages: 1,
-      fileName: file.name,
-      fileSizeBytes: file.size,
-      fileSizeFormatted,
-      suggestedTitle: localMeta.title || cleanName,
-      suggestedCategory: localMeta.category || 'جمارك',
-      summary: localMeta.summary || `تشريع تم إدراجه من ملف ${file.name}`,
-      method: 'resilient_fallback',
-    };
+    const { performScannedPdfOCR } = await import('./ocrParser');
+    const ocrResult = await performScannedPdfOCR(file, onProgress);
+    if (ocrResult && ocrResult.text && ocrResult.text.length > 50 && !ocrResult.text.startsWith('[مستند PDF:')) {
+      return ocrResult;
+    }
+  } catch (ocrErr) {
+    console.warn('[PDFParser] Scanned PDF OCR step note:', ocrErr);
   }
+
+  // Step 4: Final graceful metadata fallback
+  const localMeta = detectLawMetadataLocally('', file.name);
+  if (onProgress) {
+    onProgress({
+      currentPage: 1,
+      totalPages: 1,
+      percent: 100,
+      statusText: 'تم تجهيز الملف بنجاح، يمكنك إدخال وتعديل مواده القانونية هنا.',
+    });
+  }
+
+  return {
+    text: `[مستند PDF: ${cleanName}]\n\nتم إرفاق المستند بنجاح بحجم (${fileSizeFormatted}). يمكنك كتابة وتعديل نصوص المواد القانونية هنا مباشرة ثم حفظها في قاعدة المعرفة.`,
+    numPages: 1,
+    fileName: file.name,
+    fileSizeBytes: file.size,
+    fileSizeFormatted,
+    suggestedTitle: localMeta.title || cleanName,
+    suggestedCategory: localMeta.category || 'جمارك',
+    summary: localMeta.summary || `تشريع تم إدراجه من ملف ${file.name}`,
+    method: 'resilient_fallback',
+  };
 }

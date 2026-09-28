@@ -3342,7 +3342,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                   type="file"
                   id="pdf-file-hidden-input"
                   multiple
-                  accept=".pdf,application/pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.ppt,.pptx,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                  accept=".pdf,application/pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.ppt,.pptx,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,.png,.jpg,.jpeg,.webp,image/*,.txt"
                   onChange={handleFileInputChange}
                   className="hidden"
                 />
@@ -3433,17 +3433,17 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                       <UploadCloud className="w-8 h-8" />
                     </div>
                     <h4 className="text-base font-bold text-slate-900 mb-1.5">
-                      اسحب وأفلت ملفات (PDF، Word، PowerPoint) التشريعية هنا، أو انقر لاختيارها معاً
+                      اسحب وأفلت ملفات (PDF، Word، صور وسكانر OCR) التشريعية هنا، أو انقر لاختيارها معاً
                     </h4>
                     <p className="text-xs sm:text-sm text-slate-500 mb-4 max-w-lg mx-auto leading-relaxed">
-                      يدعم رفع عدة ملفات قوانين دفعة واحدة. سيقوم الذكاء الاصطناعي باستخراج نصوص المواد والقرارات وكتابة اسم كل ملف واقتراح تصنيفه، لتراجعه وتضيف كافة القوانين إلى قاعدة المعرفة بنقرة واحدة.
+                      يدعم رفع عدة ملفات قوانين دفعة واحدة مع تقنية التعرف الضوئي المتقدم (OCR) لتصحيح النصوص وقراءة المستندات الممسوحة ضوئياً وصور القرارات وتصنيف المواد وإضافتها إلى قاعدة المعرفة.
                     </p>
                     <div className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#12281e] text-white rounded-xl text-xs sm:text-sm font-bold shadow-sm hover:bg-[#1c3e2f] transition-all">
                       <FileUp className="w-4 h-4" />
                       استعراض واختيار عدة ملفات دفعة واحدة
                     </div>
                     <div className="mt-3 text-[11px] text-slate-400 font-medium">
-                      الصيغ المدعومة: PDF, DOCX, PPTX حتى 150 ميجابايت لكل ملف
+                      الصيغ المدعومة: PDF (رقمي وممسوح)، DOCX، PPTX، صور (PNG, JPG, WEBP) مع قراءة OCR
                     </div>
                   </div>
                 ) : (

@@ -3739,14 +3739,17 @@ app.delete('/api/admin/users/:id', async (req, res) => {
 // PDF Parsing & AI Legal Extraction endpoint powered directly by Gemini and local PDFParse engine
 app.post('/api/admin/parse-pdf', async (req, res) => {
   try {
-    const { base64Data, fileName } = req.body;
+    const { base64Data, fileName, mimeType: providedMime } = req.body;
     if (!base64Data) {
-      return res.status(400).json({ error: 'لم يتم إرسال بيانات ملف الـ PDF' });
+      return res.status(400).json({ error: 'لم يتم إرسال بيانات الملف' });
     }
+
+    const isImageFile = (providedMime && providedMime.startsWith('image/')) || (fileName && /\.(png|jpe?g|webp|bmp|tiff?)$/i.test(fileName));
+    const effectiveMimeType = isImageFile ? (providedMime || 'image/jpeg') : 'application/pdf';
 
     // Basic cleaning of file name for fallback title
     const cleanTitle = (fileName || 'تشريع فلسطيني')
-      .replace(/\.(pdf|docx|doc|pptx|ppt)$/i, '')
+      .replace(/\.(pdf|docx|doc|pptx|ppt|png|jpe?g|webp|bmp|tiff?)$/i, '')
       .replace(/[-_]+/g, ' ')
       .trim();
 
@@ -3864,7 +3867,7 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
             contentsPayload = [
               {
                 inlineData: {
-                  mimeType: 'application/pdf',
+                  mimeType: effectiveMimeType,
                   data: base64Data,
                 },
               },
@@ -4044,6 +4047,12 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
       model: 'local',
     });
   }
+});
+
+// Image Document OCR & Legal Extraction endpoint
+app.post('/api/admin/parse-image', async (req, res) => {
+  req.url = '/api/admin/parse-pdf';
+  return (app as any)._router.handle(req, res);
 });
 
 // Lightweight text structuring endpoint for client-extracted PDF text (bypasses Vercel payload limits)

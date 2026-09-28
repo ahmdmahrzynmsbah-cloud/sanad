@@ -633,7 +633,7 @@ export const SubmitLawModal: React.FC<SubmitLawModalProps> = ({
                   type="file"
                   ref={fileInputRef}
                   onChange={handleFileChange}
-                  accept=".pdf,.docx,.doc,.pptx,.ppt,.txt"
+                  accept=".pdf,.docx,.doc,.pptx,.ppt,.txt,.png,.jpg,.jpeg,.webp"
                   disabled={isLimitReached}
                   className="hidden"
                 />
@@ -653,12 +653,12 @@ export const SubmitLawModal: React.FC<SubmitLawModalProps> = ({
                     <UploadCloud className="w-6 h-6 text-[#12281e]" />
                   </div>
                   <h4 className="text-xs sm:text-sm font-bold text-gray-900">
-                    {selectedFile ? selectedFile.name : 'اضغط لاختيار أو إفلات ملف القانون (PDF / Word / TXT)'}
+                    {selectedFile ? selectedFile.name : 'اضغط لاختيار أو إفلات ملف القانون (PDF / Word / صور وسكانر OCR / TXT)'}
                   </h4>
                   <p className="text-[11px] text-gray-500 mt-1">
                     {fileMeta
                       ? `الحجم: ${fileMeta.fileSizeFormatted} • عدد الصفحات المقدر: ${fileMeta.pageCount}`
-                      : 'يدعم كافة صيغ المستندات الرسمية حتى 150 ميجابايت'}
+                      : 'يدعم PDF (رقمي وممسوح ضوئياً)، ومستندات Word، وصور الوثائق مع قراءة OCR ذكية'}
                   </p>
                 </div>
               </div>
