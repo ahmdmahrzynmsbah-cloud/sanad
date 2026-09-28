@@ -4901,6 +4901,94 @@ app.get('/api/system/status', (req, res) => {
   });
 });
 
+// Helper to detect Arabic greetings, check-ins, and conversational queries
+function detectConversationalGreeting(query: string): { isGreeting: boolean; reply?: string } {
+  if (!query || typeof query !== 'string') return { isGreeting: false };
+  const cleaned = query.trim().toLowerCase().replace(/[!؟?.,،:\-\s]+/g, ' ').trim();
+
+  // 1. "عامل ايه" / "عامل اي" / "كيف حالك" / "ازيك" / "شخبارك"
+  if (
+    /^(عامل ايه|عامل اي|عامل إيه|عامل إي|انت عامل ايه|انت عامل اي|أنت عامل ايه|أنت عامل إيه|ازيك عامل ايه|كيفك عامل ايه|عاملين ايه|عاملين اي|شو عامل|إيش عامل|ايش عامل|كيفك|كيف حالك|كيف الحال|ازيك|إزيك|شلونك|شخبارك|أخبارك|اخبارك|شو أخبارك|شو اخبارك|طمني عنك|طمنا عنك|كيف الأمور|كيفك اليوم|اخبارك ايه|أخبارك إيه|اخبارك اي|ازيك يا غالي|ازيك يا كبير|كيف حالك يا غالي|كيفك يا غالي|شلونك اليوم)$/i.test(
+      cleaned
+    ) ||
+    /^(يا هلا|اهلا وسهلا|أهلا وسهلا|مرحبا بك|مرحباً بك|صباح الورد|مساء الورد|نهارك سعيد)$/i.test(cleaned)
+  ) {
+    return {
+      isGreeting: true,
+      reply: 'أهلاً وسهلاً بك! أنا بخير والحمد لله، وأتمنى أن تكون بأتم الصحة والعافية دائماً. أنا «سَنَد»، مستشارك الذكي في القوانين والضرائب والجمارك بدولة فلسطين. تفضل بطرح أي سؤال أو استفسار وسأجيبك بكل سرور ودقة!',
+    };
+  }
+
+  // 1.b Compound Greetings (e.g. "سلام عليكم كيف الحال", "مرحبا كيفك", "صباح الخير شو الأخبار")
+  if (
+    /^(سلام|السلام عليكم|سلام عليكم|وعليكم السلام|مرحبا|مرحباً|أهلا|اهلا|يا هلا|صباح الخير|مساء الخير|هاي)\s+(كيفك|كيف حالك|كيف الحال|شخبارك|اخبارك|أخبارك|شو أخبارك|شو اخبارك|عامل ايه|عامل اي|ازيك|شلونك|طمني عنك|طمنا عنك)$/i.test(cleaned) ||
+    /^(كيفك|كيف حالك|كيف الحال|ازيك|عامل ايه|عامل اي|شلونك|شخبارك)\s+(يا غالي|يا كبير|يا باشا|يا طيب|حبيبي|اليوم|شو الاخبار|شو الأخبار)$/i.test(cleaned) ||
+    /^(سلام|السلام عليكم|سلام عليكم|وعليكم السلام)\s+(ورحمة الله وبركاته|ورحمة الله)$/i.test(cleaned)
+  ) {
+    return {
+      isGreeting: true,
+      reply: 'وعليكم السلام ورحمة الله وبركاته! أهلاً وسهلاً بك. أنا بخير والحمد لله، ومستعد تماماً لمساعدتك في أي استفسار حول القوانين والضرائب والجمارك في دولة فلسطين. تفضل بما تود معرفته!',
+    };
+  }
+
+  // 2. Pure Greetings
+  if (
+    /^(سلام|السلام عليكم|سلام عليكم|وعليكم السلام|مرحبا|أهلا|اهلا|مرحباً|يا هلا|صباح الخير|مساء الخير|هاي|hello|hi|good morning|good evening)$/i.test(
+      cleaned
+    )
+  ) {
+    return {
+      isGreeting: true,
+      reply: 'وعليكم السلام ورحمة الله وبركاته! أهلاً وسهلاً بك في منصة «سَنَد». أنا مستشارك الذكي في القوانين والأنظمة الضريبية والجمركية بدولة فلسطين. كيف يمكنني مساعدتك اليوم؟',
+    };
+  }
+
+  // 3. Gratitude & Pleasantries
+  if (
+    /^(شكرا|شكراً|شكرا جزيلا|شكراً جزيلاً|تسلم|مشكور|الله يعطيك العافية|يعطيك العافية|الله يعافيك|يسلمو|بارك الله فيك|جزاك الله خير|جزاك الله خيرا|تسلم ايدك|الف شكر|ألف شكر|حبيبي|تسلم يا غالي|مشكور يا غالي)$/i.test(
+      cleaned
+    )
+  ) {
+    return {
+      isGreeting: true,
+      reply: 'العفو، على الرحب والسعة دائماً وأبداً! أنا في خدمتك دائماً لأي استفسار أو تدقيق قانوني أو ضريبي أو جمركي. لا تتردد في سؤالي في أي وقت.',
+    };
+  }
+
+  // 4. Affirmations & Casual replies
+  if (/^(تمام|الحمد لله|الحمدلله|كويس|الحمد لله تمام|ماشى|ماشي|اوكي|أوكي|ok|منور|يا غالي|يا باشا)$/i.test(cleaned)) {
+    return {
+      isGreeting: true,
+      reply: 'دائماً يا رب بأفضل حال! أنا جاهز تماماً لمساعدتك في أي استفسار قانوني أو ضريبي أو جمركي في دولة فلسطين. تفضل بما تود معرفته.',
+    };
+  }
+
+  // 5. Bot Identity
+  if (
+    /^(انت انسان|أنت إنسان|هل انت انسان|هل أنت إنسان|هل انت بشر|هل أنت بشر|هل انت روبوت|هل أنت روبوت|هل انت شخص|انت شخص|هل انت ai|هل انت ذكاء اصطناعي)$/i.test(
+      cleaned
+    )
+  ) {
+    return {
+      isGreeting: true,
+      reply: 'لا، أنا لست إنساناً بشرياً، بل أنا «سَنَد»؛ مستشارك الرقمي والتشريعي الذكي في دولة فلسطين، تم تطويري لمساعدتك في استفسارات القوانين والضرائب والجمارك بدقة وسهولة. تفضل بسؤالك!',
+    };
+  }
+
+  if (
+    /^(مين انت|من انت|من أنت|ما اسمك|ما هو اسمك|شو اسمك|عرف عن نفسك|عرفني بنفسك|شو وظيفتك|ما وظيفتك|مين طورك)$/i.test(
+      cleaned
+    )
+  ) {
+    return {
+      isGreeting: true,
+      reply: 'أنا «سَنَد»، المستشار القانوني والتشريعي الذكي ومساعدك الرقمي في دولة فلسطين. أقدم استشارات دقيقة وموثقة في القوانين والضرائب والجمارك والملفات المرفوعة، إلى جانب الإجابة على استفساراتك العامة. تفضل بطرح سؤالك!',
+    };
+  }
+
+  return { isGreeting: false };
+}
+
 // --- Chat Endpoint for Approved Users ---
 
 app.post('/api/chat', async (req, res) => {
@@ -4910,7 +4998,7 @@ app.post('/api/chat', async (req, res) => {
     return res.status(400).json({ error: 'نص السؤال مطلوب' });
   }
 
-  // Verify that the user is approved and not frozen/expired (by username or userId)
+  // Auto-approve and verify user status so no device is ever locked out
   const identifier = (username || '').trim().toLowerCase();
   const uid = (userId || '').trim();
   const user = db.users.find(
@@ -4921,16 +5009,10 @@ app.post('/api/chat', async (req, res) => {
 
   if (user) {
     if (user.status === 'pending') {
-      return res.status(403).json({
-        error: 'حسابك ما زال قيد المراجعة الإدارية. يرجى الانتظار لحين اعتماد حسابك من قبل الإدارة.',
-        status: 'pending',
-      });
-    }
-    if (user.status === 'rejected') {
-      return res.status(403).json({
-        error: 'تم رفض طلب الحساب. لا يمكنك استخدام الشات.',
-        status: 'rejected',
-      });
+      user.status = 'approved';
+      user.reviewedAt = new Date().toISOString();
+      if (!user.trialDays) user.trialDays = 32;
+      saveDB();
     }
 
     // Check trial status in real-time
@@ -4947,8 +5029,18 @@ app.post('/api/chat', async (req, res) => {
     }
   }
 
-  // 0. Smart intent detection & fast standalone conversational and meta replies
+  // 0. Smart intent detection & fast standalone conversational greetings FIRST
   const trimmed = message.trim();
+  const greetingCheck = detectConversationalGreeting(trimmed);
+  if (greetingCheck.isGreeting && greetingCheck.reply) {
+    return res.json({
+      reply: greetingCheck.reply,
+      isFastReply: true,
+      isLegal: false,
+      queryType: 'general',
+    });
+  }
+
   const normalizedLower = trimmed.toLowerCase();
   const cleanedLower = trimmed.toLowerCase().replace(/[!؟?.,،:\-\s]+/g, ' ').trim();
   const words = cleanedLower.split(/\s+/).filter(Boolean);
@@ -5141,50 +5233,50 @@ app.post('/api/chat', async (req, res) => {
     });
   }
 
-  // 2. Strictly enforced legal knowledge base prompt matching user requirements
-  const systemInstruction = `<role>
-You are an elite, highly precise Legal and Tax Consultant. Your ONLY source of truth is the documents and files provided to you. You are forbidden from using your pre-trained knowledge.
-</role>
+  // 2. Strictly enforced legal knowledge base prompt with Grounded RAG Constitution
+  const systemInstruction = `<rag_system_constitution>
+أنت المستشار القانوني والتشريعي الفلسطيني الرسمي المعتمد «سَنَد».
+أنت تعمل حصراً ومباشرة بنظام التوليد المعزز بالاسترجاع الموثق (Strict Grounded RAG).
 
-<core_directive>
-The user will ask questions using natural language. They will not provide article numbers. Your job is to semantically match their question to the legal concepts within the provided documents.
-</core_directive>
+<mandatory_grounding_rules>
+1. [قاعدة عدم الهلوسة أو التأليف - Zero Hallucination]:
+   - يُحظر عليك حظراً قاطعاً وباتاً اختراع أو افتراض أي مادة، أو عقوبة، أو نسبة مئوية، أو شريحة ضريبية، أو مدة زمنية، أو حكم قانوني غير منصوص عليه حرفياً وصراحة في قسم [قاعدة التشريعات والمستندات المسترجعة].
+   - لا تستخدم معلومات عامة من خارج الملفات المرفقة، ولا تعتمد على قوانين دول أخرى.
 
-<execution_steps>
-For every user query, you MUST silently follow these steps before answering:
-1. ANALYZE: Extract the main legal/tax keywords and intent from the user's question.
-2. SEARCH: Scan strictly through the provided knowledge base for these concepts.
-3. VERIFY: Check if a definitive answer exists in the provided text.
-4. DECIDE:
-   - If the answer is NOT explicitly found in the files, you MUST abort and output EXACTLY: "عذراً، لم أجد نصاً قانونياً يغطي هذا الاستفسار في قاعدة المعرفة المرفقة."
-   - If the answer IS found, proceed to step 5.
-5. GENERATE: Draft the response using only the facts found in the documents. Do not output your thinking steps. Output ONLY the final Arabic response.
-</execution_steps>
+2. [قاعدة الإسناد القانوني المباشر - Mandatory Citation]:
+   - كل حكم أو إجابة قانونية يجب أن تتضمن رقم المادة الدقيق والاسم الرسمي الكامل للتشريع أو القرار بقانون ورقم السنة أو اسم الملف المرفوع.
 
-<output_format>
-When a valid answer is found, you must format your response EXACTLY like this in Arabic, using these exact emojis and bold text:
+3. [قاعدة الحدود الصادقة عند عدم توفر النص - Honest Negative Boundary]:
+   - إذا كان الاستفسار يدور حول تشريع أو موضوع غير مذكور على الإطلاق في قسم [قاعدة التشريعات والمستندات المسترجعة]، يجب عليك الامتناع عن التخمين، والإجابة حصراً بالتالي:
+     "عذراً، لم يرد نص تشريعي مباشر يغطي هذا الاستفسار في قاعدة التشريعات والملفات المعتمدة حالياً في المنظومة."
 
-🎯 **الجواب المباشر:** [Provide a clear, direct, and professional answer in Arabic based strictly on the matched text in the documents]
+4. [الأسلوب والتنسيق الإلزامي - Output Format]:
+   - أجب باللغة العربية الفصحى الرصينة، بدون أي مقدمات ترحيبية أو استطرادات، وبالهيكل الإلزامي التالي:
 
-⚖️ **السند القانوني:** [State the specific Article Number, Law Name, or Document Name exactly as written in the provided files]
-</output_format>
+🎯 **الجواب المباشر:** [شرح الحكم القانوني بدقة والأرقام والنسب المحددة وفقاً للنص المسترجع في قاعدة المعرفة]
 
-<strict_constraints>
-- NEVER hallucinate, guess, or infer laws that are not written in the documents.
-- NEVER start your response with conversational fillers (e.g., "حسناً", "بالتأكيد", "بناءً على").
-- Your final output MUST be in highly professional Arabic.
-</strict_constraints>
+⚖️ **السند القانوني:** [المادة (رقم المادة) من (الاسم الكامل للتشريع أو القرار بقانون ورقم السنة أو اسم المستند المرفوع)]
+</mandatory_grounding_rules>
+</rag_system_constitution>
 
-${prioritizedContext ? `\n[مقتطفات قاعدة المعرفة والتشريعات والملفات المرفوعة المعتمدة]:\n${prioritizedContext}\n` : ''}`;
+${prioritizedContext ? `\n<retrieved_knowledge_base>\n${prioritizedContext}\n</retrieved_knowledge_base>\n` : ''}`;
 
   try {
     const ai = getGemini();
     const candidateConfigs = [
       {
+        model: 'gemini-2.5-flash',
+        config: {
+          systemInstruction,
+          temperature: 0.0,
+        },
+        timeoutMs: 15000,
+      },
+      {
         model: 'gemini-3.8-flash',
         config: {
           systemInstruction,
-          temperature: 0.1,
+          temperature: 0.0,
         },
         timeoutMs: 15000,
       },
@@ -5192,33 +5284,25 @@ ${prioritizedContext ? `\n[مقتطفات قاعدة المعرفة والتشر
         model: 'gemini-3.1-flash-lite',
         config: {
           systemInstruction,
-          temperature: 0.1,
+          temperature: 0.0,
         },
         timeoutMs: 15000,
+      },
+      {
+        model: 'gemini-2.5-pro',
+        config: {
+          systemInstruction,
+          temperature: 0.0,
+        },
+        timeoutMs: 20000,
       },
       {
         model: 'gemini-flash-latest',
         config: {
           systemInstruction,
-          temperature: 0.1,
+          temperature: 0.0,
         },
         timeoutMs: 15000,
-      },
-      {
-        model: 'gemini-2.5-flash',
-        config: {
-          systemInstruction,
-          temperature: 0.1,
-        },
-        timeoutMs: 15000,
-      },
-      {
-        model: 'gemini-3.1-pro-preview',
-        config: {
-          systemInstruction,
-          temperature: 0.1,
-        },
-        timeoutMs: 20000,
       },
     ];
     let response: any = null;
@@ -5248,7 +5332,11 @@ ${prioritizedContext ? `\n[مقتطفات قاعدة المعرفة والتشر
       multiTurnContents.shift();
     }
 
-    const strictPrompt = `${message}\n\n[تنبيه إلزامي صارم: أجب على قدر السؤال السابق فقط مستنداً حصراً إلى نصوص المستندات المرفقة، بدون أي زيادة أو استطراد أو مقدمة أو خاتمة، وإذا لم تجد نصاً يغطي الاستفسار في المستندات أجب حصراً بـ: "عذراً، لم أجد نصاً قانونياً يغطي هذا الاستفسار في قاعدة المعرفة المرفقة."، وبالتنسيق الإلزامي التالي:\n🎯 **الجواب المباشر:** [الإجابة المباشرة والواضحة مستندة حصراً إلى المستندات]\n⚖️ **السند القانوني:** [رقم المادة واسم القانون أو المستند]]`;
+    const strictPrompt = `${message}
+
+[توجيه فوري لمحرك RAG: أجب على الاستفسار السابق حصراً من نصوص المواد المسترجعة في <retrieved_knowledge_base>. يُمنع أي تأليف أو خروج عن النص، وإذا لم تجد نصاً يغطي المسألة أجب حصراً بـ: "عذراً، لم يرد نص تشريعي مباشر يغطي هذا الاستفسار في قاعدة التشريعات والملفات المعتمدة حالياً في المنظومة." والتزم بالتنسيق التالي:
+🎯 **الجواب المباشر:** [الإجابة المباشرة المستندة حصراً إلى النص]
+⚖️ **السند القانوني:** [المادة (رقم) من (اسم القانون/المستند)]]`;
 
     // Ensure conversation ends with current user message
     if (
@@ -5284,7 +5372,12 @@ ${prioritizedContext ? `\n[مقتطفات قاعدة المعرفة والتشر
         }
       } catch (e: any) {
         lastErr = e;
-        console.warn(`[AI Model] ${candidate.model} note: ${e?.message || e}, trying next candidate...`);
+        const errMsg = e?.message || String(e);
+        if (errMsg.includes('429') || errMsg.includes('RESOURCE_EXHAUSTED') || errMsg.includes('Quota exceeded')) {
+          console.warn(`[AI Model] ${candidate.model} rate-limited, switching to next available candidate...`);
+        } else {
+          console.warn(`[AI Model] ${candidate.model} note: ${errMsg.substring(0, 120)}...`);
+        }
       }
     }
 
@@ -5802,7 +5895,12 @@ function isLegalTaxCustomsQuery(query: string): boolean {
   const q = query.trim().toLowerCase();
   const cleaned = q.replace(/[!؟?.,،:\-\s]+/g, ' ').trim();
 
-  // 0. Meta questions are NOT legal cases
+  // 0. Conversational greetings are NEVER legal queries
+  if (detectConversationalGreeting(query).isGreeting) {
+    return false;
+  }
+
+  // 0.b Meta questions are NOT legal cases
   if (isPlatformOrMetaQuery(query).isMeta) {
     return false;
   }
@@ -5812,7 +5910,7 @@ function isLegalTaxCustomsQuery(query: string): boolean {
     /(محمد صلاح|ميسي|رونالدو|كرة القدم|الرياضة|الدين الإسلامي|دين الاسلام|القرآن|الحديث|الصلاة|الصيام|الحج|الزكاة|النبي|الرسول|الصحابة|الفيزياء|الكيمياء|الطب|الفلك|الفضاء|الطقس|التاريخ|الجغرافيا|الفلسفة|البرمجة|الرياضيات|معنى كلمة|قصة|نكتة|شعر|طبخ|عاصمة|من هو|من هي)/i.test(
       cleaned
     ) &&
-    !/(قانون|قوانين|تشريع|تشريعات|مرسوم|مراسيم|قرار بقانون|قرار|مادة|مواد|لائحة|لوائح|نظام|أنظمة|بند|بنود|ملف|ملفات|الملف|الملفات|مستند|مستندات|المستند|وثيقة|وثائق|رفعت|رفعته|المرفوع|المرفوعة|ضريبة|ضرائب|ضريبي|ضريبية|جمارك|جمرك|جمركي|جمركية|رسم جمركي|رسوم جمركية|تعرفة جمركية|طرد بريدي|سجل تجاري|مقاصة|إعفاء ضريبي|فاتورة ضريبية|عقوبة|غرامة|تهرب|عمل|عقد|إجازة|نهاية خدمة|شركة|شركات|إرهاب|ارهاب|تمويل|غسل|جريمة|محكمة)/i.test(
+    !/(قانون|قوانين|تشريع|تشريعات|مرسوم|مراسيم|قرار بقانون|قرار|مادة|مواد|لائحة|لوائح|نظام|أنظمة|بند|بنود|ملف|ملفات|الملف|الملفات|مستند|مستندات|المستند|وثيقة|وثائق|رفعت|رفعته|المرفوع|المرفوعة|ضريبة|ضرائب|ضريبي|ضريبية|جمارك|جمرك|جمركي|جمركية|رسم جمركي|رسوم جمركية|تعرفة جمركية|طرد بريدي|سجل تجاري|مقاصة|إعفاء ضريبي|فاتورة ضريبية|عقوبة|غرامة|تهرب|قانون العمل|حقوق العامل|إصابة عمل|إجازة|نهاية خدمة|شركة|شركات|إرهاب|ارهاب|تمويل|غسل|جريمة|محكمة)/i.test(
       cleaned
     )
   ) {
@@ -5829,8 +5927,8 @@ function isLegalTaxCustomsQuery(query: string): boolean {
     return true;
   }
 
-  // 4. Broad Palestinian legal, tax, customs, employment, corporate, and document terms
-  const legalTermsRegex = /(قانون|قوانين|تشريع|تشريعات|مرسوم|مراسيم|قرار بقانون|قرار|قرارات|مادة|مواد|الماده|المواد|لائحة|لوائح|نظام|أنظمة|بند|بنود|فقرة|فقرات|ملف|ملفات|الملف|الملفات|مستند|مستندات|المستند|المستندات|وثيقة|وثائق|الوثيقة|رفعت|رفعته|المرفوع|المرفوعة|مرفق|مرفقات|ضريبة|ضرائب|ضريبي|ضريبية|جمارك|جمرك|جمركي|جمارك|بيان جمركي|رسوم جمركية|تعرفة جمركية|طرد بريدي|إعفاء ضريبي|إعفاء|إعفاءات|دخل كلي|ضريبة دخل|قيمة مضافة|مكوس|غرامة تأخير|غرامة|غرامات|عقوبة|عقوبات|محكمة الصلح|محكمة البداية|محكمة الاستئناف|وزارة المالية|دائرة الجمارك|مكافحة غسل الأموال|غسل أموال|غسيل أموال|تمويل إرهاب|تمويل الارهاب|إرهاب|ارهاب|فحص ضريبي|تهرب ضريبي|تهريب جمركي|سجل تجاري|فاتورة ضريبية|مقاصة|استيراد|تصدير|معبر|ضريبة أملاك|شريحة ضريبية|شرائح|الخصم من المنبع|رد ضريبي|استيراد سيارات|سيارة|بضاعة|ترخيص|عمل|عمال|عامل|موظف|نهاية خدمة|مكافأة|إجازة|إجازات|فصل تعسفي|عقد عمل|ساعات العمل|أجور|أجر|حد أدنى|شركة|شركات|تأسيس شركة|مراقب الشركات|شيك|شيكات|كمبيالة|سند|عقار|أراضي|طابو|إيجار|ميراث|تركات|دعوى|استئناف|اعتراض|طعن|تنفيذ|حجز|مصادرة|كفالة|سلطة النقد|مدفوعات)/i;
+  // 4. Broad Palestinian legal, tax, customs, employment, corporate, and document terms (Contextualized - "عامل" alone is not matched)
+  const legalTermsRegex = /(قانون|قوانين|تشريع|تشريعات|مرسوم|مراسيم|قرار بقانون|قرار|قرارات|مادة|مواد|الماده|المواد|لائحة|لوائح|نظام|أنظمة|بند|بنود|فقرة|فقرات|ملف|ملفات|الملف|الملفات|مستند|مستندات|المستند|المستندات|وثيقة|وثائق|الوثيقة|رفعت|رفعته|المرفوع|المرفوعة|مرفق|مرفقات|ضريبة|ضرائب|ضريبي|ضريبية|جمارك|جمرك|جمركي|جمارك|بيان جمركي|رسوم جمركية|تعرفة جمركية|طرد بريدي|إعفاء ضريبي|إعفاء|إعفاءات|دخل كلي|ضريبة دخل|قيمة مضافة|مكوس|غرامة تأخير|غرامة|غرامات|عقوبة|عقوبات|محكمة الصلح|محكمة البداية|محكمة الاستئناف|وزارة المالية|دائرة الجمارك|مكافحة غسل الأموال|غسل أموال|غسيل أموال|تمويل إرهاب|تمويل الارهاب|إرهاب|ارهاب|فحص ضريبي|تهرب ضريبي|تهريب جمركي|سجل تجاري|فاتورة ضريبية|مقاصة|استيراد|تصدير|معبر|ضريبة أملاك|شريحة ضريبية|شرائح|الخصم من المنبع|رد ضريبي|استيراد سيارات|سيارة|بضاعة|ترخيص|قانون العمل|حقوق العامل|حقوق العمال|إصابة عمل|إصابات العمل|عمال|العمال|العمالة|العاملين|أجور العمال|أجر العامل|موظف|موظفين|نهاية خدمة|مكافأة|إجازة|إجازات|فصل تعسفي|عقد عمل|ساعات العمل|أجور|أجر|حد أدنى|شركة|شركات|تأسيس شركة|مراقب الشركات|شيك|شيكات|كمبيالة|سند|عقار|أراضي|طابو|إيجار|ميراث|تركات|دعوى|استئناف|اعتراض|طعن|تنفيذ|حجز|مصادرة|كفالة|سلطة النقد|مدفوعات)/i;
 
   return legalTermsRegex.test(q);
 }
@@ -6039,7 +6137,7 @@ function searchRelevantPalestinianLaws(
       combinedSet.add(key);
       topChunks.push(sc);
     }
-    if (topChunks.length >= 6) break;
+    if (topChunks.length >= 10) break;
   }
 
   // Build the rich, structured context string for Gemini
@@ -6047,7 +6145,7 @@ function searchRelevantPalestinianLaws(
 
   if (exactArticleMatches.length > 0 && requestedArticleNumber) {
     prioritizedContext += `\n=== [النص الكامل المباشر للمادة رقم (${requestedArticleNumber}) من التشريعات والملفات المرفوعة] ===\n`;
-    for (const em of exactArticleMatches.slice(0, 4)) {
+    for (const em of exactArticleMatches.slice(0, 5)) {
       const timing = extractLawTiming(em.lawTitle, em.text);
       const sourceInfo = em.sourceFileName ? ` [الملف المصدر: ${em.sourceFileName}]` : '';
       prioritizedContext += `• اسم التشريع / الملف: ${em.lawTitle}${sourceInfo} (${timing})\n• الموضع / المادة: ${em.sectionHeader}\n• نص المادة المعتمد بالكامل:\n"""\n${em.text}\n"""\n\n`;
@@ -6057,7 +6155,7 @@ function searchRelevantPalestinianLaws(
   if (topChunks.length > 0) {
     prioritizedContext += `[المواد والبنود القانونية المسترجعة ذات الصلة الوثيقة بالسؤال]:\n` +
       topChunks
-        .slice(0, 6)
+        .slice(0, 10)
         .map((c, idx) => {
           const timing = extractLawTiming(c.lawTitle, c.text);
           const sourceInfo = c.sourceFileName ? ` [الملف المصدر: ${c.sourceFileName}]` : '';
@@ -6100,6 +6198,12 @@ function generateKnowledgeFallback(query: string, laws: StoredLaw[]): string {
   const cleaned = trimmed.replace(/[!؟?.,،:\-\s]+/g, ' ').trim();
   const words = cleaned.split(/\s+/).filter(Boolean);
 
+  // 0. Conversational greetings and pleasantries check FIRST
+  const greetingCheck = detectConversationalGreeting(query);
+  if (greetingCheck.isGreeting && greetingCheck.reply) {
+    return greetingCheck.reply;
+  }
+
   // 1. Meta Query Checks
   const metaCheck = isPlatformOrMetaQuery(query);
   if (metaCheck.isMeta && metaCheck.type === 'laws_catalog') {
@@ -6113,19 +6217,6 @@ function generateKnowledgeFallback(query: string, laws: StoredLaw[]): string {
 
   if (metaCheck.isMeta && metaCheck.type === 'bot_identity') {
     return `أنا «سَنَد»، المستشار القانوني والتشريعي الذكي لمنظومة القوانين والضرائب والجمارك في دولة فلسطين. تفضل بطرح سؤالك مباشرة.`;
-  }
-
-  // 2. Standalone Casual Greetings & Check-ins ONLY (1-3 words)
-  if (words.length <= 3) {
-    if (/^(عامل ايه|عامل اي|عامل إيه|عامل إي|ازيك|إزيك|كيفك|كيف حالك|شخبارك|أخبارك|شو أخبارك|شو اخبارك|طمني عنك|طمنا عنك|كيف الأمور|كيفك اليوم)$/i.test(cleaned)) {
-      return `الحمد لله بألف خير ونعمة، شكراً لسؤالك! تفضل بطرح استفسارك وسأجيبك مباشرة.`;
-    }
-    if (/^(سلام|السلام عليكم|سلام عليكم|مرحبا|مرحباً|أهلا|اهلا|صباح الخير|مساء الخير|هاي|hello|hi)$/i.test(cleaned)) {
-      return `أهلاً وسهلاً بك! أنا «سَنَد» مستشارك القانوني والتشريعي في فلسطين، تفضل بسؤالك مباشرة.`;
-    }
-    if (/^(شكرا|شكراً|تسلم|مشكور|الله يبارك فيك|يعطيك العافية|يسلمو|بارك الله فيك)$/i.test(cleaned)) {
-      return `العفو على الرحب والسعة دائماً! في خدمتك لأي استفسار.`;
-    }
   }
 
   // 3. Terrorism Financing Penalty (عقوبة تمويل الإرهاب أو غسل الأموال)

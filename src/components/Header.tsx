@@ -185,20 +185,18 @@ export const Header: React.FC<HeaderProps> = ({
               <span>الرئيسية</span>
             </button>
 
-            {currentUser && (
-              <button
-                id="header-nav-chat-btn"
-                onClick={() => handleNav('chat')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
-                  activeView === 'chat'
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'bg-white/5 text-slate-200 hover:bg-white/10 hover:text-white border border-white/10'
-                }`}
-              >
-                <MessageSquare className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span>المستشار الذكي</span>
-              </button>
-            )}
+            <button
+              id="header-nav-chat-btn"
+              onClick={() => handleNav('chat')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                activeView === 'chat'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-white/5 text-slate-200 hover:bg-white/10 hover:text-white border border-white/10'
+              }`}
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>المستشار الذكي</span>
+            </button>
 
             <button
               id="header-nav-plans-btn"
@@ -553,22 +551,20 @@ export const Header: React.FC<HeaderProps> = ({
               <ChevronLeft className="w-4 h-4 text-slate-400" />
             </button>
 
-            {currentUser && (
-              <button
-                onClick={() => handleNav('chat')}
-                className={`w-full p-3 rounded-xl text-xs font-bold flex items-center justify-between transition-all text-right cursor-pointer ${
-                  activeView === 'chat'
-                    ? 'bg-emerald-600 text-white shadow-md'
-                    : 'bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-200 border border-emerald-500/30'
-                }`}
-              >
-                <span className="flex items-center gap-2.5">
-                  <MessageSquare className="w-4 h-4 text-[#d4af37]" />
-                  <span>المستشار الذكي (الشات المباشر)</span>
-                </span>
-                <ChevronLeft className="w-4 h-4 text-[#d4af37]" />
-              </button>
-            )}
+            <button
+              onClick={() => handleNav('chat')}
+              className={`w-full p-3 rounded-xl text-xs font-bold flex items-center justify-between transition-all text-right cursor-pointer ${
+                activeView === 'chat'
+                  ? 'bg-emerald-600 text-white shadow-md'
+                  : 'bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-200 border border-emerald-500/30'
+              }`}
+            >
+              <span className="flex items-center gap-2.5">
+                <MessageSquare className="w-4 h-4 text-[#d4af37]" />
+                <span>المستشار الذكي (الشات المباشر)</span>
+              </span>
+              <ChevronLeft className="w-4 h-4 text-[#d4af37]" />
+            </button>
 
             <button
               onClick={() => handleNav('supervisors')}
