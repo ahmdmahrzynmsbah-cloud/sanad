@@ -153,7 +153,7 @@ export async function performTesseractOcrOnImage(
   }
 
   updateProgress(100, 'تمت معالجة المستند');
-  return `[مستند مصور: ${fileName}]\n(تعذر استخراج نصوص واضحة من الصورة، يرجى التأكد من وضوح الخط والإضاءة).`;
+  return '';
 }
 
 /**
