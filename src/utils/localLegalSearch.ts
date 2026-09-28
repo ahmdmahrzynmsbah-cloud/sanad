@@ -678,23 +678,47 @@ export function generateClientKnowledgeFallback(query: string, laws: Law[]): str
 ⚖️ **السند القانوني:** تعليمات الإدارة العامة للجمارك والمكوس بوزارة المالية الفلسطينية وقانون الجمارك والمكوس رقم (1) لسنة 1962م.`;
   }
 
-  // 9. Specific Article Requested across laws
+  // 9. Specific Article Requested across laws (e.g. "المادة 18" or "قولي المادة 18")
   const requestedArticle = extractRequestedArticleNumber(query);
   if (requestedArticle) {
-    const matchedChunks: LegalChunk[] = [];
+    const matchedArticles: { lawTitle: string; sectionHeader: string; text: string; sourceFileName?: string }[] = [];
     for (const law of effectiveLaws) {
       const chunks = chunkLawContent(law);
       for (const ch of chunks) {
-        if (ch.articleNumber === requestedArticle || ch.sectionHeader.includes(requestedArticle)) {
-          matchedChunks.push(ch);
+        const normHeader = normalizeArabic(ch.sectionHeader);
+        const normText = normalizeArabic(ch.text);
+        if (
+          ch.articleNumber === requestedArticle ||
+          normHeader.includes(`مادة ${requestedArticle}`) ||
+          normHeader.includes(`المادة ${requestedArticle}`) ||
+          new RegExp(`(?:المادة|مادة|الماده)\\s*(?:رقم)?\\s*0*${requestedArticle}\\b`, 'i').test(ch.sectionHeader) ||
+          new RegExp(`(?:المادة|مادة|الماده)\\s*(?:رقم)?\\s*0*${requestedArticle}\\b`, 'i').test(ch.text.substring(0, 300))
+        ) {
+          matchedArticles.push({
+            lawTitle: law.title,
+            sectionHeader: ch.sectionHeader,
+            text: ch.text,
+            sourceFileName: law.sourceFileName,
+          });
         }
       }
     }
-    if (matchedChunks.length > 0) {
-      const best = matchedChunks[0];
-      const timing = extractLawTiming(best.lawTitle, best.text);
-      return `🎯 **الجواب المباشر:** ${best.text.trim()}
-⚖️ **السند القانوني:** المادة (${requestedArticle}) من ${best.lawTitle} (${timing}) - ${best.sectionHeader}`;
+
+    if (matchedArticles.length > 0) {
+      if (matchedArticles.length === 1) {
+        const m = matchedArticles[0];
+        const timing = extractLawTiming(m.lawTitle, m.text);
+        const sourceInfo = m.sourceFileName ? ` [الملف: ${m.sourceFileName}]` : '';
+        return `🎯 **الجواب المباشر:**\n${m.text.trim()}\n\n⚖️ **السند القانوني:** المادة (${requestedArticle}) من ${m.lawTitle}${sourceInfo} (${timing}) - ${m.sectionHeader}`;
+      } else {
+        let reply = `🎯 **الجواب المباشر: تم العثور على المادة (${requestedArticle}) في عدة تشريعات معتمدة:**\n\n`;
+        for (let idx = 0; idx < Math.min(matchedArticles.length, 5); idx++) {
+          const m = matchedArticles[idx];
+          const timing = extractLawTiming(m.lawTitle, m.text);
+          reply += `### ${idx + 1}. ${m.lawTitle} (${timing})\n**الموضع:** ${m.sectionHeader}\n> ${m.text.trim().substring(0, 450)}...\n\n`;
+        }
+        return reply.trim();
+      }
     }
   }
 
