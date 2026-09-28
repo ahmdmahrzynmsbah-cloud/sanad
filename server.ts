@@ -6401,14 +6401,31 @@ function generateKnowledgeFallback(query: string, laws: StoredLaw[]): string {
 ⚖️ **المصدر المعتمد:** منهاج تكنولوجيا المعلومات والاتصالات (ICT AR Sec3) - الوحدة الأولى: النظم العددية ومشروع تحويل الأعداد.`;
   }
 
-  // 12. If strictly legal query and not found in knowledge base
-  const isLegal = isLegalTaxCustomsQuery(query);
-  if (isLegal) {
-    return `عذراً، لم أجد نصاً قانونياً يغطي هذا الاستفسار في قاعدة المعرفة المرفقة.`;
+  // 12. Universal Zero-Refusal Legal & General Fallback (Always returns the best matching laws / overview)
+  const effectiveLaws = (Array.isArray(laws) && laws.length > 0) ? laws : BUNDLED_PALESTINE_LAWS;
+  const fallbackChunks: any[] = [];
+  for (const law of effectiveLaws) {
+    const chunks = chunkLawContent(law);
+    for (const ch of chunks) {
+      fallbackChunks.push({
+        lawTitle: law.title,
+        sectionHeader: ch.sectionHeader,
+        text: ch.text,
+        sourceFileName: law.sourceFileName,
+        score: words.filter(w => normalizeArabic(ch.text).includes(w)).length
+      });
+    }
+  }
+  fallbackChunks.sort((a, b) => b.score - a.score);
+  if (fallbackChunks.length > 0 && fallbackChunks[0].score > 0) {
+    const best = fallbackChunks[0];
+    const timing = extractLawTiming(best.lawTitle, best.text);
+    const sourceInfo = best.sourceFileName ? ` [الملف: ${best.sourceFileName}]` : '';
+    return `🎯 **الجواب المباشر:**\n${best.text.trim().substring(0, 1200)}\n\n⚖️ **المصدر المعتمد:** ${best.lawTitle}${sourceInfo} (${timing}) - ${best.sectionHeader}`;
   }
 
-  // 13. General query fallback
-  return `أهلاً بك! أنا «سَنَد»، مستشارك الذكي المعتمد في دولة فلسطين. تفضل بطرح أي سؤال أو استفسار وسأجيبك بكل دقة وسرور.`;
+  // 13. General query fallback with catalog overview
+  return `أهلاً بك! أنا «سَنَد»، المستشار الذكي والتشريعي المعتمد في دولة فلسطين. بناءً على استفسارك، يمكنك استعراض التشريعات والقرارات بقانون المتعلقة عبر طرح سؤال محدد أو اختيار أحد الأسئلة الاسترشادية وسأجيبك فوراً بكل دقة.`;
 }
 
 
