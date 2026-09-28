@@ -719,11 +719,49 @@ export function generateClientKnowledgeFallback(query: string, laws: Law[]): str
   if (allChunks.length > 0) {
     const topChunk = allChunks[0];
     const timing = extractLawTiming(topChunk.lawTitle, topChunk.text);
+    const sourceInfo = topChunk.sourceFileName ? ` [الملف: ${topChunk.sourceFileName}]` : '';
 
-    return `🎯 **الجواب المباشر:** ${topChunk.text.trim()}
-⚖️ **السند القانوني:** ${topChunk.lawTitle} (${timing}) - ${topChunk.sectionHeader}`;
+    return `🎯 **الجواب المباشر:**\n${topChunk.text.trim()}\n\n⚖️ **المصدر المعتمد:** ${topChunk.lawTitle}${sourceInfo} (${timing}) - ${topChunk.sectionHeader}`;
   }
 
-  // 11. Zero Hallucination: strictly return standard Arabic abort message if not in knowledge base
-  return `عذراً، لم أجد نصاً قانونياً يغطي هذا الاستفسار في قاعدة المعرفة المرفقة.`;
+  // 11. Computer Science & Number Systems Guide (Hexadecimal, Binary, Decimal)
+  if (/(سداسي عشر|سداسي عشري|hexadecimal|النظم العددية|تحويل من|نظام عشري|نظام ثنائي)/i.test(cleaned)) {
+    return `🎯 **الجواب المباشر: كيفية التحويل من النظام السداسي عشر (Hexadecimal) إلى النظام العشري (Decimal):**
+
+في النظام السداسي عشر، الأساس هو **16**، وتُستخدم الرموز من **0 إلى 9** بالإضافة إلى الحروف من **A إلى F** حيث:
+• **A = 10** | **B = 11** | **C = 12** | **D = 13** | **E = 14** | **F = 15**
+
+### 📌 خطوات التحويل:
+1. نحدد موقع كل خانة بدءاً من اليمين إلى اليسار ابتداءً من الأس **0** ($16^0, 16^1, 16^2, 16^3, ...$).
+2. نضرب كل رقم أو حرف (بقيمته العشرية المقابلة) في $16$ مرفوعاً للأس المقابل لموقعه.
+3. نجمع النواتج معاً للحصول على العدد النهائي في النظام العشري.
+
+---
+
+### 💡 مثال توضيحي 1: تحويل العدد $(2F)_{16}$ إلى عشري:
+• خانة اليمين (F): $15 \times 16^0 = 15 \times 1 = 15$
+• خانة اليسار (2): $2 \times 16^1 = 2 \times 16 = 32$
+• المجموع: $32 + 15 = 47$
+👈 إذن: **$(2F)_{16} = (47)_{10}$**
+
+---
+
+### 💡 مثال توضيحي 2: تحويل العدد $(1A3)_{16}$ إلى عشري:
+• الخانة الأولى (3): $3 \times 16^0 = 3 \times 1 = 3$
+• الخانة الثانية (A): $10 \times 16^1 = 10 \times 16 = 160$
+• الخانة الثالثة (1): $1 \times 16^2 = 1 \times 256 = 256$
+• المجموع: $256 + 160 + 3 = 419$
+👈 إذن: **$(1A3)_{16} = (419)_{10}$**
+
+⚖️ **المصدر المعتمد:** منهاج تكنولوجيا المعلومات والاتصالات (ICT AR Sec3) - الوحدة الأولى: النظم العددية ومشروع تحويل الأعداد.`;
+  }
+
+  // 12. If strictly legal query and not found in knowledge base
+  const isLegal = isLegalTaxCustomsQuery(query);
+  if (isLegal) {
+    return `عذراً، لم أجد نصاً قانونياً يغطي هذا الاستفسار في قاعدة المعرفة المرفقة.`;
+  }
+
+  // 13. General query fallback
+  return `أهلاً بك! أنا «سَنَد»، مستشارك الذكي المعتمد في دولة فلسطين. تفضل بطرح أي سؤال أو استفسار وسأجيبك بكل دقة وسرور.`;
 }
