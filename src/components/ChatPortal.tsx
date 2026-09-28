@@ -442,14 +442,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
       let botResponseText = '';
       let isQueryLegal = isLegalTaxCustomsQuery(query);
       let resQueryType: 'legal' | 'general' = isQueryLegal ? 'legal' : 'general';
-      let resSuggestedDetails: string[] | undefined = isQueryLegal
-        ? [
-            'صفة المكلف: فرد طبيعي (موظف/مهني)',
-            'صفة المكلف: شركة تجارية/مساهمة',
-            'سنة المعاملة: 2024م',
-            'شحنة أو طرد بريدي شخصي',
-          ]
-        : undefined;
+      let resSuggestedDetails: string[] | undefined = undefined;
       let botCitations: CitationSource[] | undefined = undefined;
 
       if (res.ok) {
@@ -782,48 +775,77 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
                     </div>
                   </div>
                 ) : (
-                  <div className="markdown-body space-y-2 text-zinc-700">
+                  <div className="markdown-body space-y-2.5 text-zinc-800">
                     <Markdown
                       components={{
                         h1: ({ children }) => (
-                          <h3 className="text-sm sm:text-base font-bold text-zinc-900 mt-2 mb-1 border-b border-zinc-100 pb-1">
-                            {children}
-                          </h3>
+                          <div className="bg-gradient-to-l from-emerald-950/5 via-amber-500/10 to-transparent border-r-4 border-emerald-700 pr-3 py-1.5 my-2.5 rounded-l-xl">
+                            <h3 className="text-sm sm:text-base font-black text-emerald-950 tracking-tight flex items-center gap-1.5">
+                              {children}
+                            </h3>
+                          </div>
                         ),
                         h2: ({ children }) => (
-                          <h4 className="text-xs sm:text-sm font-bold text-zinc-800 mt-2 mb-1">
-                            {children}
-                          </h4>
+                          <div className="bg-gradient-to-l from-emerald-900/5 to-transparent border-r-3 border-amber-600 pr-2.5 py-1 my-2 rounded-l-lg">
+                            <h4 className="text-xs sm:text-sm font-black text-emerald-900">
+                              {children}
+                            </h4>
+                          </div>
                         ),
                         h3: ({ children }) => (
-                          <h5 className="text-xs font-bold text-zinc-800 mt-1.5 mb-1">
+                          <h5 className="text-xs sm:text-sm font-bold text-emerald-900 mt-2 mb-1 flex items-center gap-1 border-b border-emerald-100 pb-0.5">
                             {children}
                           </h5>
                         ),
                         p: ({ children }) => (
-                          <p className="my-1.5 leading-relaxed text-[13px] sm:text-sm text-zinc-700">{children}</p>
+                          <p className="my-1.5 leading-relaxed text-[13px] sm:text-sm text-zinc-800 font-normal">{children}</p>
                         ),
                         ul: ({ children }) => (
-                          <ul className="list-disc list-inside space-y-1 my-2 pr-1 text-zinc-700">
+                          <ul className="space-y-1.5 my-2 pr-1.5 text-zinc-800 list-none">
                             {children}
                           </ul>
                         ),
                         ol: ({ children }) => (
-                          <ol className="list-decimal list-inside space-y-1.5 my-2 pr-1 text-zinc-800 font-medium">
+                          <ol className="list-decimal list-inside space-y-1.5 my-2 pr-2 text-zinc-900 font-medium">
                             {children}
                           </ol>
                         ),
-                        li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-                        strong: ({ children }) => (
-                          <strong className="font-bold text-emerald-800 bg-emerald-50 px-1 rounded">
-                            {children}
-                          </strong>
+                        li: ({ children }) => (
+                          <li className="leading-relaxed flex items-start gap-1.5 text-[13px] sm:text-sm">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 mt-2 shrink-0"></span>
+                            <div className="flex-1">{children}</div>
+                          </li>
                         ),
+                        strong: ({ children }) => {
+                          const textStr = String(children);
+                          const isNumericOrBadge = /[\d%]|شيكل|دينار|سنة|سنوات|المادة|قرار|قانون|سجن|حبس|غرامة|معفاة|إعفاء/i.test(textStr);
+                          if (isNumericOrBadge) {
+                            return (
+                              <strong className="font-bold text-amber-950 bg-amber-100/80 border border-amber-300/70 px-1.5 py-0.5 rounded-md mx-0.5 inline-block shadow-2xs">
+                                {children}
+                              </strong>
+                            );
+                          }
+                          return (
+                            <strong className="font-bold text-emerald-950 bg-emerald-100/70 border border-emerald-200/70 px-1 py-0.5 rounded mx-0.5 inline-block">
+                              {children}
+                            </strong>
+                          );
+                        },
                         blockquote: ({ children }) => (
-                          <blockquote className="border-r-4 border-emerald-600 pr-3 my-2 text-zinc-500 italic bg-zinc-50 py-1 rounded-l">
+                          <blockquote className="border-r-4 border-[#d4af37] pr-3.5 my-2.5 text-zinc-800 bg-gradient-to-l from-amber-500/10 to-transparent py-2 rounded-l-xl shadow-2xs font-medium text-xs sm:text-sm">
                             {children}
                           </blockquote>
                         ),
+                        hr: () => <hr className="border-t border-emerald-200/70 my-3" />,
+                        table: ({ children }) => (
+                          <div className="overflow-x-auto my-3 rounded-xl border border-zinc-200 shadow-2xs">
+                            <table className="w-full text-right text-xs border-collapse">{children}</table>
+                          </div>
+                        ),
+                        thead: ({ children }) => <thead className="bg-emerald-900 text-white font-bold">{children}</thead>,
+                        th: ({ children }) => <th className="p-2 border-b border-emerald-800">{children}</th>,
+                        td: ({ children }) => <td className="p-2 border-b border-zinc-100 bg-white even:bg-zinc-50">{children}</td>,
                       }}
                     >
                       {msg.text}

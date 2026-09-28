@@ -75,15 +75,19 @@ export function initGlobalSync() {
     window.dispatchEvent(new CustomEvent('sync_update', { detail: { collection, timestamp: Date.now() } }));
   });
 
-  // 2. Server-Sent Events (SSE) stream listener with automatic infinite reconnect
+  // 2. Server-Sent Events (SSE) stream listener with safe reconnection
+  let sseErrorCount = 0;
   function connectSSE() {
+    // If SSE has failed multiple times (common on proxies/mobile/serverless), let polling handle it
+    if (sseErrorCount >= 3) return;
+
     try {
       const appUrl = import.meta.env.VITE_APP_URL || '';
       const url = `${appUrl.replace(/\/$/, '')}/api/sync`;
       activeEventSource = new EventSource(url);
 
       activeEventSource.onopen = () => {
-        // Connected to realtime SSE stream
+        sseErrorCount = 0;
       };
 
       activeEventSource.onmessage = (event) => {
@@ -106,27 +110,24 @@ export function initGlobalSync() {
       activeEventSource.onerror = () => {
         try { activeEventSource?.close(); } catch {}
         activeEventSource = null;
-        if (!reconnectTimer) {
+        sseErrorCount++;
+        if (sseErrorCount < 3 && !reconnectTimer) {
           reconnectTimer = setTimeout(() => {
             reconnectTimer = null;
             connectSSE();
-          }, 3000);
+          }, 4000);
         }
       };
     } catch {
-      if (!reconnectTimer) {
-        reconnectTimer = setTimeout(() => {
-          reconnectTimer = null;
-          connectSSE();
-        }, 5000);
-      }
+      sseErrorCount++;
     }
   }
 
   connectSSE();
 
-  // 3. Fast Version-Polling Engine (Checks /api/sync/version every 2.5s)
+  // 3. Fast Version-Polling Engine (Checks /api/sync/version every 2s)
   // Ensures 100% sync reliability on every device, mobile screen, and browser
+  let isFirstCheck = true;
   const checkServerVersion = async () => {
     try {
       const res = await fetch(`/api/sync/version?_t=${Date.now()}`, {
@@ -137,6 +138,13 @@ export function initGlobalSync() {
       const data = await res.json();
       if (data && data.timestamps) {
         const timestamps = data.timestamps as Record<string, number>;
+        
+        if (isFirstCheck) {
+          isFirstCheck = false;
+          Object.assign(knownTimestamps, timestamps);
+          return;
+        }
+
         let hasChanges = false;
         const changedCols: string[] = [];
 
@@ -161,7 +169,7 @@ export function initGlobalSync() {
 
   // Run initial version check
   checkServerVersion();
-  pollTimer = setInterval(checkServerVersion, 2500);
+  pollTimer = setInterval(checkServerVersion, 2000);
 
   // 4. Multi-tab storage sync handler
   const handleStorageEvent = (e: StorageEvent) => {

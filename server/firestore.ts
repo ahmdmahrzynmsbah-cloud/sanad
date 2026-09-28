@@ -18,7 +18,7 @@ import {
 
 // Suppress internal Firestore connection state logs such as idle stream disconnects
 try {
-  setLogLevel('error');
+  setLogLevel('silent');
 } catch {
   // Ignore
 }
@@ -215,9 +215,9 @@ export function handleFirestoreError(context: string, err: any): void {
   ) {
     if (!isFirestoreQuotaExceeded) {
       isFirestoreQuotaExceeded = true;
-      // 15-minute cooldown before re-attempting cloud reads/writes
-      quotaExceededResetTime = Date.now() + 15 * 60 * 1000;
-      console.warn(`⚠️ [Firestore Free-Tier Quota] Daily quota limit reached during [${context}]. Gracefully activating local caching & fallback mode for 15 minutes.`);
+      // 30-second cooldown before re-attempting cloud reads/writes
+      quotaExceededResetTime = Date.now() + 30 * 1000;
+      console.warn(`⚠️ [Firestore Quota] Limit notice during [${context}]. Activating fallback mode for 30s before auto-recovering.`);
     }
   } else {
     console.error(`Error in [${context}]:`, err);

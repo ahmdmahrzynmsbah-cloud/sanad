@@ -6,6 +6,7 @@
 
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import { normalizeAndFixArabicText } from './arabicText';
 
 // Configure PDF.js worker safely for Vite / Browser
 if (typeof window !== 'undefined') {
@@ -175,12 +176,40 @@ async function extractTextWithPDFJS(
       try {
         const page = await pdfDoc.getPage(pageNum);
         const textContent = await page.getTextContent();
-        const pageStrings = textContent.items
-          .map((item: any) => item.str || '')
-          .filter(Boolean);
-        const pageText = pageStrings.join(' ');
-        if (pageText.trim()) {
-          fullText += pageText + '\n\n';
+        
+        // Group items by vertical position (Y coordinate with 4px tolerance)
+        const lineGroups: { y: number; items: any[] }[] = [];
+        for (const item of (textContent.items as any[])) {
+          const str = item.str || '';
+          if (!str) continue;
+          const y = item.transform ? item.transform[5] : 0;
+          
+          let matchedGroup = lineGroups.find((g) => Math.abs(g.y - y) <= 4);
+          if (!matchedGroup) {
+            matchedGroup = { y, items: [] };
+            lineGroups.push(matchedGroup);
+          }
+          matchedGroup.items.push(item);
+        }
+
+        // Sort lines top-to-bottom (descending Y in PDF coordinate space)
+        lineGroups.sort((a, b) => b.y - a.y);
+
+        const pageLines: string[] = [];
+        for (const group of lineGroups) {
+          // Sort items horizontally within the line
+          group.items.sort((a, b) => (a.transform?.[4] || 0) - (b.transform?.[4] || 0));
+          const lineStr = group.items.map((it) => it.str).join(' ');
+          if (lineStr.trim()) {
+            pageLines.push(lineStr.trim());
+          }
+        }
+
+        const rawPageText = pageLines.join('\n');
+        // Apply specialized Arabic text normalization & de-reversal
+        const normalizedPage = normalizeAndFixArabicText(rawPageText);
+        if (normalizedPage.trim()) {
+          fullText += normalizedPage + '\n\n';
         }
 
         if (onProgress) {
@@ -189,7 +218,7 @@ async function extractTextWithPDFJS(
             currentPage: pageNum,
             totalPages: numPages,
             percent,
-            statusText: `استخراج النصوص من الصفحة ${pageNum} من ${numPages}...`,
+            statusText: `استخراج وتصحيح نصوص الصفحة ${pageNum} من ${numPages}...`,
           });
         }
       } catch (pageErr) {
@@ -197,7 +226,8 @@ async function extractTextWithPDFJS(
       }
     }
 
-    return { text: fullText.trim(), numPages: numPages || 1 };
+    const cleanResult = normalizeAndFixArabicText(fullText.trim());
+    return { text: cleanResult, numPages: numPages || 1 };
   } catch (err) {
     console.warn('[PDF.js] Direct browser extraction could not read stream:', err);
     return null;
@@ -207,9 +237,9 @@ async function extractTextWithPDFJS(
 /**
  * Extract structured legal text from a PDF file.
  * Strategy:
- * 1. Try instant client-side extraction (0 bandwidth, bypasses Vercel 4.5MB limit entirely).
- * 2. If text extracted, call lightweight text structuring endpoint for AI enrichment.
- * 3. If PDF is scanned/image-only, fallback to server-side multimodal Gemini vision.
+ * 1. Try instant client-side extraction with Arabic normalization & de-reversal.
+ * 2. Send extracted text to AI structuring endpoint for full article restructuring.
+ * 3. If PDF is scanned or image-only, fallback to server-side multimodal Gemini vision.
  */
 export async function extractTextFromPDF(
   file: File,
@@ -224,19 +254,24 @@ export async function extractTextFromPDF(
       currentPage: 1,
       totalPages: 1,
       percent: 15,
-      statusText: 'جاري فحص وقراءة ملف الـ PDF عبر المتصفح مباشرةً...',
+      statusText: 'جاري فحص وقراءة ملف الـ PDF عبر المتصفح مباشرةً وتصحيح ترميز الحروف...',
     });
   }
 
   const clientResult = await extractTextWithPDFJS(file, onProgress);
 
-  if (clientResult && clientResult.text && clientResult.text.trim().length >= 10) {
+  // Check if extracted text is valid and readable (not just a few unreadable glyphs)
+  const arabicWordsCount = clientResult?.text
+    ? (clientResult.text.match(/[\u0600-\u06FF]+/g) || []).length
+    : 0;
+
+  if (clientResult && clientResult.text && clientResult.text.trim().length >= 20 && arabicWordsCount >= 5) {
     if (onProgress) {
       onProgress({
         currentPage: clientResult.numPages,
         totalPages: clientResult.numPages,
         percent: 85,
-        statusText: 'تم استخراج نصوص الوثيقة، جاري تحليل وتصنيف المواد القانونية...',
+        statusText: 'تم استخراج نصوص الوثيقة، جاري تدقيق وترتيب المواد القانونية بالذكاء الاصطناعي...',
       });
     }
 
@@ -246,23 +281,27 @@ export async function extractTextFromPDF(
     let structuredTitle = localMeta.title;
     let structuredCategory = localMeta.category;
     let structuredSummary = localMeta.summary;
+    let finalContent = clientResult.text;
 
-    // Send lightweight sample text to server for AI metadata enrichment (only ~10KB payload!)
+    // Send sample text to server for AI metadata and clean text restructuring
     try {
       const res = await fetch('/api/admin/structure-law-text', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          text: clientResult.text.slice(0, 15000),
+          text: clientResult.text.slice(0, 35000),
           fileName: file.name,
         }),
       });
 
       if (res.ok) {
         const aiData = await res.json();
-        if (aiData.title) structuredTitle = aiData.title;
+        if (aiData.title) structuredTitle = sanitizeLawTitle(aiData.title);
         if (aiData.category) structuredCategory = aiData.category;
         if (aiData.summary) structuredSummary = aiData.summary;
+        if (aiData.content && aiData.content.trim().length > 30) {
+          finalContent = normalizeAndFixArabicText(aiData.content.trim());
+        }
       }
     } catch (enrichErr) {
       console.warn('[PDFParser] AI enrichment skipped, using robust local heuristics:', enrichErr);
@@ -273,12 +312,12 @@ export async function extractTextFromPDF(
         currentPage: clientResult.numPages,
         totalPages: clientResult.numPages,
         percent: 100,
-        statusText: 'تم استخراج وتصنيف المواد القانونية بنجاح',
+        statusText: 'تم استخراج وتصنيف المواد القانونية بنجاح بنصوص سليمة',
       });
     }
 
     return {
-      text: clientResult.text,
+      text: finalContent,
       numPages: clientResult.numPages,
       fileName: file.name,
       fileSizeBytes: file.size,
@@ -381,7 +420,8 @@ export async function extractTextFromPDF(
     }
 
     const serverResult = await res.json();
-    const extractedText = serverResult.content || serverResult.text || '';
+    const rawExtracted = serverResult.content || serverResult.text || '';
+    const extractedText = normalizeAndFixArabicText(rawExtracted);
 
     if (onProgress) {
       onProgress({

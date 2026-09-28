@@ -13,6 +13,7 @@ import {
   sanitizeLawTitle,
   detectLawMetadataLocally,
 } from './pdfParser';
+import { normalizeAndFixArabicText } from './arabicText';
 
 /**
  * Extract text from Word document (.docx) directly in browser using Mammoth
@@ -205,7 +206,7 @@ export async function extractTextFromAnyDocument(
   if (isWord) {
     try {
       const docxResult = await extractTextFromDocx(file, onProgress);
-      const text = docxResult.text;
+      const text = normalizeAndFixArabicText(docxResult.text);
 
       if (text && text.trim().length >= 10) {
         if (onProgress) {
@@ -221,6 +222,7 @@ export async function extractTextFromAnyDocument(
         let structuredTitle = localMeta.title;
         let structuredCategory = localMeta.category;
         let structuredSummary = localMeta.summary;
+        let finalContent = text;
 
         // Try AI enrichment if available
         try {
@@ -228,7 +230,7 @@ export async function extractTextFromAnyDocument(
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              text: text.slice(0, 15000),
+              text: text.slice(0, 30000),
               fileName,
             }),
           });
@@ -237,6 +239,9 @@ export async function extractTextFromAnyDocument(
             if (data.title) structuredTitle = sanitizeLawTitle(data.title);
             if (data.category) structuredCategory = data.category;
             if (data.summary) structuredSummary = data.summary;
+            if (data.content && data.content.trim().length > 30) {
+              finalContent = normalizeAndFixArabicText(data.content.trim());
+            }
           }
         } catch {}
 
@@ -250,7 +255,7 @@ export async function extractTextFromAnyDocument(
         }
 
         return {
-          text,
+          text: finalContent,
           numPages: docxResult.numPages,
           fileName,
           fileSizeBytes: file.size,
@@ -283,7 +288,7 @@ export async function extractTextFromAnyDocument(
   if (isPpt) {
     try {
       const pptResult = await extractTextFromPptx(file, onProgress);
-      const text = pptResult.text;
+      const text = normalizeAndFixArabicText(pptResult.text);
 
       if (text && text.trim().length >= 10) {
         if (onProgress) {
@@ -299,6 +304,7 @@ export async function extractTextFromAnyDocument(
         let structuredTitle = localMeta.title;
         let structuredCategory = localMeta.category;
         let structuredSummary = localMeta.summary;
+        let finalContent = text;
 
         // Try AI enrichment if available
         try {
@@ -306,7 +312,7 @@ export async function extractTextFromAnyDocument(
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              text: text.slice(0, 15000),
+              text: text.slice(0, 30000),
               fileName,
             }),
           });
@@ -315,6 +321,9 @@ export async function extractTextFromAnyDocument(
             if (data.title) structuredTitle = sanitizeLawTitle(data.title);
             if (data.category) structuredCategory = data.category;
             if (data.summary) structuredSummary = data.summary;
+            if (data.content && data.content.trim().length > 30) {
+              finalContent = normalizeAndFixArabicText(data.content.trim());
+            }
           }
         } catch {}
 
@@ -328,7 +337,7 @@ export async function extractTextFromAnyDocument(
         }
 
         return {
-          text,
+          text: finalContent,
           numPages: pptResult.numPages,
           fileName,
           fileSizeBytes: file.size,

@@ -1,10 +1,10 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc, updateDoc, setLogLevel, query, where, onSnapshot } from 'firebase/firestore';
+import { initializeFirestore, getFirestore, collection, doc, setDoc, getDocs, deleteDoc, updateDoc, setLogLevel, query, where, onSnapshot } from 'firebase/firestore';
 import type { Law, User, LawRequest, SubscriptionPlan } from '../types';
 import { normalizeAuthIdentifier, isMatchingUser } from '../utils/authUtils';
 
 try {
-  setLogLevel('error');
+  setLogLevel('silent');
 } catch {
   // Ignore
 }
@@ -27,12 +27,16 @@ export function isClientQuotaExceeded(): boolean {
 }
 
 export function markClientQuotaExceeded() {
-  clientQuotaExceededUntil = Date.now() + 15 * 60 * 1000;
-  console.warn('[Client Firestore] Quota limit reached. Pausing direct client calls for 15 minutes and relying on cached state.');
+  clientQuotaExceededUntil = Date.now() + 30 * 1000;
+  console.warn('[Client Firestore] Pausing direct client calls for 30s before auto-recovering.');
 }
 
 export function handleClientFirestoreError(context: string, err: any) {
   const errMsg = (err && (err.message || err.code || String(err))) || '';
+  if (err?.code === 'unavailable' || errMsg.includes('unavailable') || errMsg.includes('Could not reach Cloud Firestore')) {
+    // Graceful offline state - client automatically falls back to cached state and server sync
+    return;
+  }
   if (
     errMsg.includes('Quota limit exceeded') ||
     errMsg.includes('RESOURCE_EXHAUSTED') ||
@@ -51,7 +55,13 @@ export function getClientDb(forceBypassQuota = false) {
   try {
     const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
     if (!dbInstance) {
-      dbInstance = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+      try {
+        dbInstance = initializeFirestore(app, {
+          experimentalAutoDetectLongPolling: true,
+        }, firebaseConfig.firestoreDatabaseId);
+      } catch {
+        dbInstance = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+      }
     }
     return dbInstance;
   } catch (err) {
@@ -1530,6 +1540,10 @@ export function setupFirestoreRealtimeListeners(onUpdate: (collectionName: strin
           }
         },
         (error) => {
+          if (error?.code === 'unavailable' || String(error?.message).includes('unavailable')) {
+            // Graceful offline state - client relies on cached state and fast polling
+            return;
+          }
           handleClientFirestoreError(`onSnapshot listener for ${col}`, error);
         }
       );
