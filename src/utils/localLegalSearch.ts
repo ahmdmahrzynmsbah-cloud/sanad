@@ -1,4 +1,5 @@
 import type { Law, CitationSource } from '../types';
+import { BUNDLED_PALESTINE_LAWS } from '../data/bundledLaws';
 
 export interface LegalChunk {
   lawId: string;
@@ -415,9 +416,10 @@ export function isSubstantiveLaw(law: Law): boolean {
  * Search and build precise citation sources for a given legal query
  */
 export function findCitationsForQuery(query: string, laws: Law[]): CitationSource[] {
-  if (!laws || laws.length === 0 || !query) return [];
+  const effectiveLaws = (Array.isArray(laws) && laws.length > 0) ? laws : BUNDLED_PALESTINE_LAWS;
+  if (!query) return [];
 
-  const activeLaws = laws.filter(isSubstantiveLaw);
+  const activeLaws = effectiveLaws.filter(isSubstantiveLaw);
   const requestedArticleNumber = extractRequestedArticleNumber(query);
   const normQuery = normalizeArabic(query);
   const genericStopwords = new Set([
@@ -560,6 +562,7 @@ export function parseCitationsFromResponseText(responseText: string, laws: Law[]
 }
 
 export function generateClientKnowledgeFallback(query: string, laws: Law[]): string {
+  const effectiveLaws = (Array.isArray(laws) && laws.length > 0) ? laws : BUNDLED_PALESTINE_LAWS;
   const trimmed = query.trim().toLowerCase();
   const cleaned = trimmed.replace(/[!؟?.,،:\-\s]+/g, ' ').trim();
   const words = cleaned.split(/\s+/).filter(Boolean);
@@ -573,7 +576,7 @@ export function generateClientKnowledgeFallback(query: string, laws: Law[]): str
   // 1. Meta Query Checks
   const metaCheck = isPlatformOrMetaQuery(query);
   if (metaCheck.isMeta && metaCheck.type === 'laws_catalog') {
-    const count = (laws || []).length;
+    const count = effectiveLaws.length;
     return `تحتوي قاعدة بيانات «سَنَد» حالياً على **${count}** تشريعاً وقراراً بقانون وملفاً رسمياً معتمداً في دولة فلسطين. تفضل بسؤالك المحدد وسأجيبك فوراً.`;
   }
 
@@ -679,7 +682,7 @@ export function generateClientKnowledgeFallback(query: string, laws: Law[]): str
   const requestedArticle = extractRequestedArticleNumber(query);
   if (requestedArticle) {
     const matchedChunks: LegalChunk[] = [];
-    for (const law of laws) {
+    for (const law of effectiveLaws) {
       const chunks = chunkLawContent(law);
       for (const ch of chunks) {
         if (ch.articleNumber === requestedArticle || ch.sectionHeader.includes(requestedArticle)) {
@@ -695,10 +698,10 @@ export function generateClientKnowledgeFallback(query: string, laws: Law[]): str
     }
   }
 
-  // 10. General Substantive RAG Search across Database (Answers ONLY from the matched chunk)
+  // 10. General Substantive RAG Search across Database (Answers from ANY matched chunk)
   const allChunks: LegalChunk[] = [];
   const substantiveWords = normalizeArabic(query).split(/\s+/).filter(w => w.length >= 2);
-  for (const law of laws) {
+  for (const law of effectiveLaws) {
     const chunks = chunkLawContent(law);
     for (const chunk of chunks) {
       let sc = 0;

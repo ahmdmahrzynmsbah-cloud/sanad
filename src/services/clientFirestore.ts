@@ -165,38 +165,81 @@ export async function directSaveLawsBatchToFirestore(laws: Law[]): Promise<{ suc
   return { success, failedCount };
 }
 
+import { BUNDLED_PALESTINE_LAWS } from '../data/bundledLaws';
+
 /**
- * Direct client-side fetch from Firestore as fallback.
+ * Direct client-side fetch from Firestore as fallback, guaranteed with bundled laws.
  */
 export async function directFetchLawsFromFirestore(): Promise<Law[]> {
   const db = getClientDb();
-  if (!db) return [];
+  let firestoreItems: Law[] = [];
 
-  try {
-    const col = collection(db, 'laws');
-    const snapshot = await getDocs(col);
-    if (snapshot.empty) return [];
-
-    const items: Law[] = [];
-    snapshot.forEach((d) => {
-      const data = d.data();
-      items.push({
-        id: data.id || d.id,
-        title: data.title || '',
-        category: data.category || 'جمارك',
-        content: data.content || '',
-        sourceFileName: data.sourceFileName || undefined,
-        sourceFileSize: data.sourceFileSize || undefined,
-        pageCount: data.pageCount || undefined,
-        createdAt: data.createdAt || new Date().toISOString(),
-        updatedAt: data.updatedAt || new Date().toISOString(),
-      });
-    });
-    return items;
-  } catch (err) {
-    handleClientFirestoreError('directFetchLawsFromFirestore', err);
-    return [];
+  if (db) {
+    try {
+      const col = collection(db, 'laws');
+      const snapshot = await getDocs(col);
+      if (!snapshot.empty) {
+        snapshot.forEach((d) => {
+          const data = d.data();
+          if (data.title && (data.content || data.summary)) {
+            firestoreItems.push({
+              id: data.id || d.id,
+              title: data.title || '',
+              category: data.category || 'جمارك',
+              content: data.content || '',
+              sourceFileName: data.sourceFileName || undefined,
+              sourceFileSize: data.sourceFileSize || undefined,
+              pageCount: data.pageCount || undefined,
+              createdAt: data.createdAt || new Date().toISOString(),
+              updatedAt: data.updatedAt || new Date().toISOString(),
+            });
+          }
+        });
+      }
+    } catch (err) {
+      handleClientFirestoreError('directFetchLawsFromFirestore', err);
+    }
   }
+
+  // Also check any locally uploaded custom laws in localStorage
+  let localExtraLaws: Law[] = [];
+  try {
+    const rawLocal = localStorage.getItem('pal_custom_laws');
+    if (rawLocal) {
+      const parsed = JSON.parse(rawLocal);
+      if (Array.isArray(parsed)) {
+        localExtraLaws = parsed;
+      }
+    }
+  } catch {}
+
+  // Merge bundled static laws with firestore and local extra laws, avoiding duplicate IDs/titles
+  const lawsMap = new Map<string, Law>();
+
+  for (const law of BUNDLED_PALESTINE_LAWS) {
+    lawsMap.set(law.id, law);
+    if (law.title) lawsMap.set(law.title.trim().toLowerCase(), law);
+  }
+
+  for (const law of firestoreItems) {
+    lawsMap.set(law.id, law);
+  }
+
+  for (const law of localExtraLaws) {
+    lawsMap.set(law.id, law);
+  }
+
+  // Get unique laws by ID
+  const uniqueLaws: Law[] = [];
+  const seenIds = new Set<string>();
+  for (const law of lawsMap.values()) {
+    if (!seenIds.has(law.id)) {
+      seenIds.add(law.id);
+      uniqueLaws.push(law);
+    }
+  }
+
+  return uniqueLaws.length > 0 ? uniqueLaws : BUNDLED_PALESTINE_LAWS;
 }
 
 /**

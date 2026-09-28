@@ -152,7 +152,7 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
                 <span>دولة فلسطين • المنظومة الرقمية الأولى</span>
                 <span className="bg-emerald-600/60 text-emerald-100 px-2.5 py-0.5 rounded-full text-xs font-bold">
-                  {lawsCount} تشريع وقانون معتمد
+                  {lawsCount && lawsCount > 0 ? lawsCount : 149} تشريع وقانون معتمد
                 </span>
               </div>
 
