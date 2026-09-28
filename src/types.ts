@@ -64,6 +64,7 @@ export interface Law {
   title: string;
   category: LawCategory;
   content: string;
+  summary?: string;
   sourceFileName?: string;
   sourceFileSize?: string;
   pageCount?: number;

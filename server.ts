@@ -30,6 +30,7 @@ import path from 'path';
 import fs from 'fs';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
+import { BUNDLED_PALESTINE_LAWS } from './src/data/bundledLaws';
 // Vite is dynamically imported in local dev mode
 import {
   initFirestore,
@@ -1185,6 +1186,9 @@ function initDB(): DBData {
 }
 
 let db = initDB();
+if (!db.laws || db.laws.length === 0) {
+  db.laws = [...BUNDLED_PALESTINE_LAWS];
+}
 if (db.subscriptionPlans === undefined) {
   db.subscriptionPlans = [...DEFAULT_SUBSCRIPTION_PLANS];
 }
