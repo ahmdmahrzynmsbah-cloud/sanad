@@ -171,7 +171,10 @@ async function extractTextWithPDFJS(
   try {
     const arrayBuffer = await file.arrayBuffer();
     const loadingTask = pdfjsLib.getDocument({
-      data: arrayBuffer,
+      data: new Uint8Array(arrayBuffer),
+      cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.296/cmaps/',
+      cMapPacked: true,
+      standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.296/standard_fonts/',
       useSystemFonts: true,
       isEvalSupported: false,
     });
@@ -301,7 +304,7 @@ export async function extractTextFromPDF(
     : 0;
 
   // If digital text was found and contains readable content
-  if (clientResult && clientResult.text && clientResult.text.trim().length >= 20 && arabicCharsCount >= 8) {
+  if (clientResult && clientResult.text && clientResult.text.trim().length >= 10 && arabicCharsCount >= 3) {
     // 100% of the extracted text is ALWAYS preserved verbatim!
     const fullVerbatimText = clientResult.text;
     const localMeta = detectLawMetadataLocally(fullVerbatimText, file.name);
