@@ -106,25 +106,27 @@ export const VideosAdminTab: React.FC<VideosAdminTabProps> = ({ videos, setVideo
 
   const confirmDelete = async () => {
     if (!videoToDelete) return;
-    setDeletingId(videoToDelete.id);
-    let deleted = false;
+    const target = videoToDelete;
+    setDeletingId(target.id);
+
+    // 1. Immediately update UI state
+    setVideos((prev) => prev.filter((v) => v.id !== target.id));
+    setVideoToDelete(null);
+
     try {
-      const res = await fetch(`/api/admin/videos/${videoToDelete.id}`, { method: 'DELETE' });
-      if (res.ok) deleted = true;
+      await fetch(`/api/admin/videos/${target.id}`, { method: 'DELETE' });
     } catch (err) {
       console.warn('API error, falling back to direct Firestore:', err);
     }
     
-    if (!deleted) {
-      const directOk = await directDeleteVideoFromFirestore(videoToDelete.id);
-      if (directOk) deleted = true;
+    // 2. Direct Firestore delete
+    try {
+      await directDeleteVideoFromFirestore(target.id);
+    } catch (fErr) {
+      console.warn('Direct firestore video delete error:', fErr);
     }
 
-    if (deleted) {
-      fetchVideos();
-      notifySync('videos');
-      setVideoToDelete(null);
-    }
+    notifySync('videos');
     setDeletingId(null);
   };
 

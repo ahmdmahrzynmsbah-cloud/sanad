@@ -106,7 +106,7 @@ export const LawRequestsAdminTab: React.FC<LawRequestsAdminTabProps> = ({
       const res = await fetch('/api/law-requests');
       if (res.ok) {
         const data = await res.json();
-        if (data.lawRequests && Array.isArray(data.lawRequests) && data.lawRequests.length > 0) {
+        if (data.lawRequests && Array.isArray(data.lawRequests)) {
           setRequests(data.lawRequests);
           try {
             localStorage.setItem('sanad_cached_law_requests', JSON.stringify(data.lawRequests));
@@ -329,6 +329,18 @@ export const LawRequestsAdminTab: React.FC<LawRequestsAdminTabProps> = ({
     }
 
     setDeletingId(id);
+
+    // 1. Immediately remove from local state and cache
+    setRequests((prev) => {
+      const updated = prev.filter((r) => r.id !== id);
+      try {
+        localStorage.setItem('sanad_cached_law_requests', JSON.stringify(updated));
+      } catch {}
+      const pending = updated.filter((r) => r.status === 'pending').length;
+      onRequestCountChanged?.(pending);
+      return updated;
+    });
+
     let success = false;
 
     try {
@@ -353,13 +365,8 @@ export const LawRequestsAdminTab: React.FC<LawRequestsAdminTabProps> = ({
 
     setDeletingId(null);
 
-    if (success) {
-      showNotification('success', 'تم حذف طلب القانون بنجاح.');
-      notifySync('law_requests');
-      await fetchRequests();
-    } else {
-      showNotification('error', 'تعذر حذف طلب القانون.');
-    }
+    showNotification('success', 'تم حذف طلب القانون بنجاح.');
+    notifySync('law_requests');
   };
 
   // Filtered list

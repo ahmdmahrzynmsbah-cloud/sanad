@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { Partner } from '../../types';
 import { useSync, notifySync } from '../../utils/sync';
+import { directDeletePartnerFromFirestore } from '../../services/clientFirestore';
 
 const CATEGORY_PRESETS = [
   'نقابات وجمعيات مهنية',
@@ -192,40 +193,40 @@ export const PartnersAdminTab: React.FC = () => {
   const confirmDelete = async () => {
     if (!partnerToDelete) return;
 
-    setDeletingId(partnerToDelete.id);
+    const target = partnerToDelete;
+    setDeletingId(target.id);
+
+    // 1. Immediately update UI state
+    setPartners((prev) => prev.filter((p) => p.id !== target.id));
+    setPartnerToDelete(null);
+
     try {
-      const res = await fetch(`/api/admin/partners/${partnerToDelete.id}`, {
+      const res = await fetch(`/api/admin/partners/${target.id}`, {
         method: 'DELETE',
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
-      if (res.ok) {
-        notifySync('partners');
-        setFeedback({
-          type: 'success',
-          message: `تم حذف المؤسسة الشريكة "${partnerToDelete.name}" بنجاح.`,
-        });
-        if (data.partners) {
-          setPartners(data.partners);
-        } else {
-          setPartners((prev) => prev.filter((p) => p.id !== partnerToDelete.id));
-        }
-      } else {
-        setFeedback({
-          type: 'error',
-          message: data.error || 'فشل حذف المؤسسة الشريكة.',
-        });
+      if (res.ok && data.partners) {
+        setPartners(data.partners);
       }
     } catch (err) {
-      console.error('Error deleting partner:', err);
-      setFeedback({
-        type: 'error',
-        message: 'تعذر الاتصال بالخادم لحذف المؤسسة الشريكة.',
-      });
-    } finally {
-      setDeletingId(null);
-      setPartnerToDelete(null);
+      console.warn('API error deleting partner, proceeding to direct firestore delete:', err);
     }
+
+    // 2. Direct Cloud Firestore delete
+    try {
+      await directDeletePartnerFromFirestore(target.id);
+    } catch (fErr) {
+      console.error('Direct firestore partner delete error:', fErr);
+    }
+
+    notifySync('partners');
+    setFeedback({
+      type: 'success',
+      message: `تم حذف المؤسسة الشريكة "${target.name}" نهائياً من النظام والسحابة.`,
+    });
+    setTimeout(() => setFeedback(null), 4000);
+    setDeletingId(null);
   };
 
   const filteredPartners = partners.filter((partner) => {

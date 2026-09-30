@@ -88,6 +88,7 @@ import {
   directSaveAutoApproveToFirestore,
   directFetchSettingsFromFirestore,
   directFetchLawRequestsFromFirestore,
+  directDeleteCategoryFromFirestore,
 } from '../services/clientFirestore';
 
 export interface QueuedLawItem {
@@ -120,7 +121,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   const isSupervisor = currentAdmin?.role === 'supervisor';
 
   const [videos, setVideos] = useState<Video[]>([]);
-  const [activeTab, setActiveTab] = useState<'requests' | 'laws' | 'law-requests' | 'supervisors' | 'related-sites' | 'partners' | 'plans' | 'about' | 'contact' | 'settings' | 'videos'>('requests');
+  const [activeTab, setActiveTab] = useState<'requests' | 'laws' | 'law-requests' | 'supervisors' | 'related-sites' | 'partners' | 'plans' | 'about' | 'contact' | 'settings' | 'videos'>(() => isSupervisor ? 'laws' : 'requests');
 
   // Admin Daily Upload Limit & Quota (40 files max, 40MB per file, 800MB total quota per day)
   const ADMIN_DAILY_LIMIT = 40;
@@ -151,8 +152,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   // Law Requests state
   const [pendingLawRequestsCount, setPendingLawRequestsCount] = useState<number>(0);
 
-  // Users state with resilient local persistence
+  // Users state with resilient local persistence (Restricted for supervisors)
   const [users, setUsers] = useState<User[]>(() => {
+    if (isSupervisor) return [];
     if (typeof window !== 'undefined') {
       try {
         const cached = localStorage.getItem('sanad_cached_users');
@@ -290,6 +292,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     'اختر الباقة المثالية لاحتياجاتك واستفد من مرجع ذكاء اصطناعي قانوني وضريبي فلسطيني متكامل يواكب التشريعات والقرارات والتعرفة الجمركية لحظة بلحظة.'
   );
   const [showPlansSectionInLandingInput, setShowPlansSectionInLandingInput] = useState(true);
+
+  // Footer Customization (تخصيص الفوتر أسفل المنصة)
+  const [footerTextInput, setFooterTextInput] = useState('منظومة الاستعلام الجمركي والضريبي الذكية • دولة فلسطين');
+  const [footerSubtextInput, setFooterSubtextInput] = useState('');
+  const [footerCopyrightInput, setFooterCopyrightInput] = useState('جميع الحقوق محفوظة © دولة فلسطين');
+  const [footerShowScaleIconInput, setFooterShowScaleIconInput] = useState(true);
 
   // Laws state with resilient local caching
   const [laws, setLaws] = useState<Law[]>(() => {
@@ -442,12 +450,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     }
   };
 
-  // Fetch Users
+  // Fetch Users (Restricted: Supervisors cannot view subscribers)
   const fetchUsers = async () => {
+    if (isSupervisor) {
+      setUsers([]);
+      setUsersLoading(false);
+      return;
+    }
     setUsersLoading(true);
     let loadedUsers: User[] | null = null;
     try {
-      const res = await fetch('/api/admin/users');
+      const res = await fetch('/api/admin/users', {
+        headers: { 'x-admin-role': currentAdmin?.role || 'admin' }
+      });
       const data = await safeFetchJson<{ users?: User[] }>(res);
       if (data.ok && data.data?.users && Array.isArray(data.data.users) && data.data.users.length > 0) {
         loadedUsers = data.data.users;
@@ -516,11 +531,37 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   const fetchLaws = async () => {
     setLawsLoading(true);
     let loaded = false;
+
+    const filterDeleted = (list: Law[]): Law[] => {
+      try {
+        const raw = localStorage.getItem('sanad_deleted_law_ids');
+        if (raw) {
+          const deleted: string[] = JSON.parse(raw);
+          if (Array.isArray(deleted) && deleted.length > 0) {
+            return list.filter((l) => !deleted.includes(l.id) && !deleted.includes(l.title));
+          }
+        }
+      } catch {}
+      return list;
+    };
+
     try {
       const res = await fetch(`/api/laws?t=${Date.now()}`);
-      const result = await safeFetchJson<{ laws?: Law[] }>(res);
-      if (result.ok && result.data && result.data.laws && result.data.laws.length > 0) {
-        setLaws(result.data.laws);
+      const result = await safeFetchJson<{ laws?: Law[]; deletedLawIds?: string[] }>(res);
+      if (result.ok && result.data && Array.isArray(result.data.laws)) {
+        if (result.data.deletedLawIds && Array.isArray(result.data.deletedLawIds)) {
+          try {
+            const raw = localStorage.getItem('sanad_deleted_law_ids');
+            const current: string[] = raw ? JSON.parse(raw) : [];
+            const merged = Array.from(new Set([...current, ...result.data.deletedLawIds]));
+            localStorage.setItem('sanad_deleted_law_ids', JSON.stringify(merged));
+          } catch {}
+        }
+        const activeLaws = filterDeleted(result.data.laws);
+        setLaws(activeLaws);
+        try {
+          localStorage.setItem('sanad_cached_laws', JSON.stringify(activeLaws));
+        } catch {}
         if (onLawsUpdated) onLawsUpdated();
         loaded = true;
       }
@@ -531,8 +572,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     if (!loaded) {
       try {
         const firestoreLaws = await directFetchLawsFromFirestore();
-        if (firestoreLaws && firestoreLaws.length > 0) {
-          setLaws(firestoreLaws);
+        if (firestoreLaws) {
+          const activeLaws = filterDeleted(firestoreLaws);
+          setLaws(activeLaws);
+          try {
+            localStorage.setItem('sanad_cached_laws', JSON.stringify(activeLaws));
+          } catch {}
           if (onLawsUpdated) onLawsUpdated();
           loaded = true;
         }
@@ -547,8 +592,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         const cached = localStorage.getItem('sanad_cached_laws');
         if (cached) {
           const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setLaws(parsed);
+          if (Array.isArray(parsed)) {
+            const activeLaws = filterDeleted(parsed);
+            setLaws(activeLaws);
             if (onLawsUpdated) onLawsUpdated();
             loaded = true;
           }
@@ -747,6 +793,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     if (b.plansSectionTitle !== undefined) setPlansSectionTitleInput(b.plansSectionTitle || '');
     if (b.plansSectionSubtitle !== undefined) setPlansSectionSubtitleInput(b.plansSectionSubtitle || '');
     if (b.showPlansSectionInLanding !== undefined) setShowPlansSectionInLandingInput(b.showPlansSectionInLanding !== false);
+
+    // Footer Customization state
+    if (b.footerText !== undefined) setFooterTextInput(b.footerText || '');
+    if (b.footerSubtext !== undefined) setFooterSubtextInput(b.footerSubtext || '');
+    if (b.footerCopyright !== undefined) setFooterCopyrightInput(b.footerCopyright || '');
+    if (b.footerShowScaleIcon !== undefined) setFooterShowScaleIconInput(b.footerShowScaleIcon !== false);
   };
 
   // Ultra-fast consolidated initial data load (Single round-trip)
@@ -757,38 +809,74 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       setCategoriesLoading(true);
     }
     try {
-      const res = await fetch(`/api/admin/init?t=${Date.now()}`);
+      const res = await fetch(`/api/admin/init?t=${Date.now()}`, {
+        headers: { 'x-admin-role': currentAdmin?.role || 'admin' }
+      });
       if (res.ok) {
         const data = await res.json();
-        if (data.users && Array.isArray(data.users) && data.users.length > 0) {
-          setUsers(data.users);
-        } else {
-          // If init returned 0 users due to cold start, fetch directly from Firestore
-          try {
-            const firestoreUsers = await directFetchUsersFromFirestore();
-            if (firestoreUsers && firestoreUsers.length > 0) {
-              setUsers(firestoreUsers);
+        if (!isSupervisor) {
+          if (data.users && Array.isArray(data.users) && data.users.length > 0) {
+            setUsers(data.users);
+          } else {
+            // If init returned 0 users due to cold start, fetch directly from Firestore
+            try {
+              const firestoreUsers = await directFetchUsersFromFirestore();
+              if (firestoreUsers && firestoreUsers.length > 0) {
+                setUsers(firestoreUsers);
+              }
+            } catch (fErr) {
+              console.warn('Fallback direct users fetch failed:', fErr);
             }
-          } catch (fErr) {
-            console.warn('Fallback direct users fetch failed:', fErr);
           }
+        } else {
+          setUsers([]);
         }
-        if (data.laws && Array.isArray(data.laws) && data.laws.length > 0) {
-          setLaws(data.laws);
+        if (data.deletedLawIds && Array.isArray(data.deletedLawIds)) {
+          try {
+            const raw = localStorage.getItem('sanad_deleted_law_ids');
+            const current: string[] = raw ? JSON.parse(raw) : [];
+            const merged = Array.from(new Set([...current, ...data.deletedLawIds]));
+            localStorage.setItem('sanad_deleted_law_ids', JSON.stringify(merged));
+          } catch {}
+        }
+        const filterDeletedLaws = (list: Law[]): Law[] => {
+          try {
+            const raw = localStorage.getItem('sanad_deleted_law_ids');
+            if (raw) {
+              const deleted: string[] = JSON.parse(raw);
+              if (Array.isArray(deleted) && deleted.length > 0) {
+                return list.filter((l) => !deleted.includes(l.id) && !deleted.includes(l.title));
+              }
+            }
+          } catch {}
+          return list;
+        };
+
+        if (data.laws && Array.isArray(data.laws)) {
+          const activeLaws = filterDeletedLaws(data.laws);
+          setLaws(activeLaws);
+          try {
+            localStorage.setItem('sanad_cached_laws', JSON.stringify(activeLaws));
+          } catch {}
           if (onLawsUpdated) onLawsUpdated();
         } else {
           // If init returned 0 laws due to cold start, fetch from direct Firestore or localStorage cache
           try {
             const firestoreLaws = await directFetchLawsFromFirestore();
-            if (firestoreLaws && firestoreLaws.length > 0) {
-              setLaws(firestoreLaws);
+            if (firestoreLaws) {
+              const activeLaws = filterDeletedLaws(firestoreLaws);
+              setLaws(activeLaws);
+              try {
+                localStorage.setItem('sanad_cached_laws', JSON.stringify(activeLaws));
+              } catch {}
               if (onLawsUpdated) onLawsUpdated();
             } else {
               const cached = localStorage.getItem('sanad_cached_laws');
               if (cached) {
                 const parsed = JSON.parse(cached);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                  setLaws(parsed);
+                if (Array.isArray(parsed)) {
+                  const activeLaws = filterDeletedLaws(parsed);
+                  setLaws(activeLaws);
                   if (onLawsUpdated) onLawsUpdated();
                 }
               }
@@ -1040,6 +1128,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       plansSectionTitle: plansSectionTitleInput.trim(),
       plansSectionSubtitle: plansSectionSubtitleInput.trim(),
       showPlansSectionInLanding: showPlansSectionInLandingInput,
+
+      footerText: footerTextInput.trim(),
+      footerSubtext: footerSubtextInput.trim(),
+      footerCopyright: footerCopyrightInput.trim(),
+      footerShowScaleIcon: footerShowScaleIconInput,
     };
 
     const payloadStr = JSON.stringify(payload);
@@ -1152,6 +1245,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
           founderPhotoUrl: '',
           founderQuote: 'الالتزام الضريبي والجمركي الواعي هو صمام أمان الاقتصاد الوطني وحماية حقيقية لحقوق المكلفين والخزينة العامة.',
           siteOverview: 'منصة قانونية تخصصية متطورة توظف الذكاء الاصطناعي التوليدي والأنطولوجيا التشريعية لخدمة المكلفين، المحاسبين، المستوردين، ورجال الأعمال في فهم الإجراءات واللوائح والقرارات الصادرة عن وزارة المالية الفلسطينية والإدارة العامة للجمارك وضريبة الدخل.',
+          footerText: 'منظومة الاستعلام الجمركي والضريبي الذكية • دولة فلسطين',
+          footerSubtext: '',
+          footerCopyright: 'جميع الحقوق محفوظة © دولة فلسطين',
+          footerShowScaleIcon: true,
         };
         const directOk = await directSaveBrandingToFirestore(defaultState);
         if (directOk) {
@@ -1281,6 +1378,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       }
       setCategoryModalSuccess(`تم حذف التصنيف "${cat.name}" بنجاح من قاعدة البيانات`);
       setCategoryToDelete(null);
+      setCategories((prev) => {
+        const updated = prev.filter((c) => c.id !== cat.id);
+        try {
+          localStorage.setItem('sanad_cached_categories', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+      // Ensure deletion from Cloud Firestore
+      await directDeleteCategoryFromFirestore(cat.id);
+
       notifySync('laws');
       await fetchCategories();
       fetchSystemStatus();
@@ -1506,6 +1613,18 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     
     setDeletingUserId(targetUserId);
     setDeleteUserError(null);
+
+    // 1. Immediately remove from local state and cache
+    setUsers((prev) => prev.filter((u) => u.id !== targetUserId));
+    try {
+      const cached = localStorage.getItem('sanad_cached_users');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          localStorage.setItem('sanad_cached_users', JSON.stringify(parsed.filter((u: any) => u.id !== targetUserId)));
+        }
+      }
+    } catch {}
     
     try {
       const res = await fetch(`/api/admin/users/${targetUserId}`, {
@@ -1513,7 +1632,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       });
       
       if (res.ok) {
-        setUsers((prev) => prev.filter((u) => u.id !== targetUserId));
         notifySync('users');
         setUserActionMessage(`تم حذف المستخدم "${targetUserName}" نهائياً بنجاح.`);
         setTimeout(() => setUserActionMessage(null), 3000);
@@ -2405,16 +2523,31 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     setDeletingLawId(law.id);
     setDeleteLawError(null);
 
-    // 1. Immediately update UI state and local cache for instant responsive deletion
+    // 1. Immediately update UI state and record in permanent deleted set
     setLaws((prev) => prev.filter((l) => l.id !== law.id && l.title !== law.title));
 
     try {
+      const raw = localStorage.getItem('sanad_deleted_law_ids');
+      const deletedList: string[] = raw ? JSON.parse(raw) : [];
+      if (!deletedList.includes(law.id)) deletedList.push(law.id);
+      if (law.title && !deletedList.includes(law.title)) deletedList.push(law.title);
+      localStorage.setItem('sanad_deleted_law_ids', JSON.stringify(deletedList));
+
       const cached = localStorage.getItem('sanad_cached_laws');
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed)) {
           const updated = parsed.filter((l: any) => l.id !== law.id && l.title !== law.title);
           localStorage.setItem('sanad_cached_laws', JSON.stringify(updated));
+        }
+      }
+
+      const customRaw = localStorage.getItem('pal_custom_laws');
+      if (customRaw) {
+        const parsed = JSON.parse(customRaw);
+        if (Array.isArray(parsed)) {
+          const updated = parsed.filter((l: any) => l.id !== law.id && l.title !== law.title);
+          localStorage.setItem('pal_custom_laws', JSON.stringify(updated));
         }
       }
     } catch {}
@@ -2433,9 +2566,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       console.warn('API delete law notice, proceeding with cloud persistence:', err);
     }
 
-    // 3. Perform direct Firestore deletion
+    // 3. Perform direct Firestore deletion with permanent tracking
     try {
-      await directDeleteLawFromFirestore(law.id);
+      await directDeleteLawFromFirestore(law.id, law.title);
     } catch (fErr) {
       console.warn('Direct firestore delete notice:', fErr);
     }
@@ -2520,22 +2653,26 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400 mb-1.5">
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span>لوحة تحكم المسؤول المعتمد • وزارة المالية</span>
+            <span>{isSupervisor ? 'لوحة تحكم المشرف المعتمد • هيئة الإشراف التشريعي' : 'لوحة تحكم المسؤول المعتمد • وزارة المالية'}</span>
           </div>
           <h2 className="text-xl sm:text-2xl font-black tracking-tight">
-            نظام الإشراف المركزي وإدارة التشريعات
+            {isSupervisor ? 'نظام الإشراف على التشريعات وقاعدة المعرفة' : 'نظام الإشراف المركزي وإدارة التشريعات'}
           </h2>
           <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl">
-            مراجعة واعتماد طلبات حسابات المستفيدين الجدد، وإدارة نصوص المواد والقوانين المالية والجمركية المحقونة في قاعدة معرفة البوت.
+            {isSupervisor 
+              ? 'إدارة ومراجعة نصوص المواد والقوانين والقرارات بقانون المالية والجمركية المحقونة في قاعدة معرفة البوت.'
+              : 'مراجعة واعتماد طلبات حسابات المستفيدين الجدد، وإدارة نصوص المواد والقوانين المالية والجمركية المحقونة في قاعدة معرفة البوت.'}
           </p>
         </div>
 
         {/* Global Stats Badges */}
         <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
-          <div className="bg-white/5 border border-white/10 px-3.5 py-2 rounded-xl text-center min-w-[85px] sm:min-w-[95px]">
-            <span className="block text-[10px] sm:text-[11px] text-slate-300 font-medium">طلبات معلقة</span>
-            <span className="text-base sm:text-lg font-bold text-amber-400">{pendingCount}</span>
-          </div>
+          {!isSupervisor && (
+            <div className="bg-white/5 border border-white/10 px-3.5 py-2 rounded-xl text-center min-w-[85px] sm:min-w-[95px]">
+              <span className="block text-[10px] sm:text-[11px] text-slate-300 font-medium">طلبات معلقة</span>
+              <span className="text-base sm:text-lg font-bold text-amber-400">{pendingCount}</span>
+            </div>
+          )}
           <div className="bg-white/5 border border-white/10 px-3.5 py-2 rounded-xl text-center min-w-[85px] sm:min-w-[95px]">
             <span className="block text-[10px] sm:text-[11px] text-slate-300 font-medium">قوانين بالمعرفة</span>
             <span className="text-base sm:text-lg font-bold text-emerald-400">{laws.length}</span>
@@ -2580,24 +2717,25 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
 
       {/* Main Tabs Navigation */}
       <div className="flex overflow-x-auto whitespace-nowrap border-b border-slate-200 bg-white rounded-2xl px-2 sm:px-4 pt-3 shadow-xs scrollbar-none touch-scroll overscroll-x-contain">
-        <button
-          id="admin-tab-requests"
-          onClick={() => setActiveTab('requests')}
-          className={`pb-3 px-3.5 sm:px-5 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 transition-all shrink-0 cursor-pointer ${
-            activeTab === 'requests'
-              ? 'border-emerald-700 text-emerald-800'
-              : 'border-transparent text-slate-500 hover:text-slate-900'
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          طلبات المستخدمين
-          {pendingCount > 0 && (
-            <span className="bg-amber-500 text-white text-[10px] sm:text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full font-extrabold animate-pulse">
-              {pendingCount} جديد
-            </span>
-          )}
-        </button>
-
+        {!isSupervisor && (
+          <button
+            id="admin-tab-requests"
+            onClick={() => setActiveTab('requests')}
+            className={`pb-3 px-3.5 sm:px-5 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 transition-all shrink-0 cursor-pointer ${
+              activeTab === 'requests'
+                ? 'border-emerald-700 text-emerald-800'
+                : 'border-transparent text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            طلبات المستخدمين
+            {pendingCount > 0 && (
+              <span className="bg-amber-500 text-white text-[10px] sm:text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full font-extrabold animate-pulse">
+                {pendingCount} جديد
+              </span>
+            )}
+          </button>
+        )}
         <button
           id="admin-tab-laws"
           onClick={() => setActiveTab('laws')}
@@ -2745,7 +2883,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       {/* ======================================================== */}
       {/* TAB 1: USER REQUESTS (طلبات المستخدمين) */}
       {/* ======================================================== */}
-      {activeTab === 'requests' && (
+      {activeTab === 'requests' && !isSupervisor && (
         <div className="space-y-4">
           {/* Action Notification */}
           {userActionMessage && (
@@ -5546,6 +5684,131 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                   <p className="text-[11px] text-gray-500 mt-1.5">
                     * هذا النص يظهر أسفل العنوان الرئيسي مباشرة في الصفحة الرئيسية، ويمكنك تعديله وصياغته بحرية في أي وقت.
                   </p>
+                </div>
+              </div>
+
+              {/* CARD 7: FOOTER CUSTOMIZATION (تخصيص الترويسة والفوتر السفلي - خاص بالمسؤول المعتمد فقط) */}
+              <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-200 shadow-xs space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-gray-100 gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center font-bold">
+                      <Scale className="w-4 h-4 text-[#d4af37]" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                        <span>تخصيص الفوتر والترويسة السفلية (Footer)</span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                          خاص بالمسؤول فقط (Admin Only)
+                        </span>
+                      </h4>
+                      <p className="text-[11px] text-gray-500">
+                        تعديل وتخصيص النص الرسمي وحقوق الملكية والشعار الظاهر في أسفل صفحات المنصة.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Footer Main Text */}
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                      النص الرئيسي للفوتر (Main Title)
+                    </label>
+                    <input
+                      type="text"
+                      value={footerTextInput}
+                      onChange={(e) => setFooterTextInput(e.target.value)}
+                      placeholder="منظومة الاستعلام الجمركي والضريبي الذكية • دولة فلسطين"
+                      className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]/20 transition-all font-semibold"
+                    />
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      النص الرئيسي الظاهر بجانب أيقونة ميزان العدالة في الفوتر أسفل الموقع.
+                    </p>
+                  </div>
+
+                  {/* Footer Subtext */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                      النص الفرعي أو الملاحظة الإضافية (اختياري)
+                    </label>
+                    <input
+                      type="text"
+                      value={footerSubtextInput}
+                      onChange={(e) => setFooterSubtextInput(e.target.value)}
+                      placeholder="وزارة المالية • الإدارة العامة للجمارك"
+                      className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]/20 transition-all"
+                    />
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      نص إضافي يظهر بجانب النص الرئيسي في الفوتر.
+                    </p>
+                  </div>
+
+                  {/* Footer Copyright */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                      حقوق الملكية والنشر (Copyright Text)
+                    </label>
+                    <input
+                      type="text"
+                      value={footerCopyrightInput}
+                      onChange={(e) => setFooterCopyrightInput(e.target.value)}
+                      placeholder="جميع الحقوق محفوظة © دولة فلسطين"
+                      className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]/20 transition-all"
+                    />
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      يظهر في الجهة المقابلة بالفوتر لحفظ الحقوق الرسمية.
+                    </p>
+                  </div>
+
+                  {/* Toggle Scale Icon */}
+                  <div className="md:col-span-2 pt-1">
+                    <label className="flex items-center gap-3 p-3 bg-gray-50 hover:bg-gray-100 rounded-xl border border-gray-200 cursor-pointer transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={footerShowScaleIconInput}
+                        onChange={(e) => setFooterShowScaleIconInput(e.target.checked)}
+                        className="w-4 h-4 text-emerald-800 rounded border-gray-300 focus:ring-emerald-700"
+                      />
+                      <div className="flex items-center gap-2">
+                        <Scale className="w-4 h-4 text-[#d4af37]" />
+                        <span className="text-xs font-bold text-gray-800">
+                          إظهار أيقونة ميزان العدالة الذهبية الرسمية بجانب نص الفوتر
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Realtime Live Preview of Footer */}
+                <div className="pt-2">
+                  <div className="text-[11px] font-bold text-gray-700 mb-1.5 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                    <span>معاينة حية وفورية لشكل الفوتر بالصفحة:</span>
+                  </div>
+                  <div className="rounded-xl overflow-hidden border border-[#1a3829] shadow-inner">
+                    <footer className="bg-[#0f241a] text-[#8aa997] py-3.5 px-4 text-xs">
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 text-center sm:text-right">
+                        <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
+                          {footerShowScaleIconInput && (
+                            <Scale className="w-4 h-4 text-[#d4af37] shrink-0" />
+                          )}
+                          <span className="font-semibold text-white">
+                            {footerTextInput.trim() || 'منظومة الاستعلام الجمركي والضريبي الذكية • دولة فلسطين'}
+                          </span>
+                          {footerSubtextInput.trim() && (
+                            <span className="text-[#8aa997] text-[11px] sm:before:content-['•'] sm:before:mx-2 sm:before:text-[#1a3829]">
+                              {footerSubtextInput.trim()}
+                            </span>
+                          )}
+                        </div>
+                        {footerCopyrightInput.trim() && (
+                          <div className="text-[11px] text-[#698a77]">
+                            {footerCopyrightInput.trim()}
+                          </div>
+                        )}
+                      </div>
+                    </footer>
+                  </div>
                 </div>
               </div>
 

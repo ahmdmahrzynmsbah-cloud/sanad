@@ -249,6 +249,12 @@ export interface SystemBranding {
   plansSectionTitle?: string;
   plansSectionSubtitle?: string;
   showPlansSectionInLanding?: boolean;
+
+  // Footer Customization (تخصيص الفوتر أسفل المنصة)
+  footerText?: string;
+  footerSubtext?: string;
+  footerCopyright?: string;
+  footerShowScaleIcon?: boolean;
 }
 
 export interface ContactWhatsappItem {

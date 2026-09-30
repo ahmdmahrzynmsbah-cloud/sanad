@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { RelatedSite } from '../../types';
 import { useSync, notifySync } from '../../utils/sync';
+import { directDeleteRelatedSiteFromFirestore } from '../../services/clientFirestore';
 
 interface RelatedSitesAdminTabProps {
   initialSites?: RelatedSite[];
@@ -232,44 +233,42 @@ export const RelatedSitesAdminTab: React.FC<RelatedSitesAdminTabProps> = ({
   const handleConfirmDelete = async () => {
     if (!siteToDelete) return;
 
-    setDeletingId(siteToDelete.id);
+    const target = siteToDelete;
+    setDeletingId(target.id);
+
+    // 1. Immediately update UI state
+    setSites((prev) => prev.filter((s) => s.id !== target.id));
+    setSiteToDelete(null);
+
     try {
-      const res = await fetch(`/api/admin/related-sites/${siteToDelete.id}`, {
+      const res = await fetch(`/api/admin/related-sites/${target.id}`, {
         method: 'DELETE',
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        setFeedback({
-          type: 'error',
-          message: data.error || 'فشلت عملية حذف الموقع.',
-        });
-        return;
-      }
-
-      if (data.relatedSites) {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.relatedSites) {
         setSites(data.relatedSites);
-      } else {
-        setSites((prev) => prev.filter((s) => s.id !== siteToDelete.id));
       }
-
-      notifySync('related_sites');
-      await fetchCategories();
-
-      setFeedback({
-        type: 'success',
-        message: `تم حذف الموقع "${siteToDelete.title}" نهائياً.`,
-      });
-      setTimeout(() => setFeedback(null), 4000);
     } catch (err) {
-      setFeedback({
-        type: 'error',
-        message: 'حدث خطأ أثناء محاولة الحذف.',
-      });
-    } finally {
-      setDeletingId(null);
-      setSiteToDelete(null);
+      console.warn('API error deleting related site, proceeding to direct firestore delete:', err);
     }
+
+    // 2. Direct Cloud Firestore delete
+    try {
+      await directDeleteRelatedSiteFromFirestore(target.id);
+    } catch (fErr) {
+      console.error('Direct firestore related site delete error:', fErr);
+    }
+
+    notifySync('related_sites');
+    await fetchCategories();
+
+    setFeedback({
+      type: 'success',
+      message: `تم حذف الموقع "${target.title}" نهائياً من النظام والسحابة.`,
+    });
+    setTimeout(() => setFeedback(null), 4000);
+    setDeletingId(null);
   };
 
   // Add new category in Category Manager

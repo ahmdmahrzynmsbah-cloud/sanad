@@ -43,6 +43,8 @@ import {
   saveLawToFirestore,
   updateLawInFirestore,
   deleteLawFromFirestore,
+  recordDeletedLawInFirestore,
+  fetchDeletedLawIdsFromFirestore,
   saveCategoryToFirestore,
   deleteCategoryFromFirestore,
   seedFirestoreIfEmpty,
@@ -366,7 +368,7 @@ app.all('/api/sync/pulse', (req, res) => {
     if (col === 'laws' || col === 'all') {
       fetchLawsFromFirestore().then((cloudLaws) => {
         if (cloudLaws && cloudLaws.length > 0) {
-          db.laws = cloudLaws;
+          db.laws = cloudLaws.filter((l) => !db.deletedLawIds?.includes(l.id) && !db.deletedLawIds?.includes(l.title));
           cachedIndexedChunks = null;
         }
       }).catch(() => {});
@@ -518,6 +520,12 @@ interface DBSettings {
   plansSectionTitle?: string;
   plansSectionSubtitle?: string;
   showPlansSectionInLanding?: boolean;
+
+  // Footer Customization (تخصيص الفوتر أسفل المنصة)
+  footerText?: string;
+  footerSubtext?: string;
+  footerCopyright?: string;
+  footerShowScaleIcon?: boolean;
 }
 
 const DEFAULT_FOUNDER = {
@@ -550,6 +558,10 @@ const DEFAULT_BRANDING = {
   plansSectionTitle: 'خطط وباقات الاشتراك',
   plansSectionSubtitle: 'اختر الباقة المثالية لاحتياجاتك واستفد من مرجع ذكاء اصطناعي قانوني وضريبي فلسطيني متكامل يواكب التشريعات والقرارات والتعرفة الجمركية لحظة بلحظة.',
   showPlansSectionInLanding: true,
+  footerText: 'منظومة الاستعلام الجمركي والضريبي الذكية • دولة فلسطين',
+  footerSubtext: '',
+  footerCopyright: 'جميع الحقوق محفوظة © دولة فلسطين',
+  footerShowScaleIcon: true,
   ...DEFAULT_FOUNDER,
 };
 
@@ -682,6 +694,7 @@ export const DEFAULT_RELATED_SITES: StoredRelatedSite[] = [
 interface DBData {
   users: StoredUser[];
   laws: StoredLaw[];
+  deletedLawIds?: string[];
   lawRequests?: StoredLawRequest[];
   categories?: StoredCategory[];
   settings?: DBSettings;
@@ -1186,9 +1199,14 @@ function initDB(): DBData {
 }
 
 let db = initDB();
+if (!db.deletedLawIds) {
+  db.deletedLawIds = [];
+}
 if (!db.laws || db.laws.length === 0) {
   db.laws = [...BUNDLED_PALESTINE_LAWS];
 }
+// Ensure deleted laws are strictly excluded
+db.laws = db.laws.filter((l) => !db.deletedLawIds!.includes(l.id) && !db.deletedLawIds!.includes(l.title));
 if (db.subscriptionPlans === undefined) {
   db.subscriptionPlans = [...DEFAULT_SUBSCRIPTION_PLANS];
 }
@@ -2019,6 +2037,11 @@ app.get('/api/system/branding', (req, res) => {
     founderPhotoUrl: db.settings?.founderPhotoUrl || DEFAULT_FOUNDER.founderPhotoUrl,
     founderQuote: db.settings?.founderQuote || DEFAULT_FOUNDER.founderQuote,
     siteOverview: db.settings?.siteOverview || DEFAULT_FOUNDER.siteOverview,
+
+    footerText: db.settings?.footerText || DEFAULT_BRANDING.footerText,
+    footerSubtext: db.settings?.footerSubtext !== undefined ? db.settings.footerSubtext : DEFAULT_BRANDING.footerSubtext,
+    footerCopyright: db.settings?.footerCopyright !== undefined ? db.settings.footerCopyright : DEFAULT_BRANDING.footerCopyright,
+    footerShowScaleIcon: db.settings?.footerShowScaleIcon !== undefined ? db.settings.footerShowScaleIcon : DEFAULT_BRANDING.footerShowScaleIcon,
   });
 });
 
@@ -2051,10 +2074,16 @@ app.get('/api/admin/init', async (req, res) => {
     console.error('Error ensuring users for /api/admin/init:', err);
   }
 
-  const adminUsers = (db.users || []).map(toAdminUser);
+  const roleHeader = (req.headers['x-admin-role'] || req.query.role || '') as string;
+  const isSupervisorReq = roleHeader === 'supervisor';
+
+  const adminUsers = isSupervisorReq ? [] : (db.users || []).map(toAdminUser);
   res.json({
     users: adminUsers,
-    laws: (db.laws || []).map(l => ({ ...l, content: "" })),
+    laws: (db.laws || [])
+      .filter((l) => !db.deletedLawIds?.includes(l.id) && !db.deletedLawIds?.includes(l.title))
+      .map((l) => ({ ...l, content: '' })),
+    deletedLawIds: db.deletedLawIds || [],
     lawRequests: db.lawRequests || [],
     categories: db.categories || [],
     supervisors: (db.supervisors || []).sort((a, b) => (a.order || 0) - (b.order || 0)),
@@ -2088,6 +2117,11 @@ app.get('/api/admin/init', async (req, res) => {
       founderPhotoUrl: db.settings?.founderPhotoUrl || DEFAULT_FOUNDER.founderPhotoUrl,
       founderQuote: db.settings?.founderQuote || DEFAULT_FOUNDER.founderQuote,
       siteOverview: db.settings?.siteOverview || DEFAULT_FOUNDER.siteOverview,
+
+      footerText: db.settings?.footerText || DEFAULT_BRANDING.footerText,
+      footerSubtext: db.settings?.footerSubtext !== undefined ? db.settings.footerSubtext : DEFAULT_BRANDING.footerSubtext,
+      footerCopyright: db.settings?.footerCopyright !== undefined ? db.settings.footerCopyright : DEFAULT_BRANDING.footerCopyright,
+      footerShowScaleIcon: db.settings?.footerShowScaleIcon !== undefined ? db.settings.footerShowScaleIcon : DEFAULT_BRANDING.footerShowScaleIcon,
     },
     systemStatus: {
       status: 'online',
@@ -2141,6 +2175,11 @@ app.get('/api/admin/settings', (req, res) => {
       plansSectionTitle: db.settings?.plansSectionTitle || DEFAULT_BRANDING.plansSectionTitle,
       plansSectionSubtitle: db.settings?.plansSectionSubtitle || DEFAULT_BRANDING.plansSectionSubtitle,
       showPlansSectionInLanding: db.settings?.showPlansSectionInLanding !== undefined ? db.settings.showPlansSectionInLanding : (DEFAULT_BRANDING.showPlansSectionInLanding !== false),
+
+      footerText: db.settings?.footerText || DEFAULT_BRANDING.footerText,
+      footerSubtext: db.settings?.footerSubtext !== undefined ? db.settings.footerSubtext : DEFAULT_BRANDING.footerSubtext,
+      footerCopyright: db.settings?.footerCopyright !== undefined ? db.settings.footerCopyright : DEFAULT_BRANDING.footerCopyright,
+      footerShowScaleIcon: db.settings?.footerShowScaleIcon !== undefined ? db.settings.footerShowScaleIcon : DEFAULT_BRANDING.footerShowScaleIcon,
     },
   });
 });
@@ -2185,6 +2224,10 @@ app.post('/api/admin/settings/branding', async (req, res, next) => {
       plansSectionTitle,
       plansSectionSubtitle,
       showPlansSectionInLanding,
+      footerText,
+      footerSubtext,
+      footerCopyright,
+      footerShowScaleIcon,
     } = body || {};
 
     if (!systemName || !String(systemName).trim()) {
@@ -2267,6 +2310,11 @@ app.post('/api/admin/settings/branding', async (req, res, next) => {
     if (plansSectionSubtitle !== undefined) db.settings.plansSectionSubtitle = String(plansSectionSubtitle).trim();
     if (showPlansSectionInLanding !== undefined) db.settings.showPlansSectionInLanding = Boolean(showPlansSectionInLanding);
 
+    if (footerText !== undefined) db.settings.footerText = String(footerText).trim();
+    if (footerSubtext !== undefined) db.settings.footerSubtext = String(footerSubtext).trim();
+    if (footerCopyright !== undefined) db.settings.footerCopyright = String(footerCopyright).trim();
+    if (footerShowScaleIcon !== undefined) db.settings.footerShowScaleIcon = Boolean(footerShowScaleIcon);
+
     saveDB();
 
     const firestorePayload = {
@@ -2307,6 +2355,11 @@ app.post('/api/admin/settings/branding', async (req, res, next) => {
       plansSectionTitle: db.settings.plansSectionTitle,
       plansSectionSubtitle: db.settings.plansSectionSubtitle,
       showPlansSectionInLanding: db.settings.showPlansSectionInLanding !== false,
+
+      footerText: db.settings.footerText,
+      footerSubtext: db.settings.footerSubtext,
+      footerCopyright: db.settings.footerCopyright,
+      footerShowScaleIcon: db.settings.footerShowScaleIcon !== false,
     };
 
     // Await cloud Firestore save with a safety timeout so Vercel doesn't freeze in-flight connections
@@ -2348,6 +2401,11 @@ app.post('/api/admin/settings/branding', async (req, res, next) => {
         plansSectionTitle: db.settings.plansSectionTitle,
         plansSectionSubtitle: db.settings.plansSectionSubtitle,
         showPlansSectionInLanding: db.settings.showPlansSectionInLanding !== false,
+
+        footerText: db.settings.footerText,
+        footerSubtext: db.settings.footerSubtext,
+        footerCopyright: db.settings.footerCopyright,
+        footerShowScaleIcon: db.settings.footerShowScaleIcon !== false,
       },
     });
   } catch (err: any) {
@@ -3383,6 +3441,15 @@ app.post('/api/admin/settings/auto-approve', async (req, res) => {
   }
 });
 
+// Supervisor Access Control Middleware: Supervisors are strictly prohibited from viewing or managing subscribers
+app.use('/api/admin/users', (req, res, next) => {
+  const roleHeader = (req.headers['x-admin-role'] || req.query.role || '') as string;
+  if (roleHeader === 'supervisor') {
+    return res.status(403).json({ error: 'غير مصرح للمشرف بالاطلاع على أو إدارة بيانات المشتركين', users: [] });
+  }
+  next();
+});
+
 // Auto-Approve ALL Pending Users at once
 app.post('/api/admin/users/auto-approve-all', async (req, res) => {
   const pendingUsers = db.users.filter((u) => u.status === 'pending');
@@ -3420,6 +3487,11 @@ app.post('/api/admin/users/auto-approve-all', async (req, res) => {
 
 // Get all users with real-time trial and subscription calculations (Admin view with credentials)
 app.get('/api/admin/users', async (req, res) => {
+  const roleHeader = (req.headers['x-admin-role'] || req.query.role || '') as string;
+  if (roleHeader === 'supervisor') {
+    return res.status(403).json({ error: 'غير مصرح للمشرف بالاطلاع على قائمة المشتركين', users: [] });
+  }
+
   try {
     if (!db.users || db.users.length === 0) {
       const cloudUsers = await fetchUsersFromFirestore();
@@ -4358,13 +4430,18 @@ function isDuplicateLawServer(candidate: { title?: string; sourceFileName?: stri
 // Get all laws
 app.get('/api/laws', (req, res) => {
   // Omit content to prevent hitting Vercel 4.5MB payload limit
-  const lightweightLaws = db.laws.map(l => ({ ...l, content: '' }));
-  res.json({ laws: lightweightLaws });
+  const lightweightLaws = (db.laws || [])
+    .filter((l) => !db.deletedLawIds?.includes(l.id) && !db.deletedLawIds?.includes(l.title))
+    .map((l) => ({ ...l, content: '' }));
+  res.json({ laws: lightweightLaws, deletedLawIds: db.deletedLawIds || [] });
 });
 
 app.get('/api/laws/:id', (req, res) => {
   const { id } = req.params;
-  const law = db.laws.find(l => l.id === id);
+  if (db.deletedLawIds?.includes(id)) {
+    return res.status(404).json({ error: 'تم حذف هذا القانون نهائياً' });
+  }
+  const law = db.laws.find((l) => (l.id === id || l.title === id) && !db.deletedLawIds?.includes(l.id));
   if (law) {
     res.json({ law });
   } else {
@@ -4552,13 +4629,30 @@ app.put('/api/laws/:id', async (req, res) => {
 app.delete('/api/laws/:id', async (req, res) => {
   try {
     const id = decodeURIComponent(req.params.id).trim();
-    db.laws = db.laws.filter((l) => l.id !== id);
+    if (!db.deletedLawIds) db.deletedLawIds = [];
 
-    // Ensure deleted from Cloud Firestore
+    const targetLaw = db.laws.find((l) => l.id === id || l.title === id);
+    if (targetLaw) {
+      if (!db.deletedLawIds.includes(targetLaw.id)) db.deletedLawIds.push(targetLaw.id);
+      if (targetLaw.title && !db.deletedLawIds.includes(targetLaw.title)) db.deletedLawIds.push(targetLaw.title);
+      if (targetLaw.sourceFileName && !db.deletedLawIds.includes(targetLaw.sourceFileName)) db.deletedLawIds.push(targetLaw.sourceFileName);
+    }
+    if (!db.deletedLawIds.includes(id)) {
+      db.deletedLawIds.push(id);
+    }
+
+    db.laws = db.laws.filter((l) => l.id !== id && l.title !== id && !db.deletedLawIds!.includes(l.id) && !db.deletedLawIds!.includes(l.title));
+    cachedIndexedChunks = null;
+    saveDB('laws');
+
+    // Ensure permanently deleted from Cloud Firestore
     await deleteLawFromFirestore(id);
-    saveDB();
+    if (targetLaw?.id && targetLaw.id !== id) {
+      await deleteLawFromFirestore(targetLaw.id);
+    }
+    await recordDeletedLawInFirestore(id, targetLaw?.title);
 
-    return res.json({ message: 'تم حذف القانون بنجاح من قاعدة البيانات والسحابة' });
+    return res.json({ success: true, message: 'تم حذف القانون نهائياً من قاعدة البيانات والسحابة', deletedId: id });
   } catch (err: any) {
     console.error('Error deleting law:', err);
     return res.status(500).json({ error: 'حدث خطأ أثناء حذف القانون: ' + (err?.message || '') });
@@ -4568,12 +4662,29 @@ app.delete('/api/laws/:id', async (req, res) => {
 app.post('/api/laws/:id/delete', async (req, res) => {
   try {
     const id = decodeURIComponent(req.params.id).trim();
-    db.laws = db.laws.filter((l) => l.id !== id);
+    if (!db.deletedLawIds) db.deletedLawIds = [];
+
+    const targetLaw = db.laws.find((l) => l.id === id || l.title === id);
+    if (targetLaw) {
+      if (!db.deletedLawIds.includes(targetLaw.id)) db.deletedLawIds.push(targetLaw.id);
+      if (targetLaw.title && !db.deletedLawIds.includes(targetLaw.title)) db.deletedLawIds.push(targetLaw.title);
+      if (targetLaw.sourceFileName && !db.deletedLawIds.includes(targetLaw.sourceFileName)) db.deletedLawIds.push(targetLaw.sourceFileName);
+    }
+    if (!db.deletedLawIds.includes(id)) {
+      db.deletedLawIds.push(id);
+    }
+
+    db.laws = db.laws.filter((l) => l.id !== id && l.title !== id && !db.deletedLawIds!.includes(l.id) && !db.deletedLawIds!.includes(l.title));
+    cachedIndexedChunks = null;
+    saveDB('laws');
 
     await deleteLawFromFirestore(id);
-    saveDB();
+    if (targetLaw?.id && targetLaw.id !== id) {
+      await deleteLawFromFirestore(targetLaw.id);
+    }
+    await recordDeletedLawInFirestore(id, targetLaw?.title);
 
-    return res.json({ message: 'تم حذف القانون بنجاح من قاعدة البيانات والسحابة' });
+    return res.json({ success: true, message: 'تم حذف القانون نهائياً من قاعدة البيانات والسحابة', deletedId: id });
   } catch (err: any) {
     console.error('Error deleting law via POST:', err);
     return res.status(500).json({ error: 'حدث خطأ أثناء حذف القانون: ' + (err?.message || '') });

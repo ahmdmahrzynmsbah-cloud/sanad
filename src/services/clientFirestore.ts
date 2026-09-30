@@ -213,19 +213,52 @@ export async function directFetchLawsFromFirestore(): Promise<Law[]> {
     }
   } catch {}
 
+  // 0. Load permanently deleted law IDs/titles from localStorage and Firestore
+  const deletedSet = new Set<string>();
+  try {
+    const raw = localStorage.getItem('sanad_deleted_law_ids');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) parsed.forEach((id: string) => deletedSet.add(id));
+    }
+  } catch {}
+
+  if (db) {
+    try {
+      const delCol = collection(db, 'deleted_laws');
+      const delSnap = await getDocs(delCol);
+      if (!delSnap.empty) {
+        delSnap.forEach((d) => {
+          deletedSet.add(d.id);
+          const data = d.data();
+          if (data?.title) deletedSet.add(data.title);
+        });
+      }
+    } catch {}
+  }
+
   // Merge bundled static laws with firestore and local extra laws, avoiding duplicate IDs/titles
   const lawsMap = new Map<string, Law>();
 
   for (const law of BUNDLED_PALESTINE_LAWS) {
+    if (deletedSet.has(law.id) || (law.title && (deletedSet.has(law.title) || deletedSet.has(law.title.trim().toLowerCase())))) {
+      continue;
+    }
     lawsMap.set(law.id, law);
     if (law.title) lawsMap.set(law.title.trim().toLowerCase(), law);
   }
 
   for (const law of firestoreItems) {
+    if (deletedSet.has(law.id) || (law.title && (deletedSet.has(law.title) || deletedSet.has(law.title.trim().toLowerCase())))) {
+      continue;
+    }
     lawsMap.set(law.id, law);
   }
 
   for (const law of localExtraLaws) {
+    if (deletedSet.has(law.id) || (law.title && (deletedSet.has(law.title) || deletedSet.has(law.title.trim().toLowerCase())))) {
+      continue;
+    }
     lawsMap.set(law.id, law);
   }
 
@@ -239,14 +272,40 @@ export async function directFetchLawsFromFirestore(): Promise<Law[]> {
     }
   }
 
-  return uniqueLaws.length > 0 ? uniqueLaws : BUNDLED_PALESTINE_LAWS;
+  return uniqueLaws;
 }
 
 /**
- * Direct client-side delete from Firestore as fallback.
+ * Direct client-side delete from Firestore as fallback, with persistent deleted tracking.
  */
-export async function directDeleteLawFromFirestore(lawId: string): Promise<boolean> {
+export async function directDeleteLawFromFirestore(lawId: string, lawTitle?: string): Promise<boolean> {
   if (!lawId) return true;
+
+  // 1. Immediately record in localStorage so it never resurrects
+  try {
+    const raw = localStorage.getItem('sanad_deleted_law_ids');
+    const list: string[] = raw ? JSON.parse(raw) : [];
+    if (!list.includes(lawId)) list.push(lawId);
+    if (lawTitle && !list.includes(lawTitle)) list.push(lawTitle);
+    localStorage.setItem('sanad_deleted_law_ids', JSON.stringify(list));
+
+    // Also remove from pal_custom_laws and sanad_cached_laws
+    const customRaw = localStorage.getItem('pal_custom_laws');
+    if (customRaw) {
+      const parsed = JSON.parse(customRaw);
+      if (Array.isArray(parsed)) {
+        localStorage.setItem('pal_custom_laws', JSON.stringify(parsed.filter((l: any) => l.id !== lawId && l.title !== lawTitle)));
+      }
+    }
+    const cachedLawsRaw = localStorage.getItem('sanad_cached_laws');
+    if (cachedLawsRaw) {
+      const parsed = JSON.parse(cachedLawsRaw);
+      if (Array.isArray(parsed)) {
+        localStorage.setItem('sanad_cached_laws', JSON.stringify(parsed.filter((l: any) => l.id !== lawId && l.title !== lawTitle)));
+      }
+    }
+  } catch {}
+
   const db = getClientDb();
   if (!db) return true;
 
@@ -272,6 +331,16 @@ export async function directDeleteLawFromFirestore(lawId: string): Promise<boole
         })
       );
     }
+  } catch {}
+
+  // Record in Firestore 'deleted_laws' collection so all clients respect the deletion
+  try {
+    const delDoc = doc(db, 'deleted_laws', lawId);
+    await setDoc(delDoc, {
+      id: lawId,
+      title: lawTitle || '',
+      deletedAt: new Date().toISOString(),
+    });
   } catch {}
 
   return true;
@@ -928,6 +997,33 @@ export async function directFetchContactInfoFromFirestore(): Promise<any | null>
   }
 }
 
+export async function directDeleteCategoryFromFirestore(categoryId: string): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+
+  try {
+    // Delete from both possible collections: legal_categories and categories
+    await deleteDoc(doc(db, 'legal_categories', categoryId)).catch(() => {});
+    await deleteDoc(doc(db, 'categories', categoryId)).catch(() => {});
+
+    for (const colName of ['legal_categories', 'categories']) {
+      try {
+        const col = collection(db, colName);
+        const q = query(col, where('id', '==', categoryId));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+        }
+      } catch {}
+    }
+    console.log(`[Client Firestore] Successfully deleted category directly: ${categoryId}`);
+    return true;
+  } catch (err) {
+    handleClientFirestoreError('directDeleteCategoryFromFirestore', err);
+    return false;
+  }
+}
+
 export async function directSavePartnerToFirestore(partner: any): Promise<boolean> {
   const db = getClientDb();
   if (!db) return false;
@@ -952,7 +1048,16 @@ export async function directDeletePartnerFromFirestore(id: string): Promise<bool
   if (!db) return false;
 
   try {
-    await deleteDoc(doc(db, 'partners', id));
+    await deleteDoc(doc(db, 'partners', id)).catch(() => {});
+    try {
+      const col = collection(db, 'partners');
+      const q = query(col, where('id', '==', id));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+      }
+    } catch {}
+    console.log(`[Client Firestore] Successfully deleted partner directly: ${id}`);
     return true;
   } catch (err) {
     handleClientFirestoreError('directDeletePartnerFromFirestore', err);
@@ -1002,7 +1107,16 @@ export async function directDeleteRelatedSiteFromFirestore(id: string): Promise<
   if (!db) return false;
 
   try {
-    await deleteDoc(doc(db, 'related_sites', id));
+    await deleteDoc(doc(db, 'related_sites', id)).catch(() => {});
+    try {
+      const col = collection(db, 'related_sites');
+      const q = query(col, where('id', '==', id));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+      }
+    } catch {}
+    console.log(`[Client Firestore] Successfully deleted related site directly: ${id}`);
     return true;
   } catch (err) {
     handleClientFirestoreError('directDeleteRelatedSiteFromFirestore', err);
@@ -1052,7 +1166,16 @@ export async function directDeleteSupervisorFromFirestore(id: string): Promise<b
   if (!db) return false;
 
   try {
-    await deleteDoc(doc(db, 'supervisors', id));
+    await deleteDoc(doc(db, 'supervisors', id)).catch(() => {});
+    try {
+      const col = collection(db, 'supervisors');
+      const q = query(col, where('id', '==', id));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+      }
+    } catch {}
+    console.log(`[Client Firestore] Successfully deleted supervisor directly: ${id}`);
     return true;
   } catch (err) {
     handleClientFirestoreError('directDeleteSupervisorFromFirestore', err);
@@ -1333,10 +1456,29 @@ export async function directAutoApproveAllPendingInFirestore(defaultDays: number
 export async function directDeleteUserFromFirestore(
   userId: string
 ): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+
   try {
-    const db = getClientDb();
-    await deleteDoc(doc(db, 'users', userId));
-    console.log(`[Client Firestore] Successfully deleted user directly: ${userId}`);
+    // 1. Direct delete by document key
+    await deleteDoc(doc(db, 'users', userId)).catch(() => {});
+
+    // 2. Query and delete all matching documents by 'id' and 'username'
+    try {
+      const col = collection(db, 'users');
+      const q1 = query(col, where('id', '==', userId));
+      const snap1 = await getDocs(q1);
+      if (!snap1.empty) {
+        await Promise.all(snap1.docs.map((d) => deleteDoc(d.ref)));
+      }
+      const q2 = query(col, where('username', '==', userId));
+      const snap2 = await getDocs(q2);
+      if (!snap2.empty) {
+        await Promise.all(snap2.docs.map((d) => deleteDoc(d.ref)));
+      }
+    } catch {}
+
+    console.log(`[Client Firestore] Successfully deleted user directly from Firestore: ${userId}`);
     return true;
   } catch (err) {
     handleClientFirestoreError('directDeleteUserFromFirestore', err);
@@ -1463,7 +1605,15 @@ export async function directDeleteLawRequestFromFirestore(requestId: string): Pr
 
   try {
     const docRef = doc(db, 'law_requests', requestId);
-    await deleteDoc(docRef);
+    await deleteDoc(docRef).catch(() => {});
+    try {
+      const col = collection(db, 'law_requests');
+      const q = query(col, where('id', '==', requestId));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+      }
+    } catch {}
     console.log(`[Client Firestore] Successfully deleted law request directly: ${requestId}`);
     return true;
   } catch (err) {
@@ -1590,7 +1740,16 @@ export async function directDeleteVideoFromFirestore(id: string): Promise<boolea
   const db = getClientDb();
   if (!db) return false;
   try {
-    await deleteDoc(doc(db, 'videos', id));
+    await deleteDoc(doc(db, 'videos', id)).catch(() => {});
+    try {
+      const col = collection(db, 'videos');
+      const q = query(col, where('id', '==', id));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+      }
+    } catch {}
+    console.log(`[Client Firestore] Successfully deleted video directly: ${id}`);
     return true;
   } catch (err) {
     handleClientFirestoreError('directDeleteVideoFromFirestore', err);

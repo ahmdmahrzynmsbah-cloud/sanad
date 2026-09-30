@@ -562,7 +562,16 @@ export function parseCitationsFromResponseText(responseText: string, laws: Law[]
 }
 
 export function generateClientKnowledgeFallback(query: string, laws: Law[]): string {
-  const effectiveLaws = (Array.isArray(laws) && laws.length > 0) ? laws : BUNDLED_PALESTINE_LAWS;
+  let deletedList: string[] = [];
+  try {
+    const raw = localStorage.getItem('sanad_deleted_law_ids');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) deletedList = parsed;
+    }
+  } catch {}
+  const rawList = (Array.isArray(laws) && laws.length > 0) ? laws : BUNDLED_PALESTINE_LAWS;
+  const effectiveLaws = rawList.filter((l) => !deletedList.includes(l.id) && !deletedList.includes(l.title));
   const trimmed = query.trim().toLowerCase();
   const cleaned = trimmed.replace(/[!؟?.,،:\-\s]+/g, ' ').trim();
   const words = cleaned.split(/\s+/).filter(Boolean);

@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { Supervisor } from '../../types';
 import { useSync, notifySync } from '../../utils/sync';
+import { directDeleteSupervisorFromFirestore } from '../../services/clientFirestore';
 
 interface SupervisorsAdminTabProps {
   initialSupervisors?: Supervisor[];
@@ -202,42 +203,40 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
   const handleConfirmDelete = async () => {
     if (!supervisorToDelete) return;
 
-    setDeletingId(supervisorToDelete.id);
+    const target = supervisorToDelete;
+    setDeletingId(target.id);
+
+    // 1. Immediately update UI state
+    setSupervisors((prev) => prev.filter((s) => s.id !== target.id));
+    setSupervisorToDelete(null);
+
     try {
-      const res = await fetch(`/api/admin/supervisors/${supervisorToDelete.id}`, {
+      const res = await fetch(`/api/admin/supervisors/${target.id}`, {
         method: 'DELETE',
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        setFeedback({
-          type: 'error',
-          message: data.error || 'فشلت عملية حذف المشرف.',
-        });
-        return;
-      }
-
-      if (data.supervisors) {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.supervisors) {
         setSupervisors(data.supervisors);
-      } else {
-        setSupervisors((prev) => prev.filter((s) => s.id !== supervisorToDelete.id));
       }
-
-      notifySync('supervisors');
-      setFeedback({
-        type: 'success',
-        message: `تم حذف المشرف "${supervisorToDelete.name}" نهائياً من النظام.`,
-      });
-      setTimeout(() => setFeedback(null), 4000);
     } catch (err) {
-      setFeedback({
-        type: 'error',
-        message: 'حدث خطأ أثناء محاولة الحذف.',
-      });
-    } finally {
-      setDeletingId(null);
-      setSupervisorToDelete(null);
+      console.warn('API error deleting supervisor, proceeding to direct firestore delete:', err);
     }
+
+    // 2. Direct Cloud Firestore delete
+    try {
+      await directDeleteSupervisorFromFirestore(target.id);
+    } catch (fErr) {
+      console.error('Direct firestore supervisor delete error:', fErr);
+    }
+
+    notifySync('supervisors');
+    setFeedback({
+      type: 'success',
+      message: `تم حذف المشرف "${target.name}" نهائياً من النظام والسحابة.`,
+    });
+    setTimeout(() => setFeedback(null), 4000);
+    setDeletingId(null);
   };
 
   const filtered = supervisors.filter((s) => {

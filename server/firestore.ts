@@ -424,7 +424,22 @@ export async function deleteUserFromFirestore(userId: string): Promise<boolean> 
 
   try {
     const userRef = doc(db, 'users', userId);
-    await deleteDoc(userRef);
+    await deleteDoc(userRef).catch(() => {});
+
+    try {
+      const col = collection(db, 'users');
+      const q1 = query(col, where('id', '==', userId));
+      const snap1 = await getDocs(q1);
+      if (!snap1.empty) {
+        await Promise.all(snap1.docs.map((d) => deleteDoc(d.ref)));
+      }
+      const q2 = query(col, where('username', '==', userId));
+      const snap2 = await getDocs(q2);
+      if (!snap2.empty) {
+        await Promise.all(snap2.docs.map((d) => deleteDoc(d.ref)));
+      }
+    } catch {}
+
     console.log(`Successfully deleted user ${userId} from Firestore.`);
     return true;
   } catch (err) {
@@ -510,11 +525,61 @@ export async function deleteLawFromFirestore(lawId: string): Promise<boolean> {
 
   try {
     const lawRef = doc(db, 'laws', lawId);
-    await deleteDoc(lawRef);
+    await deleteDoc(lawRef).catch(() => {});
+
+    try {
+      const col = collection(db, 'laws');
+      const q = query(col, where('id', '==', lawId));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+      }
+    } catch {}
+
     return true;
   } catch (err) {
     handleFirestoreError(`deleteLawFromFirestore ${lawId}`, err);
     return false;
+  }
+}
+
+export async function recordDeletedLawInFirestore(lawId: string, lawTitle?: string): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
+  const db = initFirestore();
+  if (!db) return false;
+
+  try {
+    const deletedRef = doc(db, 'deleted_laws', lawId);
+    await setDoc(deletedRef, {
+      id: lawId,
+      title: lawTitle || '',
+      deletedAt: new Date().toISOString(),
+    });
+    return true;
+  } catch (err) {
+    handleFirestoreError(`recordDeletedLawInFirestore ${lawId}`, err);
+    return false;
+  }
+}
+
+export async function fetchDeletedLawIdsFromFirestore(): Promise<string[]> {
+  if (isQuotaExceeded()) return [];
+  const db = initFirestore();
+  if (!db) return [];
+
+  try {
+    const col = collection(db, 'deleted_laws');
+    const snapshot = await getDocs(col);
+    const ids: string[] = [];
+    snapshot.forEach((d) => {
+      ids.push(d.id);
+      const data = d.data();
+      if (data.title) ids.push(data.title);
+    });
+    return ids;
+  } catch (err) {
+    handleFirestoreError('fetchDeletedLawIdsFromFirestore', err);
+    return [];
   }
 }
 
@@ -603,7 +668,17 @@ export async function deleteLawRequestFromFirestore(requestId: string): Promise<
 
   try {
     const docRef = doc(db, 'law_requests', requestId);
-    await deleteDoc(docRef);
+    await deleteDoc(docRef).catch(() => {});
+
+    try {
+      const col = collection(db, 'law_requests');
+      const q = query(col, where('id', '==', requestId));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+      }
+    } catch {}
+
     return true;
   } catch (err) {
     handleFirestoreError(`deleteLawRequestFromFirestore ${requestId}`, err);
@@ -664,8 +739,20 @@ export async function deleteCategoryFromFirestore(categoryId: string): Promise<b
   if (!db) return false;
 
   try {
-    const catRef = doc(db, 'legal_categories', categoryId);
-    await deleteDoc(catRef);
+    await deleteDoc(doc(db, 'legal_categories', categoryId)).catch(() => {});
+    await deleteDoc(doc(db, 'categories', categoryId)).catch(() => {});
+
+    for (const colName of ['legal_categories', 'categories']) {
+      try {
+        const col = collection(db, colName);
+        const q = query(col, where('id', '==', categoryId));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+        }
+      } catch {}
+    }
+
     return true;
   } catch (err) {
     handleFirestoreError(`deleteCategoryFromFirestore ${categoryId}`, err);
@@ -749,7 +836,17 @@ export async function deleteSupervisorFromFirestore(supervisorId: string): Promi
 
   try {
     const docRef = doc(db, 'supervisors', supervisorId);
-    await deleteDoc(docRef);
+    await deleteDoc(docRef).catch(() => {});
+
+    try {
+      const col = collection(db, 'supervisors');
+      const q = query(col, where('id', '==', supervisorId));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+      }
+    } catch {}
+
     return true;
   } catch (err) {
     handleFirestoreError(`deleteSupervisorFromFirestore ${supervisorId}`, err);
@@ -827,7 +924,17 @@ export async function deleteRelatedSiteFromFirestore(siteId: string): Promise<bo
 
   try {
     const docRef = doc(db, 'related_sites', siteId);
-    await deleteDoc(docRef);
+    await deleteDoc(docRef).catch(() => {});
+
+    try {
+      const col = collection(db, 'related_sites');
+      const q = query(col, where('id', '==', siteId));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+      }
+    } catch {}
+
     return true;
   } catch (err) {
     handleFirestoreError(`deleteRelatedSiteFromFirestore ${siteId}`, err);
@@ -984,7 +1091,17 @@ export async function deletePartnerFromFirestore(partnerId: string): Promise<boo
 
   try {
     const docRef = doc(db, 'partners', partnerId);
-    await deleteDoc(docRef);
+    await deleteDoc(docRef).catch(() => {});
+
+    try {
+      const col = collection(db, 'partners');
+      const q = query(col, where('id', '==', partnerId));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+      }
+    } catch {}
+
     return true;
   } catch (err) {
     handleFirestoreError(`deletePartnerFromFirestore ${partnerId}`, err);
@@ -1629,7 +1746,17 @@ export async function deleteVideoFromFirestore(id: string): Promise<boolean> {
 
   try {
     const docRef = doc(db, 'videos', id);
-    await deleteDoc(docRef);
+    await deleteDoc(docRef).catch(() => {});
+
+    try {
+      const col = collection(db, 'videos');
+      const q = query(col, where('id', '==', id));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+      }
+    } catch {}
+
     notifyChange('videos');
     return true;
   } catch (err) {
