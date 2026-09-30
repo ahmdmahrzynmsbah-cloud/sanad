@@ -15,6 +15,9 @@ service cloud.firestore {
     match /legal_categories/{categoryId} {
       allow read, write: if true;
     }
+    match /categories/{categoryId} {
+      allow read, write: if true;
+    }
     
     // Supervisors / Advisors
     match /supervisors/{supervisorId} {

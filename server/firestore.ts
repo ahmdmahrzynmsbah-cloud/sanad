@@ -692,21 +692,30 @@ export async function fetchCategoriesFromFirestore(): Promise<StoredCategory[] |
   if (!db) return null;
 
   try {
-    const catCol = collection(db, 'legal_categories');
-    const snapshot = await getDocs(catCol);
-    if (snapshot.empty) {
-      return [];
+    const categories: StoredCategory[] = [];
+    const seenNames = new Set<string>();
+
+    for (const colName of ['legal_categories', 'categories']) {
+      try {
+        const catCol = collection(db, colName);
+        const snapshot = await getDocs(catCol);
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data() as StoredCategory;
+          const name = data.name || (docSnap.data() as any).title;
+          if (name && !seenNames.has(name.trim().toLowerCase())) {
+            seenNames.add(name.trim().toLowerCase());
+            categories.push({
+              id: docSnap.id,
+              name: name.trim(),
+              isDefault: data.isDefault ?? false,
+              createdAt: data.createdAt,
+            });
+          }
+        });
+      } catch {}
     }
 
-    const categories: StoredCategory[] = [];
-    snapshot.forEach((docSnap) => {
-      const data = docSnap.data() as StoredCategory;
-      categories.push({
-        id: docSnap.id,
-        ...data,
-      });
-    });
-    return categories;
+    return categories.length > 0 ? categories : [];
   } catch (err) {
     handleFirestoreError('fetchCategoriesFromFirestore', err);
     return null;
@@ -719,13 +728,14 @@ export async function saveCategoryToFirestore(category: StoredCategory): Promise
   if (!db) return false;
 
   try {
-    const catRef = doc(db, 'legal_categories', category.id);
-    await setDoc(catRef, {
+    const data = {
       id: category.id,
       name: category.name,
       isDefault: category.isDefault ?? false,
       createdAt: category.createdAt,
-    });
+    };
+    await setDoc(doc(db, 'legal_categories', category.id), data, { merge: true }).catch(() => {});
+    await setDoc(doc(db, 'categories', category.id), data, { merge: true }).catch(() => {});
     return true;
   } catch (err) {
     handleFirestoreError(`saveCategoryToFirestore ${category.id}`, err);

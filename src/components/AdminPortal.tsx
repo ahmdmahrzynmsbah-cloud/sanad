@@ -51,9 +51,9 @@ import {
   Handshake,
   CreditCard,
   User as UserIcon,
-  Bot
+  Bot,
 } from 'lucide-react';
-import { User, Law, LawCategory, LegalCategory, SystemBranding, PlatformAboutData, ContactInfo, Video, RelatedSite, Partner, SubscriptionPlan, Supervisor } from '../types';
+import { User, Law, LawCategory, LegalCategory, DEFAULT_LEGAL_CATEGORIES, SystemBranding, PlatformAboutData, ContactInfo, Video, RelatedSite, Partner, SubscriptionPlan, Supervisor } from '../types';
 import { formatBytes, sanitizeLawTitle, PDFProgress } from '../utils/pdfParser';
 import { extractTextFromAnyDocument } from '../utils/documentParser';
 import { findKnownPalestinianDecree } from '../utils/palestinianDecrees';
@@ -340,7 +340,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         }
       } catch {}
     }
-    return [];
+    return DEFAULT_LEGAL_CATEGORIES;
   });
   const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -611,20 +611,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   const fetchCategories = async () => {
     setCategoriesLoading(true);
     let loaded = false;
+    let fetchedCategories: LegalCategory[] = [];
+
     try {
       const res = await fetch('/api/categories');
       if (res.ok) {
         const data = await res.json();
-        if (data.categories && data.categories.length > 0) {
-          setCategories(data.categories);
-          try {
-            localStorage.setItem('sanad_cached_categories', JSON.stringify(data.categories));
-          } catch {}
+        if (data.categories && Array.isArray(data.categories) && data.categories.length > 0) {
+          fetchedCategories = data.categories;
           loaded = true;
-          setNewCategory((prev) => {
-            const exists = data.categories.some((c: LegalCategory) => c.name === prev);
-            return exists ? prev : data.categories[0].name;
-          });
         }
       }
     } catch (err) {
@@ -634,16 +629,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     if (!loaded) {
       try {
         const directCats = await directFetchCategoriesFromFirestore();
-        if (directCats && directCats.length > 0) {
-          setCategories(directCats);
-          try {
-            localStorage.setItem('sanad_cached_categories', JSON.stringify(directCats));
-          } catch {}
+        if (directCats && Array.isArray(directCats) && directCats.length > 0) {
+          fetchedCategories = directCats;
           loaded = true;
-          setNewCategory((prev) => {
-            const exists = directCats.some((c: LegalCategory) => c.name === prev);
-            return exists ? prev : directCats[0].name;
-          });
         }
       } catch (fErr) {
         console.warn('Direct Firestore fetch categories notice:', fErr);
@@ -656,11 +644,47 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         if (cached) {
           const parsed = JSON.parse(cached);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            setCategories(parsed);
+            fetchedCategories = parsed;
+            loaded = true;
           }
         }
       } catch {}
     }
+
+    // If completely empty, use full standard Palestinian default categories
+    if (!loaded || fetchedCategories.length === 0) {
+      fetchedCategories = [...DEFAULT_LEGAL_CATEGORIES];
+    }
+
+    // Merge any unique categories that already exist in laws
+    if (laws && laws.length > 0) {
+      const seenNames = new Set(fetchedCategories.map((c) => c.name.trim().toLowerCase()));
+      for (const law of laws) {
+        if (law.category && typeof law.category === 'string' && law.category.trim()) {
+          const catName = law.category.trim();
+          if (!seenNames.has(catName.toLowerCase())) {
+            seenNames.add(catName.toLowerCase());
+            fetchedCategories.push({
+              id: `cat-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+              name: catName,
+              isDefault: false,
+              createdAt: new Date().toISOString(),
+            });
+          }
+        }
+      }
+    }
+
+    setCategories(fetchedCategories);
+    try {
+      localStorage.setItem('sanad_cached_categories', JSON.stringify(fetchedCategories));
+    } catch {}
+
+    setNewCategory((prev) => {
+      const exists = fetchedCategories.some((c: LegalCategory) => c.name === prev);
+      return exists ? prev : (fetchedCategories[0]?.name || 'جمارك');
+    });
+
     setCategoriesLoading(false);
   };
 

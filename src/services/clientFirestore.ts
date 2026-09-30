@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { initializeFirestore, getFirestore, collection, doc, setDoc, getDocs, deleteDoc, updateDoc, setLogLevel, query, where, onSnapshot } from 'firebase/firestore';
 import type { Law, User, LawRequest, SubscriptionPlan, LegalCategory } from '../types';
+import { DEFAULT_LEGAL_CATEGORIES } from '../types';
 import { normalizeAuthIdentifier, isMatchingUser } from '../utils/authUtils';
 
 try {
@@ -1050,7 +1051,7 @@ export async function directSaveCategoryToFirestore(category: LegalCategory): Pr
 
 export async function directFetchCategoriesFromFirestore(): Promise<LegalCategory[] | null> {
   const db = getClientDb();
-  if (!db) return null;
+  if (!db) return DEFAULT_LEGAL_CATEGORIES;
 
   try {
     // Try legal_categories first, then categories
@@ -1077,10 +1078,22 @@ export async function directFetchCategoriesFromFirestore(): Promise<LegalCategor
       } catch {}
     }
 
-    return items.length > 0 ? items : null;
+    if (items.length > 0) {
+      return items;
+    }
+
+    // Auto-seed default categories into Firestore if empty
+    for (const cat of DEFAULT_LEGAL_CATEGORIES) {
+      try {
+        await setDoc(doc(db, 'legal_categories', cat.id), cat, { merge: true });
+        await setDoc(doc(db, 'categories', cat.id), cat, { merge: true });
+      } catch {}
+    }
+
+    return DEFAULT_LEGAL_CATEGORIES;
   } catch (err) {
     handleClientFirestoreError('directFetchCategoriesFromFirestore', err);
-    return null;
+    return DEFAULT_LEGAL_CATEGORIES;
   }
 }
 

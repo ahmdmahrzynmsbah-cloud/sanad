@@ -59,6 +59,23 @@ export interface LegalCategory {
   createdAt?: string;
 }
 
+export const DEFAULT_LEGAL_CATEGORIES: LegalCategory[] = [
+  { id: 'cat-customs', name: 'جمارك', isDefault: true, createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'cat-income-tax', name: 'ضريبة دخل', isDefault: true, createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'cat-vat', name: 'ضريبة قيمة مضافة', isDefault: true, createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'cat-money-laundering', name: 'قانون غسيل الاموال', isDefault: false, createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'cat-labor', name: 'العمل', isDefault: false, createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'cat-standards', name: 'المواصفات والمقاييس', isDefault: false, createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'cat-companies', name: 'الشركات', isDefault: false, createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'cat-cma', name: 'هيئة سوق راس المال', isDefault: false, createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'cat-associations', name: 'جمعيات', isDefault: false, createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'cat-investment', name: 'تشجيع الاستثمار', isDefault: false, createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'cat-auditing', name: 'تدقيق الحسابات', isDefault: false, createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'cat-solar', name: 'الطاقة الشمسية', isDefault: false, createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'cat-automotive', name: 'السيارات', isDefault: false, createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'cat-other', name: 'أخرى', isDefault: true, createdAt: '2026-01-01T00:00:00.000Z' },
+];
+
 export interface Law {
   id: string;
   title: string;
