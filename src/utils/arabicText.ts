@@ -2,13 +2,14 @@
  * Comprehensive Arabic Text Normalization & PDF Extraction Repair Utility
  * Handles:
  * 1. Unicode Presentation Forms (NFKC normalization)
- * 2. Reversed Arabic words/sentences (common in Arabic PDFs)
+ * 2. Reversed Arabic words & LTR visual stream reversal (common in PDF exports)
  * 3. Detached/spaced-out Arabic characters within words
- * 4. Punctuation and numbering re-orientation
+ * 4. Punctuation, brackets, and numbering re-orientation
+ * 5. Official Palestinian gazette running header/footer cleanup
  */
 
 // Common reversed Arabic legal keywords frequently found in corrupted PDF exports
-const REVERSED_ARABIC_INDICATORS = [
+export const REVERSED_ARABIC_INDICATORS = [
   'ةداملا', // المادة
   'نوناق',   // قانون
   'رارق',    // قرار
@@ -35,9 +36,12 @@ const REVERSED_ARABIC_INDICATORS = [
   'ميظنت',  // تنظيم
   'تارارق',  // قرارات
   'تاملعت',  // تعليمات
+  'ةلود',    // دولة
+  'سيرم',    // مرسوم
+  'سلف',     // فلس
 ];
 
-const NORMAL_ARABIC_INDICATORS = [
+export const NORMAL_ARABIC_INDICATORS = [
   'المادة',
   'قانون',
   'قرار',
@@ -55,29 +59,42 @@ const NORMAL_ARABIC_INDICATORS = [
   'تحكيم',
   'أحكام',
   'شروط',
+  'دولة',
+  'مرسوم',
+  'تعليمات',
 ];
 
 /**
  * Check if the given Arabic text appears to be reversed (RTL characters rendered LTR).
  */
 export function isArabicTextReversed(text: string): boolean {
-  if (!text || text.length < 10) return false;
+  if (!text || text.length < 5) return false;
 
   let reversedHits = 0;
   for (const word of REVERSED_ARABIC_INDICATORS) {
     if (text.includes(word)) {
-      reversedHits++;
+      reversedHits += 2;
     }
   }
 
   let normalHits = 0;
   for (const word of NORMAL_ARABIC_INDICATORS) {
     if (text.includes(word)) {
-      normalHits++;
+      normalHits += 2;
     }
   }
 
-  return reversedHits > 0 && reversedHits >= normalHits;
+  return reversedHits > 0 && reversedHits > normalHits;
+}
+
+/**
+ * Reverse a single Arabic word's letters
+ */
+export function reverseArabicWordLetters(word: string): string {
+  if (!word || !/^[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]+$/.test(word)) {
+    return word;
+  }
+  return word.split('').reverse().join('');
 }
 
 /**
@@ -90,42 +107,53 @@ export function reverseArabicWords(text: string): string {
   return text
     .split('\n')
     .map((line) => {
-      if (!line.trim()) return line;
+      const trimmed = line.trim();
+      if (!trimmed) return line;
+
+      // Check if this specific line is reversed
+      let lineReversedHits = 0;
+      for (const w of REVERSED_ARABIC_INDICATORS) {
+        if (line.includes(w)) lineReversedHits++;
+      }
+      let lineNormalHits = 0;
+      for (const w of NORMAL_ARABIC_INDICATORS) {
+        if (line.includes(w)) lineNormalHits++;
+      }
+
+      // If line is clearly normal, do NOT reverse
+      if (lineNormalHits > lineReversedHits) {
+        return line;
+      }
 
       // Tokenize line preserving Arabic words, numbers, Latin words, spaces, and punctuation
       const tokens =
         line.match(
-          /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]+|\d+|[a-zA-Z]+|[^\s\w\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]+|\s+/g
+          /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]+|\d+|[a-zA-Z]+|[^\s\w\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]+|\s+/g
         ) || [line];
 
-      // Check if line contains known reversed indicators or inverted words
-      const hasReversedTokens = tokens.some((t) => REVERSED_ARABIC_INDICATORS.includes(t));
-
-      if (hasReversedTokens) {
+      // If the line has reversed indicators or text is predominantly reversed
+      if (lineReversedHits > 0 || isArabicTextReversed(line)) {
         // Reverse token sequence to restore RTL reading order, flipping brackets
         const reversedTokens = [...tokens].reverse();
         return reversedTokens
           .map((t) => {
-            if (/^[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]+$/.test(t)) {
+            if (/^[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]+$/.test(t)) {
               return t.split('').reverse().join('');
             }
             if (t === '(') return ')';
             if (t === ')') return '(';
             if (t === '[') return ']';
             if (t === ']') return '[';
+            if (t === '{') return '}';
+            if (t === '}') return '{';
+            if (t === '«') return '»';
+            if (t === '»') return '«';
             return t;
           })
           .join('');
       }
 
-      // Standard token reversal for individual flipped Arabic words
-      let fixedLine = line.replace(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]+/g, (match) => {
-        return match.split('').reverse().join('');
-      });
-
-      // Fix mirrored brackets in reversed text: )1( -> (1)
-      fixedLine = fixedLine.replace(/\)(\d+)\(/g, '($1)');
-      return fixedLine;
+      return line;
     })
     .join('\n');
 }
@@ -164,11 +192,34 @@ export function fixSpacedArabicLetters(text: string): string {
 }
 
 /**
+ * Clean Palestinian gazette headers, footers, website URLs and reference bar noise
+ */
+export function cleanGazetteNoise(text: string): string {
+  if (!text) return '';
+
+  return text
+    .split('\n')
+    .filter((line) => {
+      const l = line.trim();
+      // Drop lines that are purely website URLs or official gazette metadata headers
+      if (/^https?:\/\//i.test(l)) return false;
+      if (/^mjr\.(lab|ogb|pna|gov)\.ps/i.test(l)) return false;
+      if (/^www\.[a-z0-9\-_.]+\.ps/i.test(l)) return false;
+      if (/^الرقم المرجعي\s*:\s*[\d\s\-_/]+$/i.test(l)) return false;
+      if (/^صفحة\s*\d+\s*من\s*\d+$/i.test(l)) return false;
+      if (/^\d+\s*ديوان الفتوى والتشريع\s*[\d\s\-_/]+$/i.test(l)) return false;
+      if (/^ديوان الفتوى والتشريع\s*[\d\s\-_/]+$/i.test(l)) return false;
+      return true;
+    })
+    .join('\n');
+}
+
+/**
  * Universal Arabic text normalizer and repair pipeline:
  * 1. Normalize Unicode NFKC (Presentation Forms-A & B to base Arabic).
- * 2. Remove zero-width spaces and control glyphs.
+ * 2. Remove zero-width spaces, directional marks, and control glyphs.
  * 3. Fix spaced-out characters.
- * 4. Detect and correct reversed Arabic words.
+ * 4. Detect and correct reversed Arabic words safely without corrupting normal text.
  * 5. Format paragraphs and legal article numbering.
  */
 export function normalizeAndFixArabicText(rawText: string): string {
@@ -178,7 +229,7 @@ export function normalizeAndFixArabicText(rawText: string): string {
   let text = rawText.normalize('NFKC');
 
   // 2. Strip non-printable and invisible control marks (except newlines, tabs, and spaces)
-  text = text.replace(/[\u200B-\u200F\uFEFF\u00A0]/g, ' ');
+  text = text.replace(/[\u200B-\u200F\u202A-\u202E\uFEFF\u00A0]/g, ' ');
 
   // 3. Fix spaced-out Arabic letters
   text = fixSpacedArabicLetters(text);
@@ -191,10 +242,13 @@ export function normalizeAndFixArabicText(rawText: string): string {
   // 5. Structure legal articles cleanly:
   // Ensure "المادة (1):" or "المادة 1 -" starts on a clean newline
   text = text.replace(/([^\n])\s*(المادة\s*(\(\d+\)|\d+))/g, '$1\n\n$2');
-  text = text.replace(/([^\n])\s*(الفصل\s*(\(\d+\)|\d+|الأول|الثاني|الثالث|الرابع|الخامس))/g, '$1\n\n$2');
-  text = text.replace(/([^\n])\s*(الباب\s*(\(\d+\)|\d+|الأول|الثاني|الثالث|الرابع|الخامس))/g, '$1\n\n$2');
+  text = text.replace(/([^\n])\s*(الفصل\s*(\(\d+\)|\d+|الأول|الثاني|الثالث|الرابع|الخامس|السادس|السابع|الثامن|التاسع|العاشر))/g, '$1\n\n$2');
+  text = text.replace(/([^\n])\s*(الباب\s*(\(\d+\)|\d+|الأول|الثاني|الثالث|الرابع|الخامس|السادس|السابع|الثامن|التاسع|العاشر))/g, '$1\n\n$2');
 
-  // 6. Clean up excessive whitespace
+  // 6. Clean gazette URL noise
+  text = cleanGazetteNoise(text);
+
+  // 7. Clean up excessive whitespace
   text = text
     .split('\n')
     .map((l) => l.trim())

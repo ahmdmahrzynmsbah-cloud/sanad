@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { initializeFirestore, getFirestore, collection, doc, setDoc, getDocs, deleteDoc, updateDoc, setLogLevel, query, where, onSnapshot } from 'firebase/firestore';
-import type { Law, User, LawRequest, SubscriptionPlan } from '../types';
+import type { Law, User, LawRequest, SubscriptionPlan, LegalCategory } from '../types';
 import { normalizeAuthIdentifier, isMatchingUser } from '../utils/authUtils';
 
 try {
@@ -1021,6 +1021,66 @@ export async function directDeleteCategoryFromFirestore(categoryId: string): Pro
   } catch (err) {
     handleClientFirestoreError('directDeleteCategoryFromFirestore', err);
     return false;
+  }
+}
+
+export async function directSaveCategoryToFirestore(category: LegalCategory): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+
+  try {
+    const catId = category.id || `cat-${Date.now()}`;
+    const data = {
+      id: catId,
+      name: category.name,
+      isDefault: category.isDefault ?? false,
+      createdAt: category.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    // Save to both possible collections for backward/forward compatibility
+    await setDoc(doc(db, 'legal_categories', catId), data, { merge: true }).catch(() => {});
+    await setDoc(doc(db, 'categories', catId), data, { merge: true }).catch(() => {});
+    console.log(`[Client Firestore] Successfully saved category directly: ${category.name}`);
+    return true;
+  } catch (err) {
+    handleClientFirestoreError('directSaveCategoryToFirestore', err);
+    return false;
+  }
+}
+
+export async function directFetchCategoriesFromFirestore(): Promise<LegalCategory[] | null> {
+  const db = getClientDb();
+  if (!db) return null;
+
+  try {
+    // Try legal_categories first, then categories
+    let items: LegalCategory[] = [];
+    const seenNames = new Set<string>();
+
+    for (const colName of ['legal_categories', 'categories']) {
+      try {
+        const col = collection(db, colName);
+        const snap = await getDocs(col);
+        snap.forEach((d) => {
+          const data = d.data() as LegalCategory;
+          const name = data.name || (d.data() as any).title;
+          if (name && !seenNames.has(name.trim().toLowerCase())) {
+            seenNames.add(name.trim().toLowerCase());
+            items.push({
+              id: d.id,
+              name: name.trim(),
+              isDefault: data.isDefault ?? false,
+              createdAt: data.createdAt,
+            });
+          }
+        });
+      } catch {}
+    }
+
+    return items.length > 0 ? items : null;
+  } catch (err) {
+    handleClientFirestoreError('directFetchCategoriesFromFirestore', err);
+    return null;
   }
 }
 

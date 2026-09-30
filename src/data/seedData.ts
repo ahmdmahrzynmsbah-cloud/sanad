@@ -1,4 +1,5 @@
 import { User } from '../types';
+import { PALESTINIAN_KNOWN_DECREES } from '../utils/palestinianDecrees';
 
 export interface LawRequestItem {
   id: string;
@@ -342,11 +343,11 @@ export const SEED_LAW_REQUESTS: LawRequestItem[] = [
     id: "req-1789443500022-vsz2",
     category: "رسوم ومكوس",
     rejectionReason: "",
-    content: "[مستند PDF: مرسوم رقم 14 لسنة 2022 بشأن تنفيذ قرارات مجلس الامن]\n\nتم إرفاق المستند بنجاح بحجم (2.5 ميجابايت). يمكنك كتابة وتعديل نصوص المواد القانونية هنا ثم حفظها في قاعدة المعرفة.",
+    content: PALESTINIAN_KNOWN_DECREES[0].content,
     reviewedAt: null,
     sourceFileSize: "2.5 ميجابايت",
     userId: "user-1789426489363",
-    pageCount: 1,
+    pageCount: 19,
     reviewedBy: null,
     userFullName: "المستعصم بالله",
     title: "مرسوم رقم 14 لسنة 2022 بشأن تنفيذ قرارات مجلس الامن",
