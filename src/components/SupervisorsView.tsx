@@ -16,8 +16,7 @@ import {
 } from 'lucide-react';
 import { Supervisor } from '../types';
 import { useSync } from '../utils/sync';
-
-import { SEED_SUPERVISORS } from '../data/seedData';
+import { fetchSupervisors, getCachedSupervisors } from '../services/supervisorsService';
 
 interface SupervisorsViewProps {
   onBackToHome: () => void;
@@ -32,55 +31,28 @@ export const SupervisorsView: React.FC<SupervisorsViewProps> = ({
   isAdmin,
   onNavigateToAuth,
 }) => {
-  const [supervisors, setSupervisors] = useState<Supervisor[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = localStorage.getItem('sanad_cached_supervisors');
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch {}
-    }
-    return (SEED_SUPERVISORS as unknown as Supervisor[]) || [];
-  });
+  const [supervisors, setSupervisors] = useState<Supervisor[]>(getCachedSupervisors);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDept, setSelectedDept] = useState<string>('all');
 
-  const fetchSupervisors = async () => {
+  const loadSupervisorsData = async () => {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
-
-      const res = await fetch(`/api/supervisors?t=${Date.now()}`, {
-        signal: controller.signal,
-      }).finally(() => clearTimeout(timeoutId));
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.supervisors && Array.isArray(data.supervisors) && data.supervisors.length > 0) {
-          const items: Supervisor[] = data.supervisors;
-          items.sort((a, b) => (a.order || 0) - (b.order || 0));
-          setSupervisors(items);
-          try {
-            localStorage.setItem('sanad_cached_supervisors', JSON.stringify(items));
-          } catch {}
-        }
-      }
+      const items = await fetchSupervisors();
+      setSupervisors(items);
     } catch (err) {
-      console.warn('Failed to load supervisors from API:', err);
+      console.warn('Failed to load supervisors:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchSupervisors();
+    loadSupervisorsData();
   }, []);
 
-  useSync(['supervisors'], () => {
-    fetchSupervisors();
+  useSync(['supervisors', 'all'], () => {
+    loadSupervisorsData();
   });
 
   // Filter departments

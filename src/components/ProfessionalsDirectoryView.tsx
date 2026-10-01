@@ -315,144 +315,126 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-slate-100/60 to-slate-50 text-slate-900 pb-20 font-sans">
-      {/* Top Hero Section */}
-      <div className="bg-gradient-to-l from-[#193225] via-[#12281e] to-[#0c1c14] text-white border-b border-emerald-900/40 shadow-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-            <div>
-              <button
-                onClick={onBackToHome}
-                className="inline-flex items-center gap-1.5 text-xs text-emerald-300 hover:text-emerald-100 mb-3 transition-colors bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg border border-emerald-500/20"
-              >
-                <ArrowRight className="w-3.5 h-3.5" />
-                <span>العودة للرئيسية</span>
-              </button>
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-700 flex items-center justify-center text-white shadow-lg shadow-emerald-950/40 border border-emerald-400/30">
-                  <Briefcase className="w-6 h-6" />
-                </div>
-                <div>
-                  <h1 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight text-white flex items-center gap-2">
-                    <span>دليل المحاسبين والمدققين والمكاتب</span>
-                    <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
-                      فلسطين
-                    </span>
-                  </h1>
-                  <p className="text-xs sm:text-sm text-emerald-200/90 mt-1 max-w-2xl leading-relaxed">
-                    الدليل المهني الشامل للوصول المباشر إلى نخبة المحاسبين القانونيين، ومدققي الحسابات المرخصين، ومكاتب وشركات المحاسبة والتدقيق في كافة المحافظات الفلسطينية.
-                  </p>
-                </div>
+      {/* Top Header & Breadcrumb - Clean & Compact */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-5 pb-2">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+          <div>
+            <button
+              onClick={onBackToHome}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-800 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-xl border border-emerald-200 transition-colors mb-2.5 cursor-pointer"
+            >
+              <ArrowRight className="w-3.5 h-3.5" />
+              <span>العودة للرئيسية</span>
+            </button>
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-xl bg-emerald-700 text-white flex items-center justify-center font-bold shadow-xs border border-emerald-600 shrink-0">
+                <Briefcase className="w-5 h-5 text-emerald-100" />
               </div>
-            </div>
-
-            {/* CTA Buttons */}
-            <div className="flex items-center gap-2.5 w-full sm:w-auto flex-wrap sm:flex-nowrap">
-              <button
-                onClick={handleShuffle}
-                title="إعادة الترتيب العشوائي للظهور العادل"
-                className="px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-emerald-100 hover:text-white border border-emerald-400/20 text-xs font-bold transition-all flex items-center gap-2"
-              >
-                <Shuffle className="w-4 h-4 text-emerald-300" />
-                <span className="hidden sm:inline">ترتيب عادل متجدد</span>
-              </button>
-              <button
-                onClick={() => {
-                  resetForm();
-                  setIsRegisterModalOpen(true);
-                }}
-                className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-gradient-to-l from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs sm:text-sm shadow-lg shadow-emerald-950/40 border border-emerald-400/30 transition-all flex items-center justify-center gap-2 transform active:scale-95"
-              >
-                <Plus className="w-4 h-4" />
-                <span>سجّل بياناتك في الدليل المهني</span>
-              </button>
+              <div>
+                <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                  <span>دليل المحاسبين والمدققين والمكاتب</span>
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    فلسطين
+                  </span>
+                </h1>
+                <p className="text-xs sm:text-sm text-slate-600 mt-0.5 font-normal">
+                  دليل معتمد للمحاسبين القانونيين ومدققي الحسابات ومكاتب المحاسبة والتدقيق المرخصة
+                </p>
+              </div>
             </div>
           </div>
 
-          {/* Directory Navigation Tabs */}
-          <div className="mt-8 flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none border-t border-emerald-800/50 pt-5">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             <button
-              onClick={() => setActiveTypeTab('all')}
-              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0 flex items-center gap-2 ${
-                activeTypeTab === 'all'
-                  ? 'bg-emerald-500 text-white shadow-md shadow-emerald-950/30'
-                  : 'bg-white/5 text-emerald-200 hover:bg-white/10 hover:text-white border border-emerald-500/20'
-              }`}
+              onClick={handleShuffle}
+              title="إعادة الترتيب العشوائي للظهور العادل"
+              className="px-3 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
             >
-              <Users className="w-4 h-4" />
-              <span>كافة المهنيين والمكاتب</span>
-              <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
-                activeTypeTab === 'all' ? 'bg-emerald-900/50 text-white' : 'bg-emerald-950/60 text-emerald-300'
-              }`}>
-                {counts.all}
-              </span>
+              <Shuffle className="w-3.5 h-3.5 text-emerald-700" />
+              <span className="hidden sm:inline">ترتيب عادل</span>
             </button>
-
             <button
-              onClick={() => setActiveTypeTab('accountant')}
-              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0 flex items-center gap-2 ${
-                activeTypeTab === 'accountant'
-                  ? 'bg-emerald-500 text-white shadow-md shadow-emerald-950/30'
-                  : 'bg-white/5 text-emerald-200 hover:bg-white/10 hover:text-white border border-emerald-500/20'
-              }`}
+              onClick={() => {
+                resetForm();
+                setIsRegisterModalOpen(true);
+              }}
+              className="flex-1 sm:flex-none px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs sm:text-sm shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
             >
-              <UserCheck className="w-4 h-4" />
-              <span>دليل المحاسبين</span>
-              <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
-                activeTypeTab === 'accountant' ? 'bg-emerald-900/50 text-white' : 'bg-emerald-950/60 text-emerald-300'
-              }`}>
-                {counts.accountants}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTypeTab('auditor')}
-              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0 flex items-center gap-2 ${
-                activeTypeTab === 'auditor'
-                  ? 'bg-emerald-500 text-white shadow-md shadow-emerald-950/30'
-                  : 'bg-white/5 text-emerald-200 hover:bg-white/10 hover:text-white border border-emerald-500/20'
-              }`}
-            >
-              <ShieldCheck className="w-4 h-4" />
-              <span>دليل المدققين القانونيين</span>
-              <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
-                activeTypeTab === 'auditor' ? 'bg-emerald-900/50 text-white' : 'bg-emerald-950/60 text-emerald-300'
-              }`}>
-                {counts.auditors}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTypeTab('firm')}
-              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0 flex items-center gap-2 ${
-                activeTypeTab === 'firm'
-                  ? 'bg-emerald-500 text-white shadow-md shadow-emerald-950/30'
-                  : 'bg-white/5 text-emerald-200 hover:bg-white/10 hover:text-white border border-emerald-500/20'
-              }`}
-            >
-              <Building2 className="w-4 h-4" />
-              <span>مكاتب وشركات المحاسبة والتدقيق</span>
-              <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
-                activeTypeTab === 'firm' ? 'bg-emerald-900/50 text-white' : 'bg-emerald-950/60 text-emerald-300'
-              }`}>
-                {counts.firms}
-              </span>
+              <Plus className="w-4 h-4" />
+              <span>سجّل بياناتك في الدليل المهني</span>
             </button>
           </div>
         </div>
-      </div>
 
-      {/* Fair Exposure Notification Banner */}
-      <div className="bg-emerald-50 border-b border-emerald-200/80 px-4 py-2.5">
-        <div className="max-w-7xl mx-auto flex items-center justify-between text-xs text-emerald-900 font-medium">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-emerald-700 shrink-0" />
-            <span>
-              <strong>نظام الظهور العادل:</strong> يتم تغيير ترتيب عرض البطاقات عشوائياً وتلقائياً مع كل تحديث للصفحة لضمان تكافؤ الفرص وعدم التحيز.
+        {/* Directory Filter Tabs */}
+        <div className="flex items-center gap-2 overflow-x-auto py-3 scrollbar-none">
+          <button
+            onClick={() => setActiveTypeTab('all')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${
+              activeTypeTab === 'all'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>كافة المهنيين والمكاتب</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+              activeTypeTab === 'all' ? 'bg-emerald-900 text-white' : 'bg-slate-100 text-slate-600'
+            }`}>
+              {counts.all}
             </span>
-          </div>
-          <span className="hidden md:inline-block text-[11px] text-emerald-700 font-bold bg-white px-2.5 py-0.5 rounded-md border border-emerald-200 shadow-2xs">
-            معتمد ومرخص رسمياً في فلسطين
-          </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTypeTab('accountant')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${
+              activeTypeTab === 'accountant'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+            }`}
+          >
+            <UserCheck className="w-3.5 h-3.5" />
+            <span>دليل المحاسبين</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+              activeTypeTab === 'accountant' ? 'bg-emerald-900 text-white' : 'bg-slate-100 text-slate-600'
+            }`}>
+              {counts.accountants}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTypeTab('auditor')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${
+              activeTypeTab === 'auditor'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>دليل المدققين القانونيين</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+              activeTypeTab === 'auditor' ? 'bg-emerald-900 text-white' : 'bg-slate-100 text-slate-600'
+            }`}>
+              {counts.auditors}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTypeTab('firm')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${
+              activeTypeTab === 'firm'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+            }`}
+          >
+            <Building2 className="w-3.5 h-3.5" />
+            <span>مكاتب وشركات المحاسبة والتدقيق</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+              activeTypeTab === 'firm' ? 'bg-emerald-900 text-white' : 'bg-slate-100 text-slate-600'
+            }`}>
+              {counts.firms}
+            </span>
+          </button>
         </div>
       </div>
 

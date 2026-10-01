@@ -95,6 +95,7 @@ import {
   directSaveCategoryToFirestore,
   directFetchCategoriesFromFirestore,
 } from '../services/clientFirestore';
+import { fetchSupervisors, getCachedSupervisors } from '../services/supervisorsService';
 
 export interface QueuedLawItem {
   id: string;
@@ -126,7 +127,21 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   const isSupervisor = currentAdmin?.role === 'supervisor';
 
   const [videos, setVideos] = useState<Video[]>([]);
-  const [professionals, setProfessionals] = useState<ProfessionalProfile[]>([]);
+  const [supervisors, setSupervisors] = useState<Supervisor[]>(getCachedSupervisors);
+  const [professionals, setProfessionals] = useState<ProfessionalProfile[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('sanad_cached_professionals');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          const mockProfIds = ['prof-firm-1', 'prof-firm-2', 'prof-firm-3', 'prof-firm-4', 'prof-auditor-1', 'prof-auditor-2', 'prof-auditor-3', 'prof-accountant-1', 'prof-accountant-2', 'prof-accountant-3'];
+          const real = Array.isArray(parsed) ? parsed.filter((p: any) => !mockProfIds.includes(p.id) && !p.id.startsWith('prof-firm-') && !p.id.startsWith('prof-auditor-') && !p.id.startsWith('prof-accountant-')) : [];
+          if (real.length > 0) return real;
+        }
+      } catch {}
+    }
+    return [];
+  });
   const [activeTab, setActiveTab] = useState<'requests' | 'laws' | 'law-requests' | 'professionals' | 'supervisors' | 'related-sites' | 'partners' | 'plans' | 'about' | 'contact' | 'settings' | 'videos'>(() => isSupervisor ? 'laws' : 'requests');
 
   // Admin Daily Upload Limit & Quota (40 files max, 40MB per file, 800MB total quota per day)
@@ -993,6 +1008,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         } else {
           fetchPendingLawRequestsCount();
         }
+        fetchSupervisors().then((items) => {
+          if (items && items.length > 0) setSupervisors(items);
+        }).catch(() => {});
       } else {
         // Fallback to parallel execution
         await Promise.all([
@@ -2955,7 +2973,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
           }`}
         >
           <Users className="w-4 h-4" />
-          هيئة المشرفين
+          <span>هيئة المشرفين</span>
+          <span className="bg-slate-100 text-slate-600 text-[10px] sm:text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full font-bold">
+            {supervisors.length}
+          </span>
         </button>
         )}
 
@@ -6140,7 +6161,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       {/* TAB 4: SUPERVISORS MANAGEMENT (هيئة المشرفين)            */}
       {/* ======================================================== */}
       {activeTab === 'supervisors' && (
-        <SupervisorsAdminTab />
+        <SupervisorsAdminTab initialSupervisors={supervisors} />
       )}
 
       {/* ======================================================== */}

@@ -21,8 +21,7 @@ import {
 import { Supervisor } from '../../types';
 import { useSync, notifySync } from '../../utils/sync';
 import { directDeleteSupervisorFromFirestore } from '../../services/clientFirestore';
-
-import { SEED_SUPERVISORS } from '../../data/seedData';
+import { fetchSupervisors, getCachedSupervisors, syncSupervisorsToLocalStorage } from '../../services/supervisorsService';
 
 interface SupervisorsAdminTabProps {
   initialSupervisors?: Supervisor[];
@@ -32,17 +31,8 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
   initialSupervisors,
 }) => {
   const [supervisors, setSupervisors] = useState<Supervisor[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = localStorage.getItem('sanad_cached_supervisors');
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch {}
-    }
     if (initialSupervisors && initialSupervisors.length > 0) return initialSupervisors;
-    return (SEED_SUPERVISORS as unknown as Supervisor[]) || [];
+    return getCachedSupervisors();
   });
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -68,31 +58,10 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const fetchSupervisors = async () => {
+  const loadSupervisorsData = async () => {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
-
-      const res = await fetch(`/api/supervisors?t=${Date.now()}`, {
-        signal: controller.signal,
-      }).finally(() => clearTimeout(timeoutId));
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.supervisors && Array.isArray(data.supervisors) && data.supervisors.length > 0) {
-          const items: Supervisor[] = data.supervisors;
-          setSupervisors((prev) => {
-            const map = new Map<string, Supervisor>();
-            prev.forEach((s) => map.set(s.id, s));
-            items.forEach((s) => map.set(s.id, s));
-            const merged = Array.from(map.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
-            try {
-              localStorage.setItem('sanad_cached_supervisors', JSON.stringify(merged));
-            } catch {}
-            return merged;
-          });
-        }
-      }
+      const items = await fetchSupervisors();
+      setSupervisors(items);
     } catch (err) {
       console.warn('API fetch supervisors failed:', err);
     } finally {
@@ -101,11 +70,17 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
   };
 
   useEffect(() => {
-    fetchSupervisors();
+    loadSupervisorsData();
   }, []);
 
+  useEffect(() => {
+    if (initialSupervisors && initialSupervisors.length > 0) {
+      setSupervisors(initialSupervisors);
+    }
+  }, [initialSupervisors]);
+
   useSync(['supervisors', 'all'], () => {
-    fetchSupervisors();
+    loadSupervisorsData();
   });
 
   const openAddModal = () => {
@@ -248,12 +223,16 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
           const map = new Map<string, Supervisor>();
           prev.forEach((s) => map.set(s.id, s));
           map.set(data.supervisor.id, data.supervisor);
-          return Array.from(map.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
+          const next = Array.from(map.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
+          syncSupervisorsToLocalStorage(next);
+          return next;
         });
       } else if (data.supervisors) {
-        setSupervisors(data.supervisors);
+        const next = [...data.supervisors].sort((a: Supervisor, b: Supervisor) => (a.order || 0) - (b.order || 0));
+        setSupervisors(next);
+        syncSupervisorsToLocalStorage(next);
       } else {
-        fetchSupervisors();
+        loadSupervisorsData();
       }
 
       notifySync('supervisors');
@@ -288,10 +267,12 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
           const map = new Map<string, Supervisor>();
           prev.forEach((s) => map.set(s.id, s));
           map.set(payloadToSave.id, payloadToSave);
-          return Array.from(map.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
+          const next = Array.from(map.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
+          syncSupervisorsToLocalStorage(next);
+          return next;
         });
         notifySync('supervisors');
-        fetchSupervisors();
+        loadSupervisorsData();
         setFeedback({
           type: 'success',
           message: editingSupervisor
@@ -315,8 +296,12 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
     const target = supervisorToDelete;
     setDeletingId(target.id);
 
-    // 1. Immediately update UI state
-    setSupervisors((prev) => prev.filter((s) => s.id !== target.id));
+    // 1. Immediately update UI state and LocalStorage
+    setSupervisors((prev) => {
+      const next = prev.filter((s) => s.id !== target.id);
+      syncSupervisorsToLocalStorage(next);
+      return next;
+    });
     setSupervisorToDelete(null);
 
     try {
@@ -326,7 +311,9 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
 
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.supervisors) {
-        setSupervisors(data.supervisors);
+        const next = [...data.supervisors].sort((a: Supervisor, b: Supervisor) => (a.order || 0) - (b.order || 0));
+        setSupervisors(next);
+        syncSupervisorsToLocalStorage(next);
       }
     } catch (err) {
       console.warn('API error deleting supervisor, proceeding to direct firestore delete:', err);
@@ -399,7 +386,7 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
 
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <button
-            onClick={fetchSupervisors}
+            onClick={() => loadSupervisorsData()}
             className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors cursor-pointer"
             title="تحديث القائمة"
           >

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Briefcase,
   Users,
@@ -33,6 +33,7 @@ import {
   PROFESSIONAL_SERVICES_LIST
 } from '../../types';
 import { compressImageClientSide } from '../../utils/imageCompressor';
+import { useSync } from '../../utils/sync';
 
 interface ProfessionalsAdminTabProps {
   professionals: ProfessionalProfile[];
@@ -43,6 +44,54 @@ export const ProfessionalsAdminTab: React.FC<ProfessionalsAdminTabProps> = ({
   professionals,
   onRefresh,
 }) => {
+  const [items, setItems] = useState<ProfessionalProfile[]>(() => {
+    if (professionals && professionals.length > 0) return professionals;
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('sanad_cached_professionals');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          const mockProfIds = ['prof-firm-1', 'prof-firm-2', 'prof-firm-3', 'prof-firm-4', 'prof-auditor-1', 'prof-auditor-2', 'prof-auditor-3', 'prof-accountant-1', 'prof-accountant-2', 'prof-accountant-3'];
+          const real = Array.isArray(parsed) ? parsed.filter((p: any) => !mockProfIds.includes(p.id) && !p.id.startsWith('prof-firm-') && !p.id.startsWith('prof-auditor-') && !p.id.startsWith('prof-accountant-')) : [];
+          if (real.length > 0) return real;
+        }
+      } catch {}
+    }
+    return [];
+  });
+
+  const loadItems = async () => {
+    try {
+      const res = await fetch(`/api/professionals?t=${Date.now()}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.professionals && Array.isArray(data.professionals)) {
+          const mockProfIds = ['prof-firm-1', 'prof-firm-2', 'prof-firm-3', 'prof-firm-4', 'prof-auditor-1', 'prof-auditor-2', 'prof-auditor-3', 'prof-accountant-1', 'prof-accountant-2', 'prof-accountant-3'];
+          const real = data.professionals.filter((p: any) => !mockProfIds.includes(p.id) && !p.id.startsWith('prof-firm-') && !p.id.startsWith('prof-auditor-') && !p.id.startsWith('prof-accountant-'));
+          setItems(real);
+          try {
+            localStorage.setItem('sanad_cached_professionals', JSON.stringify(real));
+          } catch {}
+        }
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    loadItems();
+  }, []);
+
+  useEffect(() => {
+    if (professionals && professionals.length > 0) {
+      setItems(professionals);
+    }
+  }, [professionals]);
+
+  useSync(['professionals', 'all'], () => {
+    loadItems();
+    onRefresh();
+  });
+
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | ProfessionalType>('all');
   const [govFilter, setGovFilter] = useState<string>('all');
@@ -75,7 +124,7 @@ export const ProfessionalsAdminTab: React.FC<ProfessionalsAdminTabProps> = ({
   const [isUploadingLogo, setIsUploadingLogo] = useState<boolean>(false);
 
   // Filtered & Sorted List (Pending items sorted first)
-  const filteredList = professionals.filter((item) => {
+  const filteredList = items.filter((item) => {
     if (statusFilter !== 'all' && (item.status || 'approved') !== statusFilter) return false;
     if (typeFilter !== 'all' && item.type !== typeFilter) return false;
     if (govFilter !== 'all' && item.governorate !== govFilter) return false;
@@ -99,7 +148,7 @@ export const ProfessionalsAdminTab: React.FC<ProfessionalsAdminTabProps> = ({
     return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
   });
 
-  const pendingCount = professionals.filter((p) => p.status === 'pending').length;
+  const pendingCount = items.filter((p) => p.status === 'pending').length;
 
   const handleOpenAdd = () => {
     setEditingId(null);
@@ -222,6 +271,14 @@ export const ProfessionalsAdminTab: React.FC<ProfessionalsAdminTabProps> = ({
       }).finally(() => clearTimeout(timeoutId));
 
       if (res.ok) {
+        const resData = await res.json().catch(() => ({}));
+        const savedItem = resData.professional || { ...payload, id: editingId || 'prof-' + Date.now() };
+        setItems((prev) => {
+          const exists = prev.some((p) => p.id === savedItem.id);
+          const next = exists ? prev.map((p) => (p.id === savedItem.id ? savedItem : p)) : [savedItem, ...prev];
+          try { localStorage.setItem('sanad_cached_professionals', JSON.stringify(next)); } catch {}
+          return next;
+        });
         setActionSuccess(editingId ? 'تم تحديث بيانات المهني بنجاح' : 'تمت إضافة ونشر المهني بنجاح');
         setIsModalOpen(false);
         setIsSaving(false);
@@ -238,13 +295,20 @@ export const ProfessionalsAdminTab: React.FC<ProfessionalsAdminTabProps> = ({
         // Direct Firestore fallback if server returns non-200
         const { directSaveProfessionalToFirestore } = await import('../../services/clientFirestore');
         const profId = editingId || 'prof-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
-        const saved = await directSaveProfessionalToFirestore({
+        const savedItem = {
           ...payload,
           id: profId,
           updatedAt: new Date().toISOString(),
           createdAt: new Date().toISOString(),
-        });
+        } as ProfessionalProfile;
+        const saved = await directSaveProfessionalToFirestore(savedItem);
         if (saved) {
+          setItems((prev) => {
+            const exists = prev.some((p) => p.id === savedItem.id);
+            const next = exists ? prev.map((p) => (p.id === savedItem.id ? savedItem : p)) : [savedItem, ...prev];
+            try { localStorage.setItem('sanad_cached_professionals', JSON.stringify(next)); } catch {}
+            return next;
+          });
           setActionSuccess(editingId ? 'تم تحديث بيانات المهني بنجاح' : 'تمت إضافة ونشر المهني بنجاح');
           setIsModalOpen(false);
           setIsSaving(false);
@@ -265,11 +329,18 @@ export const ProfessionalsAdminTab: React.FC<ProfessionalsAdminTabProps> = ({
       try {
         const { directSaveProfessionalToFirestore } = await import('../../services/clientFirestore');
         const profId = editingId || 'prof-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
-        await directSaveProfessionalToFirestore({
+        const savedItem = {
           ...payload,
           id: profId,
           updatedAt: new Date().toISOString(),
           createdAt: new Date().toISOString(),
+        } as ProfessionalProfile;
+        await directSaveProfessionalToFirestore(savedItem);
+        setItems((prev) => {
+          const exists = prev.some((p) => p.id === savedItem.id);
+          const next = exists ? prev.map((p) => (p.id === savedItem.id ? savedItem : p)) : [savedItem, ...prev];
+          try { localStorage.setItem('sanad_cached_professionals', JSON.stringify(next)); } catch {}
+          return next;
         });
         setActionSuccess(editingId ? 'تم تحديث بيانات المهني بنجاح' : 'تمت إضافة ونشر المهني بنجاح');
         setIsModalOpen(false);
@@ -299,7 +370,13 @@ export const ProfessionalsAdminTab: React.FC<ProfessionalsAdminTabProps> = ({
         body: JSON.stringify({ status: 'approved' }),
       });
       if (res.ok) {
+        setItems((prev) => {
+          const next = prev.map((p) => (p.id === id ? { ...p, status: 'approved' as const, rejectionReason: undefined } : p));
+          try { localStorage.setItem('sanad_cached_professionals', JSON.stringify(next)); } catch {}
+          return next;
+        });
         setActionSuccess('تمت الموافقة واعتماد الظهور في الدليل بنجاح');
+        import('../../utils/sync').then(({ notifySync }) => notifySync('professionals')).catch(() => {});
         await onRefresh();
         setTimeout(() => setActionSuccess(null), 3000);
       }
@@ -317,7 +394,13 @@ export const ProfessionalsAdminTab: React.FC<ProfessionalsAdminTabProps> = ({
         body: JSON.stringify({ status: 'rejected' }),
       });
       if (res.ok) {
+        setItems((prev) => {
+          const next = prev.map((p) => (p.id === id ? { ...p, status: 'rejected' as const } : p));
+          try { localStorage.setItem('sanad_cached_professionals', JSON.stringify(next)); } catch {}
+          return next;
+        });
         setActionSuccess('تم رفض / تعليق الطلب');
+        import('../../utils/sync').then(({ notifySync }) => notifySync('professionals')).catch(() => {});
         await onRefresh();
         setTimeout(() => setActionSuccess(null), 3000);
       }
@@ -335,7 +418,13 @@ export const ProfessionalsAdminTab: React.FC<ProfessionalsAdminTabProps> = ({
         method: 'DELETE',
       });
       if (res.ok) {
+        setItems((prev) => {
+          const next = prev.filter((p) => p.id !== id);
+          try { localStorage.setItem('sanad_cached_professionals', JSON.stringify(next)); } catch {}
+          return next;
+        });
         setActionSuccess(`تم حذف «${name}» بنجاح`);
+        import('../../utils/sync').then(({ notifySync }) => notifySync('professionals')).catch(() => {});
         await onRefresh();
         setTimeout(() => setActionSuccess(null), 3000);
       }
