@@ -17,6 +17,8 @@ import {
   directFetchBrandingFromFirestore,
   directFetchPlatformAboutFromFirestore,
   directFetchContactInfoFromFirestore,
+  subscribeToUserInFirestore,
+  subscribeToAdminInFirestore,
 } from './services/clientFirestore';
 
 // Lazy loading heavy modular components to drastically optimize initial page load
@@ -311,6 +313,56 @@ export default function App() {
     
     return () => cleanupSync();
   }, [fetchLawsCount, fetchBranding, fetchPlatformAbout, fetchContactInfo]);
+
+  // Realtime Firestore onSnapshot listener for currentUser and currentAdmin
+  useEffect(() => {
+    const userIdentifier = currentUser?.id || currentUser?.username;
+    const adminIdentifier = currentAdmin?.username;
+
+    if (!userIdentifier && !adminIdentifier) return;
+
+    let unsubUser: (() => void) | null = null;
+    let unsubAdmin: (() => void) | null = null;
+
+    if (userIdentifier) {
+      unsubUser = subscribeToUserInFirestore(userIdentifier, (updatedUser) => {
+        if (updatedUser) {
+          setCurrentUser(updatedUser);
+          try {
+            localStorage.setItem('pal_tax_user', JSON.stringify(updatedUser));
+          } catch {}
+
+          const currentView = activeViewRef.current;
+          // Auto redirect pending user to chat upon approval
+          if (currentView === 'auth' && updatedUser.status === 'approved') {
+            setActiveView('chat');
+          }
+          // Auto redirect active users out of chat if frozen or rejected
+          if (currentView === 'chat' && updatedUser.status !== 'approved') {
+            setActiveView('auth');
+          }
+        }
+      });
+    }
+
+    if (adminIdentifier) {
+      unsubAdmin = subscribeToAdminInFirestore(adminIdentifier, (updatedAdmin) => {
+        if (updatedAdmin) {
+          setCurrentAdmin((prev) => (prev ? { ...prev, ...updatedAdmin } : updatedAdmin));
+          try {
+            const saved = localStorage.getItem('pal_tax_admin');
+            const parsed = saved ? JSON.parse(saved) : {};
+            localStorage.setItem('pal_tax_admin', JSON.stringify({ ...parsed, ...updatedAdmin }));
+          } catch {}
+        }
+      });
+    }
+
+    return () => {
+      if (unsubUser) unsubUser();
+      if (unsubAdmin) unsubAdmin();
+    };
+  }, [currentUser?.id, currentUser?.username, currentAdmin?.username]);
 
   useSync(['users', 'all'], () => {
     fetchCurrentUser();

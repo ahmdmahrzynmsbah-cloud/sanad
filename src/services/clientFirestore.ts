@@ -2041,6 +2041,158 @@ export function setupFirestoreRealtimeListeners(onUpdate: (collectionName: strin
   };
 }
 
+/**
+ * Realtime Firestore onSnapshot listener for currentUser
+ */
+export function subscribeToUserInFirestore(
+  identifier: string,
+  onUserChange: (user: User | null) => void
+): () => void {
+  const db = getClientDb();
+  if (!db || !identifier) return () => {};
+
+  let isUnsubscribed = false;
+  const unsubs: (() => void)[] = [];
+
+  const handleDocData = (data: any, id: string) => {
+    if (!data) return;
+    const now = Date.now();
+    const user: User = {
+      id: data.id || id,
+      username: data.username || '',
+      fullName: data.fullName || '',
+      phone: data.phone || '',
+      password: data.password || '',
+      recoveryCode: data.recoveryCode || '',
+      role: (data.role as any) || 'user',
+      status: (data.status as any) || 'approved',
+      createdAt: data.createdAt || new Date().toISOString(),
+      reviewedAt: data.reviewedAt || '',
+      subscriptionStatus: (data.subscriptionStatus as any) || 'trial',
+      trialDays: typeof data.trialDays === 'number' ? data.trialDays : 7,
+      trialStartedAt: data.trialStartedAt || data.createdAt || new Date().toISOString(),
+      trialEndsAt: data.trialEndsAt || '',
+      isSubscribed: Boolean(data.isSubscribed),
+      subscriptionPlan: data.subscriptionPlan || '',
+      subscribedAt: data.subscribedAt || '',
+      frozenAt: data.frozenAt || '',
+      freezeReason: data.freezeReason || '',
+    };
+
+    if (user.isSubscribed) {
+      user.subscriptionStatus = 'active';
+      user.isFrozen = false;
+      user.remainingTrialDays = 999;
+      user.remainingTrialHours = 999;
+    } else if (user.status === 'frozen' || user.subscriptionStatus === 'frozen') {
+      user.isFrozen = true;
+      user.subscriptionStatus = 'frozen';
+      user.remainingTrialDays = 0;
+      user.remainingTrialHours = 0;
+    } else {
+      if (!user.trialEndsAt) {
+        const createdTime = user.createdAt ? new Date(user.createdAt).getTime() : now;
+        const tDays = user.trialDays && user.trialDays > 0 ? user.trialDays : 7;
+        user.trialEndsAt = new Date(createdTime + tDays * 24 * 60 * 60 * 1000).toISOString();
+      }
+      const trialEndTime = new Date(user.trialEndsAt).getTime();
+      if (now >= trialEndTime) {
+        user.status = 'frozen';
+        user.subscriptionStatus = 'frozen';
+        user.isFrozen = true;
+        user.remainingTrialDays = 0;
+        user.remainingTrialHours = 0;
+      } else {
+        const diffMs = trialEndTime - now;
+        user.remainingTrialDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+        user.remainingTrialHours = Math.floor((diffMs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+        user.isFrozen = false;
+        user.subscriptionStatus = 'trial';
+      }
+    }
+
+    if (!isUnsubscribed) {
+      onUserChange(user);
+    }
+  };
+
+  try {
+    // 1. Direct document listener (by ID)
+    const docRef = doc(db, 'users', identifier);
+    const unsubDoc = onSnapshot(
+      docRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          handleDocData(docSnap.data(), docSnap.id);
+        }
+      },
+      (err) => handleClientFirestoreError('onSnapshot:userDoc', err)
+    );
+    unsubs.push(unsubDoc);
+  } catch {}
+
+  try {
+    // 2. Query listener by username
+    const usersCol = collection(db, 'users');
+    const q = query(usersCol, where('username', '==', identifier), limit(1));
+    const unsubQuery = onSnapshot(
+      q,
+      (snap) => {
+        if (!snap.empty) {
+          const docSnap = snap.docs[0];
+          handleDocData(docSnap.data(), docSnap.id);
+        }
+      },
+      (err) => handleClientFirestoreError('onSnapshot:userQuery', err)
+    );
+    unsubs.push(unsubQuery);
+  } catch {}
+
+  return () => {
+    isUnsubscribed = true;
+    unsubs.forEach((u) => {
+      try {
+        u();
+      } catch {}
+    });
+  };
+}
+
+/**
+ * Realtime Firestore onSnapshot listener for currentAdmin
+ */
+export function subscribeToAdminInFirestore(
+  username: string,
+  onAdminChange: (adminData: { username: string; role: string; fullName?: string; status?: string } | null) => void
+): () => void {
+  const db = getClientDb();
+  if (!db || !username) return () => {};
+
+  try {
+    const usersCol = collection(db, 'users');
+    const q = query(usersCol, where('username', '==', username), limit(1));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        if (!snap.empty) {
+          const d = snap.docs[0].data();
+          onAdminChange({
+            username: d.username || username,
+            role: d.role || 'supervisor',
+            fullName: d.fullName || '',
+            status: d.status || 'approved',
+          });
+        }
+      },
+      (err) => handleClientFirestoreError('onSnapshot:adminQuery', err)
+    );
+    return unsub;
+  } catch {
+    return () => {};
+  }
+}
+
+
 
 // Videos fallback
 export async function directFetchVideosFromFirestore(): Promise<any[]> {
