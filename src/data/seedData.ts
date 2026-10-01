@@ -374,3 +374,55 @@ export const SEED_LAW_REQUESTS: LawRequestItem[] = [
     reviewedBy: "المشرف"
   }
 ];
+
+export interface SeedSupervisor {
+  id: string;
+  name: string;
+  title: string;
+  bio: string;
+  photoUrl: string;
+  email: string;
+  phone: string;
+  department: string;
+  order: number;
+  createdAt: string;
+}
+
+export const SEED_SUPERVISORS: SeedSupervisor[] = [
+  {
+    id: 'sup-1',
+    name: 'د. خليل إبراهيم شحادة',
+    title: 'رئيس هيئة الإشراف القانوني والضريبي',
+    bio: 'دكتوراه في القانون المالي والتشريعات الضريبية المقارنة. أستاذ جامعي ومستشار قانوني معتمد، متخصص في صياغة اللوائح الضريبية والطعون الاستئنافية والسياسات المالية العامة.',
+    photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80',
+    email: 'k.shehada@pal-tax.ps',
+    phone: '+970 59 911 2233',
+    department: 'الهيئة التشريعية والسياسات المالية',
+    order: 1,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'sup-2',
+    name: 'أ. سمر كمال التميمي',
+    title: 'مشرفة المنازعات الجمركية والتعريفة الموحدة',
+    bio: 'ماجستير في قانون التجارة الدولية. متخصصة في جداول التعريفة الجمركية المنسقة، قواعد المنشأ، إجراءات التخليص الجمركي، وحل منازعات التقييم في الموانئ والمعابر.',
+    photoUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=500&auto=format&fit=crop&q=80',
+    email: 's.tamimi@pal-tax.ps',
+    phone: '+970 59 922 3344',
+    department: 'إدارة الرقابة والتعريفة الجمركية',
+    order: 2,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'sup-3',
+    name: 'أ. رمزي عبد الهادي عساف',
+    title: 'مشرف الامتثال الضريبي والضريبة المضافة',
+    bio: 'محاسب قانوني ومستشار ضرائب معتمد. خبير في الفحص والتدقيق الميداني، إعداد الدفاتر المحاسبية القانونية، وإقرارات المقاصة وضريبة القيمة المضافة وخصم المصدر.',
+    photoUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80',
+    email: 'r.assaf@pal-tax.ps',
+    phone: '+970 59 933 4455',
+    department: 'لجنة الفحص والامتثال الضريبي',
+    order: 3,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+];

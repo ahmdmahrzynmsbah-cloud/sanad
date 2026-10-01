@@ -1774,3 +1774,71 @@ export async function deleteVideoFromFirestore(id: string): Promise<boolean> {
     return false;
   }
 }
+
+// Professional Directory Server Firestore Helpers
+export async function fetchProfessionalsFromFirestore(): Promise<any[] | null> {
+  if (isQuotaExceeded()) return null;
+  const db = initFirestore();
+  if (!db) return null;
+
+  try {
+    const col = collection(db, 'professionals');
+    const snapshot = await getDocs(col);
+    if (snapshot.empty) {
+      return [];
+    }
+    const items: any[] = [];
+    snapshot.forEach((docSnap) => {
+      items.push({ id: docSnap.id, ...docSnap.data() });
+    });
+    const mockProfIds = ['prof-firm-1', 'prof-firm-2', 'prof-firm-3', 'prof-firm-4', 'prof-auditor-1', 'prof-auditor-2', 'prof-auditor-3', 'prof-accountant-1', 'prof-accountant-2', 'prof-accountant-3'];
+    return items.filter((p) => !mockProfIds.includes(p.id) && !p.id.startsWith('prof-firm-') && !p.id.startsWith('prof-auditor-') && !p.id.startsWith('prof-accountant-'));
+  } catch (err) {
+    handleFirestoreError('fetchProfessionalsFromFirestore', err);
+    return null;
+  }
+}
+
+export async function saveProfessionalToFirestore(prof: any): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
+  const db = initFirestore();
+  if (!db) return false;
+
+  try {
+    const docRef = doc(db, 'professionals', prof.id);
+    await setDoc(docRef, {
+      ...prof,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+    notifyChange('professionals');
+    return true;
+  } catch (err) {
+    handleFirestoreError(`saveProfessionalToFirestore ${prof.id}`, err);
+    return false;
+  }
+}
+
+export async function deleteProfessionalFromFirestore(id: string): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
+  const db = initFirestore();
+  if (!db) return false;
+
+  try {
+    const docRef = doc(db, 'professionals', id);
+    await deleteDoc(docRef).catch(() => {});
+    try {
+      const col = collection(db, 'professionals');
+      const q = query(col, where('id', '==', id));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+      }
+    } catch {}
+    notifyChange('professionals');
+    return true;
+  } catch (err) {
+    handleFirestoreError(`deleteProfessionalFromFirestore ${id}`, err);
+    return false;
+  }
+}
+

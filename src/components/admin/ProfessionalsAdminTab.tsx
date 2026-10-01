@@ -1,0 +1,920 @@
+import React, { useState } from 'react';
+import {
+  Briefcase,
+  Users,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  Plus,
+  Edit2,
+  Trash2,
+  Search,
+  Filter,
+  MapPin,
+  Phone,
+  MessageCircle,
+  Mail,
+  Globe,
+  Building2,
+  ShieldCheck,
+  UserCheck,
+  Upload,
+  Loader2,
+  AlertCircle,
+  Check,
+  X,
+  ExternalLink,
+  PhoneCall
+} from 'lucide-react';
+import {
+  ProfessionalProfile,
+  ProfessionalType,
+  PALESTINIAN_GOVERNORATES,
+  PROFESSIONAL_SERVICES_LIST
+} from '../../types';
+import { compressImageClientSide } from '../../utils/imageCompressor';
+
+interface ProfessionalsAdminTabProps {
+  professionals: ProfessionalProfile[];
+  onRefresh: () => Promise<void>;
+}
+
+export const ProfessionalsAdminTab: React.FC<ProfessionalsAdminTabProps> = ({
+  professionals,
+  onRefresh,
+}) => {
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | ProfessionalType>('all');
+  const [govFilter, setGovFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+
+  // Form State
+  const [formType, setFormType] = useState<ProfessionalType>('accountant');
+  const [formName, setFormName] = useState<string>('');
+  const [formTitle, setFormTitle] = useState<string>('');
+  const [formGovernorate, setFormGovernorate] = useState<string>(PALESTINIAN_GOVERNORATES[1]);
+  const [formCity, setFormCity] = useState<string>('');
+  const [formAddress, setFormAddress] = useState<string>('');
+  const [formPhone, setFormPhone] = useState<string>('');
+  const [formSecondaryPhone, setFormSecondaryPhone] = useState<string>('');
+  const [formWhatsapp, setFormWhatsapp] = useState<string>('');
+  const [formEmail, setFormEmail] = useState<string>('');
+  const [formWebsite, setFormWebsite] = useState<string>('');
+  const [formBio, setFormBio] = useState<string>('');
+  const [formLicenseNumber, setFormLicenseNumber] = useState<string>('');
+  const [formServices, setFormServices] = useState<string[]>([]);
+  const [formLogoUrl, setFormLogoUrl] = useState<string>('');
+  const [formStatus, setFormStatus] = useState<'pending' | 'approved' | 'rejected'>('approved');
+  const [formIsVerified, setFormIsVerified] = useState<boolean>(true);
+  const [isUploadingLogo, setIsUploadingLogo] = useState<boolean>(false);
+
+  // Filtered & Sorted List (Pending items sorted first)
+  const filteredList = professionals.filter((item) => {
+    if (statusFilter !== 'all' && (item.status || 'approved') !== statusFilter) return false;
+    if (typeFilter !== 'all' && item.type !== typeFilter) return false;
+    if (govFilter !== 'all' && item.governorate !== govFilter) return false;
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      const match =
+        item.name.toLowerCase().includes(q) ||
+        item.title?.toLowerCase().includes(q) ||
+        item.city?.toLowerCase().includes(q) ||
+        item.phone?.includes(q) ||
+        item.licenseNumber?.toLowerCase().includes(q) ||
+        item.services?.some((s) => s.toLowerCase().includes(q));
+      if (!match) return false;
+    }
+    return true;
+  }).sort((a, b) => {
+    const aPending = a.status === 'pending' ? 1 : 0;
+    const bPending = b.status === 'pending' ? 1 : 0;
+    if (aPending !== bPending) return bPending - aPending;
+    return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+  });
+
+  const pendingCount = professionals.filter((p) => p.status === 'pending').length;
+
+  const handleOpenAdd = () => {
+    setEditingId(null);
+    setFormType('accountant');
+    setFormName('');
+    setFormTitle('');
+    setFormGovernorate(PALESTINIAN_GOVERNORATES[1]);
+    setFormCity('');
+    setFormAddress('');
+    setFormPhone('');
+    setFormSecondaryPhone('');
+    setFormWhatsapp('');
+    setFormEmail('');
+    setFormWebsite('');
+    setFormBio('');
+    setFormLicenseNumber('');
+    setFormServices([]);
+    setFormLogoUrl('');
+    setFormStatus('approved');
+    setFormIsVerified(true);
+    setActionError(null);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (item: ProfessionalProfile) => {
+    setEditingId(item.id);
+    setFormType(item.type);
+    setFormName(item.name);
+    setFormTitle(item.title || '');
+    setFormGovernorate(item.governorate || PALESTINIAN_GOVERNORATES[1]);
+    setFormCity(item.city || '');
+    setFormAddress(item.address || '');
+    setFormPhone(item.phone || '');
+    setFormSecondaryPhone(item.secondaryPhone || '');
+    setFormWhatsapp(item.whatsapp || item.phone || '');
+    setFormEmail(item.email || '');
+    setFormWebsite(item.website || '');
+    setFormBio(item.bio || '');
+    setFormLicenseNumber(item.licenseNumber || '');
+    setFormServices(item.services || []);
+    setFormLogoUrl(item.logoUrl || '');
+    setFormStatus(item.status || 'approved');
+    setFormIsVerified(item.isVerified ?? true);
+    setActionError(null);
+    setIsModalOpen(true);
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingLogo(true);
+    try {
+      const compressed = await compressImageClientSide(file, 400, 400);
+      setFormLogoUrl(compressed);
+    } catch (err) {
+      console.error('Logo compression error:', err);
+      const reader = new FileReader();
+      reader.onload = () => setFormLogoUrl(reader.result as string);
+      reader.readAsDataURL(file);
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
+
+  const toggleService = (srv: string) => {
+    if (formServices.includes(srv)) {
+      setFormServices(formServices.filter((s) => s !== srv));
+    } else {
+      setFormServices([...formServices, srv]);
+    }
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formName.trim()) {
+      setActionError('الاسم مطلوب');
+      return;
+    }
+    if (!formPhone.trim()) {
+      setActionError('رقم الهاتف مطلوب');
+      return;
+    }
+
+    setIsSaving(true);
+    setActionError(null);
+
+    const payload: Partial<ProfessionalProfile> = {
+      type: formType,
+      name: formName.trim(),
+      title: formTitle.trim() || (formType === 'firm' ? 'مكتب محاسبة وتدقيق' : formType === 'auditor' ? 'مدقق حسابات قانوني' : 'محاسب قانوني'),
+      governorate: formGovernorate,
+      city: formCity.trim(),
+      address: formAddress.trim(),
+      phone: formPhone.trim(),
+      secondaryPhone: formSecondaryPhone.trim(),
+      whatsapp: formWhatsapp.trim() || formPhone.trim(),
+      email: formEmail.trim(),
+      website: formWebsite.trim(),
+      logoUrl: formLogoUrl.trim(),
+      services: formServices.length > 0 ? formServices : ['خدمات محاسبية وضريبية'],
+      bio: formBio.trim(),
+      licenseNumber: formLicenseNumber.trim(),
+      status: formStatus,
+      isVerified: formIsVerified,
+    };
+
+    try {
+      const url = editingId ? `/api/admin/professionals/${editingId}` : '/api/admin/professionals';
+      const method = editingId ? 'PUT' : 'POST';
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeoutId));
+
+      if (res.ok) {
+        setActionSuccess(editingId ? 'تم تحديث بيانات المهني بنجاح' : 'تمت إضافة ونشر المهني بنجاح');
+        setIsModalOpen(false);
+        setIsSaving(false);
+        setStatusFilter('all');
+        setTypeFilter('all');
+        setGovFilter('all');
+        setSearchQuery('');
+        import('../../utils/sync').then(({ notifySync }) => notifySync('professionals')).catch(() => {});
+        onRefresh();
+        setTimeout(() => setActionSuccess(null), 3500);
+        return;
+      } else {
+        const data = await res.json().catch(() => ({}));
+        // Direct Firestore fallback if server returns non-200
+        const { directSaveProfessionalToFirestore } = await import('../../services/clientFirestore');
+        const profId = editingId || 'prof-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+        const saved = await directSaveProfessionalToFirestore({
+          ...payload,
+          id: profId,
+          updatedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+        });
+        if (saved) {
+          setActionSuccess(editingId ? 'تم تحديث بيانات المهني بنجاح' : 'تمت إضافة ونشر المهني بنجاح');
+          setIsModalOpen(false);
+          setIsSaving(false);
+          setStatusFilter('all');
+          setTypeFilter('all');
+          setGovFilter('all');
+          setSearchQuery('');
+          import('../../utils/sync').then(({ notifySync }) => notifySync('professionals')).catch(() => {});
+          onRefresh();
+          setTimeout(() => setActionSuccess(null), 3500);
+          return;
+        } else {
+          setActionError(data.error || 'حدث خطأ أثناء الحفظ.');
+        }
+      }
+    } catch (err: any) {
+      console.warn('Server save failed, using direct Firestore fallback:', err);
+      try {
+        const { directSaveProfessionalToFirestore } = await import('../../services/clientFirestore');
+        const profId = editingId || 'prof-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+        await directSaveProfessionalToFirestore({
+          ...payload,
+          id: profId,
+          updatedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+        });
+        setActionSuccess(editingId ? 'تم تحديث بيانات المهني بنجاح' : 'تمت إضافة ونشر المهني بنجاح');
+        setIsModalOpen(false);
+        setIsSaving(false);
+        setStatusFilter('all');
+        setTypeFilter('all');
+        setGovFilter('all');
+        setSearchQuery('');
+        import('../../utils/sync').then(({ notifySync }) => notifySync('professionals')).catch(() => {});
+        onRefresh();
+        setTimeout(() => setActionSuccess(null), 3500);
+        return;
+      } catch (fErr) {
+        setActionError('تعذر الاتصال بالخادم. يرجى إعادة المحاولة.');
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Quick Approve Status
+  const handleQuickApprove = async (id: string) => {
+    try {
+      const res = await fetch(`/api/admin/professionals/${id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'approved' }),
+      });
+      if (res.ok) {
+        setActionSuccess('تمت الموافقة واعتماد الظهور في الدليل بنجاح');
+        await onRefresh();
+        setTimeout(() => setActionSuccess(null), 3000);
+      }
+    } catch (err) {
+      console.error('Approve error:', err);
+    }
+  };
+
+  // Quick Reject Status
+  const handleQuickReject = async (id: string) => {
+    try {
+      const res = await fetch(`/api/admin/professionals/${id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'rejected' }),
+      });
+      if (res.ok) {
+        setActionSuccess('تم رفض / تعليق الطلب');
+        await onRefresh();
+        setTimeout(() => setActionSuccess(null), 3000);
+      }
+    } catch (err) {
+      console.error('Reject error:', err);
+    }
+  };
+
+  // Delete
+  const handleDelete = async (id: string, name: string) => {
+    if (!window.confirm(`هل أنت متأكد من حذف «${name}» نهائياً من الدليل؟`)) return;
+
+    try {
+      const res = await fetch(`/api/admin/professionals/${id}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        setActionSuccess(`تم حذف «${name}» بنجاح`);
+        await onRefresh();
+        setTimeout(() => setActionSuccess(null), 3000);
+      }
+    } catch (err) {
+      console.error('Delete error:', err);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Tab Header & Action Bar */}
+      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center justify-center">
+              <Briefcase className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+                <span>إدارة الدليل المهني (المحاسبين والمدققين والمكاتب)</span>
+                {pendingCount > 0 && (
+                  <span className="bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold px-2.5 py-0.5 rounded-full animate-pulse">
+                    {pendingCount} بانتظار الموافقة
+                  </span>
+                )}
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                إدارة ومراجعة طلبات الانضمام للدليل المهني واعتماد ظهورها أو تعديلها وحذفها.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={handleOpenAdd}
+          className="px-4 py-2.5 bg-[#12281e] hover:bg-[#1a382b] text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs transition-all flex items-center gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          <span>إضافة محاسب / مدقق / مكتب جديد</span>
+        </button>
+      </div>
+
+      {/* Feedback Messages */}
+      {actionSuccess && (
+        <div className="p-3.5 bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs font-bold rounded-xl flex items-center gap-2 shadow-2xs">
+          <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-700" />
+          <span>{actionSuccess}</span>
+        </div>
+      )}
+
+      {/* Filters Bar */}
+      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Search */}
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute right-3 top-3 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="بحث بالاسم، المدينة، الهاتف..."
+              className="w-full pr-9 pl-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white"
+            />
+          </div>
+
+          {/* Status Filter */}
+          <div>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as any)}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white"
+            >
+              <option value="all">كافة الحالات</option>
+              <option value="pending">⏳ قيد المراجعة والاعتماد ({pendingCount})</option>
+              <option value="approved">✅ معتمد للظهور</option>
+              <option value="rejected">❌ مرفوض / معلق</option>
+            </select>
+          </div>
+
+          {/* Type Filter */}
+          <div>
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value as any)}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white"
+            >
+              <option value="all">كافة التصنيفات</option>
+              <option value="accountant">محاسبون قانونيون / ماليون</option>
+              <option value="auditor">مدققو حسابات قانونيون</option>
+              <option value="firm">مكاتب وشركات المحاسبة والتدقيق</option>
+            </select>
+          </div>
+
+          {/* Governorate Filter */}
+          <div>
+            <select
+              value={govFilter}
+              onChange={(e) => setGovFilter(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white"
+            >
+              <option value="all">كافة المحافظات</option>
+              {PALESTINIAN_GOVERNORATES.map((gov) => (
+                <option key={gov} value={gov}>
+                  {gov}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Table / List View */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+        {filteredList.length === 0 ? (
+          <div className="p-12 text-center text-slate-400 text-xs">
+            لا توجد سجلات تطابق الفلاتر المحددة.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-right text-xs">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold">
+                <tr>
+                  <th className="px-4 py-3.5">الاسم / المنشأة</th>
+                  <th className="px-4 py-3.5">التصنيف</th>
+                  <th className="px-4 py-3.5">المحافظة / المدينة</th>
+                  <th className="px-4 py-3.5">الهاتف والتواصل</th>
+                  <th className="px-4 py-3.5">الحالة والاعتماد</th>
+                  <th className="px-4 py-3.5 text-center">الإجراءات</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredList.map((item) => (
+                  <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-3">
+                        {item.logoUrl ? (
+                          <img
+                            src={item.logoUrl}
+                            alt=""
+                            className="w-10 h-10 rounded-lg object-cover border border-slate-200"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center font-bold">
+                            {item.type === 'firm' ? <Building2 className="w-5 h-5" /> : <UserCheck className="w-5 h-5" />}
+                          </div>
+                        )}
+                        <div>
+                          <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                            <span>{item.name}</span>
+                            {item.isVerified && (
+                              <span title="موثق">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-500">{item.title}</div>
+                          {item.licenseNumber && (
+                            <span className="text-[10px] font-mono text-slate-400">ترخيص: {item.licenseNumber}</span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+
+                    <td className="px-4 py-3.5">
+                      <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold border ${
+                        item.type === 'firm'
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          : item.type === 'auditor'
+                          ? 'bg-teal-50 text-teal-800 border-teal-200'
+                          : 'bg-amber-50 text-amber-900 border-amber-200'
+                      }`}>
+                        {item.type === 'firm' ? 'مكتب / شركة' : item.type === 'auditor' ? 'مدقق قانوني' : 'محاسب'}
+                      </span>
+                    </td>
+
+                    <td className="px-4 py-3.5">
+                      <div className="font-bold text-slate-800">{item.governorate}</div>
+                      <div className="text-[11px] text-slate-500">{item.city || item.address}</div>
+                    </td>
+
+                    <td className="px-4 py-3.5">
+                      <div className="font-mono text-slate-800 font-bold">{item.phone}</div>
+                      {item.whatsapp && (
+                        <div className="text-[11px] text-emerald-700 flex items-center gap-1">
+                          <MessageCircle className="w-3 h-3" />
+                          <span>واتساب: {item.whatsapp}</span>
+                        </div>
+                      )}
+                    </td>
+
+                    <td className="px-4 py-3.5">
+                      {item.status === 'pending' ? (
+                        <span className="bg-amber-50 text-amber-800 border border-amber-300 px-2.5 py-1 rounded-md font-bold text-[11px] flex items-center gap-1 w-fit">
+                          <Clock className="w-3 h-3 text-amber-600" />
+                          <span>قيد المراجعة</span>
+                        </span>
+                      ) : item.status === 'rejected' ? (
+                        <span className="bg-red-50 text-red-800 border border-red-300 px-2.5 py-1 rounded-md font-bold text-[11px] flex items-center gap-1 w-fit">
+                          <XCircle className="w-3 h-3 text-red-600" />
+                          <span>مرفوض / معلق</span>
+                        </span>
+                      ) : (
+                        <span className="bg-emerald-50 text-emerald-800 border border-emerald-300 px-2.5 py-1 rounded-md font-bold text-[11px] flex items-center gap-1 w-fit">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <span>معتمد للظهور</span>
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center justify-center gap-1.5">
+                        {item.status === 'pending' && (
+                          <button
+                            onClick={() => handleQuickApprove(item.id)}
+                            className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1 shadow-2xs"
+                            title="موافقة واعتماد النشر في الدليل"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <span>موافقة</span>
+                          </button>
+                        )}
+                        {item.status === 'pending' && (
+                          <button
+                            onClick={() => handleQuickReject(item.id)}
+                            className="px-2 py-1.5 bg-red-100 hover:bg-red-200 text-red-800 rounded-lg text-xs font-bold transition-colors"
+                            title="رفض الطلب"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleOpenEdit(item)}
+                          className="p-1.5 text-slate-500 hover:text-emerald-800 hover:bg-emerald-50 rounded-lg border border-slate-200 transition-colors"
+                          title="تعديل البيانات"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(item.id, item.name)}
+                          className="p-1.5 text-slate-500 hover:text-red-700 hover:bg-red-50 rounded-lg border border-slate-200 transition-colors"
+                          title="حذف"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Add / Edit Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full border border-slate-200 overflow-hidden my-8 max-h-[90vh] flex flex-col">
+            <div className="bg-gradient-to-l from-[#193225] via-[#12281e] to-[#0c1c14] text-white px-6 py-4 flex items-center justify-between shrink-0">
+              <h3 className="font-black text-base text-white">
+                {editingId ? 'تعديل بيانات المهني / المكتب' : 'إضافة محاسب / مدقق / مكتب جديد'}
+              </h3>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="text-slate-300 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSave} className="p-6 overflow-y-auto flex-1 space-y-4">
+              {/* Type Selection */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  التصنيف المهني <span className="text-red-500">*</span>
+                </label>
+                <div className="grid grid-cols-3 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setFormType('accountant')}
+                    className={`p-2.5 rounded-xl border text-xs font-bold transition-all ${
+                      formType === 'accountant'
+                        ? 'bg-emerald-50 border-emerald-600 text-emerald-950'
+                        : 'bg-slate-50 border-slate-200 text-slate-600'
+                    }`}
+                  >
+                    محاسب قانوني / مالي
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormType('auditor')}
+                    className={`p-2.5 rounded-xl border text-xs font-bold transition-all ${
+                      formType === 'auditor'
+                        ? 'bg-emerald-50 border-emerald-600 text-emerald-950'
+                        : 'bg-slate-50 border-slate-200 text-slate-600'
+                    }`}
+                  >
+                    مدقق حسابات قانوني
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormType('firm')}
+                    className={`p-2.5 rounded-xl border text-xs font-bold transition-all ${
+                      formType === 'firm'
+                        ? 'bg-emerald-50 border-emerald-600 text-emerald-950'
+                        : 'bg-slate-50 border-slate-200 text-slate-600'
+                    }`}
+                  >
+                    مكتب / شركة محاسبة
+                  </button>
+                </div>
+              </div>
+
+              {/* Status & Verification */}
+              <div className="grid grid-cols-2 gap-3.5 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    حالة النشر والاعتماد
+                  </label>
+                  <select
+                    value={formStatus}
+                    onChange={(e) => setFormStatus(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800"
+                  >
+                    <option value="approved">✅ معتمد للظهور مباشرة في الدليل</option>
+                    <option value="pending">⏳ قيد المراجعة</option>
+                    <option value="rejected">❌ مرفوض / معلق</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2 pt-5">
+                  <input
+                    type="checkbox"
+                    id="formIsVerified"
+                    checked={formIsVerified}
+                    onChange={(e) => setFormIsVerified(e.target.checked)}
+                    className="w-4 h-4 text-emerald-700 rounded border-slate-300 focus:ring-emerald-700"
+                  />
+                  <label htmlFor="formIsVerified" className="text-xs font-bold text-slate-800 cursor-pointer">
+                    تمييز كـ مهني معتمد وموثق رسمياً
+                  </label>
+                </div>
+              </div>
+
+              {/* Name & Title */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    الاسم الكامل / اسم المكتب <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    المسمى المهني
+                  </label>
+                  <input
+                    type="text"
+                    value={formTitle}
+                    onChange={(e) => setFormTitle(e.target.value)}
+                    placeholder="مدقق حسابات قانوني / محاسب قانوني..."
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900"
+                  />
+                </div>
+              </div>
+
+              {/* Location */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    المحافظة <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={formGovernorate}
+                    onChange={(e) => setFormGovernorate(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
+                  >
+                    {PALESTINIAN_GOVERNORATES.map((g) => (
+                      <option key={g} value={g}>
+                        {g}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    المدينة
+                  </label>
+                  <input
+                    type="text"
+                    value={formCity}
+                    onChange={(e) => setFormCity(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    العنوان التفصيلي
+                  </label>
+                  <input
+                    type="text"
+                    value={formAddress}
+                    onChange={(e) => setFormAddress(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900"
+                  />
+                </div>
+              </div>
+
+              {/* Phones & License */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    الهاتف الأساسي <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    value={formPhone}
+                    onChange={(e) => setFormPhone(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    الواتساب
+                  </label>
+                  <input
+                    type="tel"
+                    value={formWhatsapp}
+                    onChange={(e) => setFormWhatsapp(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    رقم الترخيص / العضوية
+                  </label>
+                  <input
+                    type="text"
+                    value={formLicenseNumber}
+                    onChange={(e) => setFormLicenseNumber(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900"
+                  />
+                </div>
+              </div>
+
+              {/* Email & Website */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    البريد الإلكتروني
+                  </label>
+                  <input
+                    type="email"
+                    value={formEmail}
+                    onChange={(e) => setFormEmail(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    الموقع أو صفحة التواصل
+                  </label>
+                  <input
+                    type="url"
+                    value={formWebsite}
+                    onChange={(e) => setFormWebsite(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900"
+                  />
+                </div>
+              </div>
+
+              {/* Logo / Photo */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  رابط الشعار أو رفعه من الجهاز
+                </label>
+                <div className="flex items-center gap-3">
+                  {formLogoUrl && (
+                    <img
+                      src={formLogoUrl}
+                      alt="Logo"
+                      className="w-12 h-12 rounded-lg object-cover border border-slate-200"
+                    />
+                  )}
+                  <input
+                    type="text"
+                    value={formLogoUrl}
+                    onChange={(e) => setFormLogoUrl(e.target.value)}
+                    placeholder="https://... أو ارفع صورة"
+                    className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900"
+                  />
+                  <label className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer transition-colors shrink-0">
+                    <input type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
+                    <span>رفع صورة</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Services Selection */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  الخدمات المقدمة:
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {PROFESSIONAL_SERVICES_LIST.map((srv) => {
+                    const checked = formServices.includes(srv);
+                    return (
+                      <button
+                        key={srv}
+                        type="button"
+                        onClick={() => toggleService(srv)}
+                        className={`p-2 rounded-lg text-right text-xs font-semibold border transition-all flex items-center justify-between ${
+                          checked
+                            ? 'bg-emerald-50 border-emerald-600 text-emerald-950 font-bold'
+                            : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        <span className="truncate">{srv}</span>
+                        {checked && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 shrink-0 mr-1" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Bio */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  نبذة تعريفية
+                </label>
+                <textarea
+                  rows={2}
+                  value={formBio}
+                  onChange={(e) => setFormBio(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 resize-none"
+                />
+              </div>
+
+              {actionError && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs font-semibold rounded-xl flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{actionError}</span>
+                </div>
+              )}
+
+              <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="px-5 py-2 bg-[#12281e] hover:bg-[#1a382b] text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-2"
+                >
+                  {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  <span>{editingId ? 'حفظ التعديلات' : 'إضافة ونشر'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

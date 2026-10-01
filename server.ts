@@ -82,9 +82,13 @@ import {
   fetchVideosFromFirestore,
   saveVideoToFirestore,
   deleteVideoFromFirestore,
+  fetchProfessionalsFromFirestore,
+  saveProfessionalToFirestore,
+  deleteProfessionalFromFirestore,
   onDatabaseChange,
   isQuotaExceeded,
 } from './server/firestore.ts';
+import { SEED_PROFESSIONALS } from './src/data/seedProfessionals.ts';
 import type {
   StoredPartner,
   StoredSubscriptionPlan,
@@ -409,6 +413,26 @@ app.all('/api/sync/pulse', (req, res) => {
         }
       }).catch(() => {});
     }
+    if (col === 'professionals' || col === 'all') {
+      fetchProfessionalsFromFirestore().then((cloudProfs) => {
+        if (cloudProfs && cloudProfs.length > 0) {
+          const map = new Map<string, any>();
+          (db.professionals || []).forEach((p) => map.set(p.id, p));
+          cloudProfs.forEach((p) => map.set(p.id, p));
+          db.professionals = Array.from(map.values());
+        }
+      }).catch(() => {});
+    }
+    if (col === 'partners' || col === 'all') {
+      fetchPartnersFromFirestore().then((cloudPartners) => {
+        if (cloudPartners && cloudPartners.length > 0) {
+          const map = new Map<string, any>();
+          (db.partners || []).forEach((p) => map.set(p.id, p));
+          cloudPartners.forEach((p) => map.set(p.id, p));
+          db.partners = Array.from(map.values());
+        }
+      }).catch(() => {});
+    }
   } catch (pulseErr) {
     console.warn('[Sync Pulse] Background refresh notice:', pulseErr);
   }
@@ -706,6 +730,7 @@ interface DBData {
   platformAbout?: any;
   contactInfo?: any;
   videos?: any[];
+  professionals?: any[];
   relatedSiteCategories?: any[];
   conversations?: any[];
 }
@@ -1189,6 +1214,7 @@ function initDB(): DBData {
     users: [...PERSISTENT_USERS_SEED],
     laws: INITIAL_LAWS,
     lawRequests: [...PERSISTENT_LAW_REQUESTS_SEED],
+    professionals: [],
   };
 
   try {
@@ -1211,6 +1237,55 @@ db.laws = db.laws.filter((l) => !db.deletedLawIds!.includes(l.id) && !db.deleted
 if (db.subscriptionPlans === undefined) {
   db.subscriptionPlans = [...DEFAULT_SUBSCRIPTION_PLANS];
 }
+if (!db.professionals) {
+  db.professionals = [];
+}
+const mockProfIds = ['prof-firm-1', 'prof-firm-2', 'prof-firm-3', 'prof-firm-4', 'prof-auditor-1', 'prof-auditor-2', 'prof-auditor-3', 'prof-accountant-1', 'prof-accountant-2', 'prof-accountant-3'];
+db.professionals = db.professionals.filter(p => !mockProfIds.includes(p.id) && !p.id.startsWith('prof-firm-') && !p.id.startsWith('prof-auditor-') && !p.id.startsWith('prof-accountant-'));
+try {
+  Promise.all([
+    fetchUsersFromFirestore().then((cloudUsers) => {
+      if (cloudUsers && Array.isArray(cloudUsers) && cloudUsers.length > 0) {
+        const map = new Map<string, any>();
+        (db.users || []).forEach((u) => map.set(u.id, u));
+        cloudUsers.forEach((u) => map.set(u.id, u));
+        db.users = Array.from(map.values());
+      }
+    }),
+    fetchProfessionalsFromFirestore().then((cloudProfs) => {
+      if (cloudProfs && Array.isArray(cloudProfs) && cloudProfs.length > 0) {
+        const map = new Map<string, any>();
+        (db.professionals || []).forEach((p) => map.set(p.id, p));
+        cloudProfs.forEach((p) => map.set(p.id, p));
+        db.professionals = Array.from(map.values());
+      }
+    }),
+    fetchSupervisorsFromFirestore().then((cloudSups) => {
+      if (cloudSups && Array.isArray(cloudSups) && cloudSups.length > 0) {
+        const map = new Map<string, any>();
+        (db.supervisors || []).forEach((s) => map.set(s.id, s));
+        cloudSups.forEach((s) => map.set(s.id, s));
+        db.supervisors = Array.from(map.values());
+      }
+    }),
+    fetchPartnersFromFirestore().then((cloudPartners) => {
+      if (cloudPartners && Array.isArray(cloudPartners) && cloudPartners.length > 0) {
+        const map = new Map<string, any>();
+        (db.partners || []).forEach((p) => map.set(p.id, p));
+        cloudPartners.forEach((p) => map.set(p.id, p));
+        db.partners = Array.from(map.values());
+      }
+    }),
+    fetchRelatedSitesFromFirestore().then((cloudSites) => {
+      if (cloudSites && Array.isArray(cloudSites) && cloudSites.length > 0) {
+        const map = new Map<string, any>();
+        (db.relatedSites || []).forEach((s) => map.set(s.id, s));
+        cloudSites.forEach((s) => map.set(s.id, s));
+        db.relatedSites = Array.from(map.values());
+      }
+    }),
+  ]).catch(() => {});
+} catch {}
 
 function saveDB(collectionName: string = 'all') {
   if (!process.env.VERCEL) {
@@ -2065,14 +2140,58 @@ app.get('/api/system/contact', (req, res) => {
 // Fast Consolidated Admin Initial Data (Single roundtrip for ultra-fast portal load)
 app.get('/api/admin/init', async (req, res) => {
   try {
-    if (!db.users || db.users.length === 0) {
-      const cloudUsers = await fetchUsersFromFirestore();
-      if (cloudUsers && Array.isArray(cloudUsers)) {
-        db.users = cloudUsers;
-      }
+    const firestorePromise = Promise.all([
+      fetchUsersFromFirestore().catch(() => null),
+      fetchProfessionalsFromFirestore().catch(() => null),
+      fetchSupervisorsFromFirestore().catch(() => null),
+      fetchPartnersFromFirestore().catch(() => null),
+      fetchRelatedSitesFromFirestore().catch(() => null),
+    ]);
+    const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve([]), 800));
+
+    const results = (await Promise.race([firestorePromise, timeoutPromise])) as any[];
+    const cloudUsers = results?.[0];
+    const cloudProfs = results?.[1];
+    const cloudSups = results?.[2];
+    const cloudPartners = results?.[3];
+    const cloudSites = results?.[4];
+
+    if (cloudUsers && Array.isArray(cloudUsers) && cloudUsers.length > 0) {
+      const map = new Map<string, any>();
+      (db.users || []).forEach((u) => map.set(u.id, u));
+      cloudUsers.forEach((u) => map.set(u.id, u));
+      db.users = Array.from(map.values());
+    }
+
+    if (cloudProfs && Array.isArray(cloudProfs) && cloudProfs.length > 0) {
+      const map = new Map<string, any>();
+      (db.professionals || []).forEach((p) => map.set(p.id, p));
+      cloudProfs.forEach((p) => map.set(p.id, p));
+      db.professionals = Array.from(map.values());
+    }
+
+    if (cloudSups && Array.isArray(cloudSups) && cloudSups.length > 0) {
+      const map = new Map<string, any>();
+      (db.supervisors || []).forEach((s) => map.set(s.id, s));
+      cloudSups.forEach((s) => map.set(s.id, s));
+      db.supervisors = Array.from(map.values());
+    }
+
+    if (cloudPartners && Array.isArray(cloudPartners) && cloudPartners.length > 0) {
+      const map = new Map<string, any>();
+      (db.partners || []).forEach((p) => map.set(p.id, p));
+      cloudPartners.forEach((p) => map.set(p.id, p));
+      db.partners = Array.from(map.values());
+    }
+
+    if (cloudSites && Array.isArray(cloudSites) && cloudSites.length > 0) {
+      const map = new Map<string, any>();
+      (db.relatedSites || []).forEach((s) => map.set(s.id, s));
+      cloudSites.forEach((s) => map.set(s.id, s));
+      db.relatedSites = Array.from(map.values());
     }
   } catch (err) {
-    console.error('Error ensuring users for /api/admin/init:', err);
+    console.error('Error ensuring data for /api/admin/init:', err);
   }
 
   const roleHeader = (req.headers['x-admin-role'] || req.query.role || '') as string;
@@ -2091,6 +2210,7 @@ app.get('/api/admin/init', async (req, res) => {
     relatedSites: db.relatedSites || [],
     partners: (db.partners || []).sort((a, b) => (a.order || 0) - (b.order || 0)),
     videos: (db.videos || []).sort((a, b) => (a.order || 0) - (b.order || 0)),
+    professionals: db.professionals || [],
     subscriptionPlans: (db.subscriptionPlans || []).sort((a, b) => (a.order || 0) - (b.order || 0)),
     platformAbout: db.platformAbout || DEFAULT_PLATFORM_ABOUT,
     contactInfo: db.contactInfo || DEFAULT_CONTACT_INFO,
@@ -2420,7 +2540,21 @@ app.post('/api/admin/settings/branding', async (req, res, next) => {
 // ----------------------------------------------------
 // Supervisors Endpoints (المشرفين)
 // ----------------------------------------------------
-app.get('/api/supervisors', (req, res) => {
+app.get('/api/supervisors', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  try {
+    const cloudSups = await Promise.race([
+      fetchSupervisorsFromFirestore(),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 600)),
+    ]);
+    if (cloudSups && Array.isArray(cloudSups) && cloudSups.length > 0) {
+      const map = new Map<string, any>();
+      (db.supervisors || []).forEach((s) => map.set(s.id, s));
+      cloudSups.forEach((s) => map.set(s.id, s));
+      db.supervisors = Array.from(map.values());
+    }
+  } catch {}
+
   if (!db.supervisors) {
     db.supervisors = [...DEFAULT_SUPERVISORS];
   }
@@ -2476,8 +2610,10 @@ app.post('/api/admin/supervisors', async (req, res) => {
   db.users.push(newSupervisorUser);
   saveDB();
   
-  saveSupervisorToFirestore(newSupervisor).catch(e => console.error('Firestore save error:', e));
-  saveUserToFirestore(newSupervisorUser).catch(e => console.error('Firestore save error:', e));
+  await Promise.all([
+    saveSupervisorToFirestore(newSupervisor).catch(e => console.error('Firestore save error:', e)),
+    saveUserToFirestore(newSupervisorUser).catch(e => console.error('Firestore save error:', e))
+  ]);
 
   res.status(201).json({
     success: true,
@@ -2799,11 +2935,26 @@ app.delete('/api/admin/related-sites/:id', async (req, res) => {
 // ----------------------------------------------------
 // Partners Endpoints (شركاؤنا - المؤسسات الشريكة)
 // ----------------------------------------------------
-app.get('/api/partners', (req, res) => {
+app.get('/api/partners', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  try {
+    const cloudPartners = await Promise.race([
+      fetchPartnersFromFirestore(),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 600)),
+    ]);
+    if (cloudPartners && Array.isArray(cloudPartners) && cloudPartners.length > 0) {
+      const map = new Map<string, any>();
+      (db.partners || []).forEach((p) => map.set(p.id, p));
+      cloudPartners.forEach((p) => map.set(p.id, p));
+      db.partners = Array.from(map.values());
+    }
+  } catch {}
+
   if (!db.partners) {
     db.partners = [...DEFAULT_PARTNERS];
   }
-  res.json({ partners: db.partners });
+  const sorted = [...db.partners].sort((a, b) => (a.order || 0) - (b.order || 0));
+  res.json({ partners: sorted });
 });
 
 app.post('/api/admin/partners', async (req, res, next) => {
@@ -6643,6 +6794,152 @@ app.delete('/api/admin/videos/:id', async (req, res) => {
   } catch {}
   broadcastSync('videos');
   res.json({ message: 'Video deleted' });
+});
+
+// ==========================================
+// Professional Directory Endpoints (دليل المحاسبين والمدققين والمكاتب)
+// ==========================================
+app.get('/api/professionals', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  if (!db.professionals) {
+    db.professionals = [];
+  }
+  const mockProfIds = ['prof-firm-1', 'prof-firm-2', 'prof-firm-3', 'prof-firm-4', 'prof-auditor-1', 'prof-auditor-2', 'prof-auditor-3', 'prof-accountant-1', 'prof-accountant-2', 'prof-accountant-3'];
+  const realOnly = db.professionals.filter(p => !mockProfIds.includes(p.id) && !p.id.startsWith('prof-firm-') && !p.id.startsWith('prof-auditor-') && !p.id.startsWith('prof-accountant-'));
+  res.json({ ok: true, professionals: realOnly });
+});
+
+app.post('/api/professionals/register', async (req, res) => {
+  try {
+    const { name, phone, type, title, governorate, city, address, secondaryPhone, whatsapp, email, website, logoUrl, services, bio, licenseNumber } = req.body;
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ error: 'الاسم أو اسم المنشأة مطلوب' });
+    }
+    if (!phone || typeof phone !== 'string' || !phone.trim()) {
+      return res.status(400).json({ error: 'رقم الهاتف الأساسي مطلوب' });
+    }
+
+    if (!db.professionals) db.professionals = [];
+    const newProf = {
+      id: 'prof-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+      type: type || 'accountant',
+      name: name.trim(),
+      title: (title || '').trim() || (type === 'firm' ? 'مكتب محاسبة وتدقيق' : type === 'auditor' ? 'مدقق حسابات قانوني' : 'محاسب قانوني'),
+      governorate: governorate || 'رام الله والبيرة',
+      city: (city || '').trim(),
+      address: (address || '').trim(),
+      phone: phone.trim(),
+      secondaryPhone: (secondaryPhone || '').trim(),
+      whatsapp: (whatsapp || phone).trim(),
+      email: (email || '').trim(),
+      website: (website || '').trim(),
+      logoUrl: (logoUrl || '').trim(),
+      services: Array.isArray(services) && services.length > 0 ? services : ['خدمات محاسبية وضريبية'],
+      bio: (bio || '').trim(),
+      licenseNumber: (licenseNumber || '').trim(),
+      status: 'pending', // Pending admin approval
+      isVerified: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    db.professionals.unshift(newProf);
+    saveDB('professionals');
+    saveProfessionalToFirestore(newProf).catch(e => console.error('Firestore save error:', e));
+    broadcastSync('professionals');
+    res.status(201).json({ message: 'تم إرسال طلبك بنجاح وهو قيد المراجعة', professional: newProf });
+  } catch (err: any) {
+    console.error('Register professional error:', err);
+    res.status(500).json({ error: 'تعذر تسجيل البيانات: ' + (err?.message || '') });
+  }
+});
+
+app.post('/api/admin/professionals', async (req, res) => {
+  try {
+    if (!db.professionals) db.professionals = [];
+    const newProf = {
+      ...req.body,
+      id: req.body.id || 'prof-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+      status: req.body.status || 'approved',
+      isVerified: req.body.isVerified ?? true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    db.professionals.unshift(newProf);
+    saveDB('professionals');
+    saveProfessionalToFirestore(newProf).catch(e => console.error('Firestore save error:', e));
+    broadcastSync('professionals');
+    res.status(201).json({ message: 'تمت إضافة ونشر المهني بنجاح', professional: newProf });
+  } catch (err: any) {
+    console.error('Admin create professional error:', err);
+    res.status(500).json({ error: 'تعذر الحفظ: ' + (err?.message || '') });
+  }
+});
+
+app.put('/api/admin/professionals/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!db.professionals) db.professionals = [];
+    const index = db.professionals.findIndex((p) => p.id === id);
+    if (index !== -1) {
+      db.professionals[index] = {
+        ...db.professionals[index],
+        ...req.body,
+        id,
+        updatedAt: new Date().toISOString(),
+      };
+      saveDB('professionals');
+      saveProfessionalToFirestore(db.professionals[index]).catch(e => console.error('Firestore save error:', e));
+      broadcastSync('professionals');
+      res.json({ message: 'تم التحديث بنجاح', professional: db.professionals[index] });
+    } else {
+      res.status(404).json({ error: 'السجل غير موجود' });
+    }
+  } catch (err: any) {
+    console.error('Admin update professional error:', err);
+    res.status(500).json({ error: 'تعذر التحديث: ' + (err?.message || '') });
+  }
+});
+
+app.patch('/api/admin/professionals/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, rejectionReason } = req.body;
+    if (!db.professionals) db.professionals = [];
+    const index = db.professionals.findIndex((p) => p.id === id);
+    if (index !== -1) {
+      db.professionals[index].status = status;
+      if (rejectionReason !== undefined) {
+        db.professionals[index].rejectionReason = rejectionReason;
+      }
+      db.professionals[index].updatedAt = new Date().toISOString();
+      saveDB('professionals');
+      saveProfessionalToFirestore(db.professionals[index]).catch(e => console.error('Firestore save error:', e));
+      broadcastSync('professionals');
+      res.json({ message: 'تم تحديث حالة الاعتماد بنجاح', professional: db.professionals[index] });
+    } else {
+      res.status(404).json({ error: 'السجل غير موجود' });
+    }
+  } catch (err: any) {
+    console.error('Admin update professional status error:', err);
+    res.status(500).json({ error: 'تعذر تعديل الحالة: ' + (err?.message || '') });
+  }
+});
+
+app.delete('/api/admin/professionals/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!db.professionals) db.professionals = [];
+    db.professionals = db.professionals.filter((p) => p.id !== id);
+    saveDB('professionals');
+    deleteProfessionalFromFirestore(id).catch(e => console.error('Firestore delete error:', e));
+    broadcastSync('professionals');
+    res.json({ message: 'تم الحذف بنجاح' });
+  } catch (err: any) {
+    console.error('Admin delete professional error:', err);
+    res.status(500).json({ error: 'تعذر الحذف: ' + (err?.message || '') });
+  }
 });
 
 // Standalone and dev server startup

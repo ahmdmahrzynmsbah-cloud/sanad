@@ -309,3 +309,65 @@ export interface Video {
   isActive?: boolean;
   createdAt: string;
 }
+
+export type ProfessionalType = 'accountant' | 'auditor' | 'firm';
+
+export interface ProfessionalProfile {
+  id: string;
+  type: ProfessionalType; // 'accountant' (محاسب) | 'auditor' (مدقق حسابات) | 'firm' (مكتب / شركة محاسبة وتدقيق)
+  name: string; // الاسم أو اسم المكتب / الشركة
+  title: string; // المسمى المهني أو الصفة
+  governorate: string; // المحافظة
+  city: string; // المدينة / البلدة
+  address: string; // العنوان التفصيلي
+  phone: string; // الهاتف الأساسي
+  secondaryPhone?: string; // هاتف إضافي
+  whatsapp?: string; // رقم الواتساب المباشر
+  email?: string; // البريد الإلكتروني
+  website?: string; // الموقع أو صفحة التواصل
+  logoUrl?: string; // الشعار أو الصورة الشخصية
+  services: string[]; // الخدمات المقدمة
+  bio?: string; // نبذة تعريفية وخبرات
+  licenseNumber?: string; // رقم ترخيص المزاولة / العضوية
+  status: 'pending' | 'approved' | 'rejected'; // حالة الاعتماد
+  rejectionReason?: string;
+  isVerified?: boolean; // علامة توثيق
+  order?: number;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export const PALESTINIAN_GOVERNORATES = [
+  'القدس',
+  'رام الله والبيرة',
+  'نابلس',
+  'الخليل',
+  'بيت لحم',
+  'جنين',
+  'طولكرم',
+  'قلقيلية',
+  'سلفيت',
+  'طوباس',
+  'أريحا والأغوار',
+  'غزة',
+  'خان يونس',
+  'رفح',
+  'دير البلح',
+  'شمال غزة',
+];
+
+export const PROFESSIONAL_SERVICES_LIST = [
+  'تدقيق حسابات قانوني',
+  'إعداد ومراجعة القوائم المالية',
+  'استشارات ضريبية ومقاصة',
+  'مسك دفاتر محاسبية وسجلات',
+  'إقرارات ضريبة الدخل والقيمة المضافة',
+  'دراسات جدوى وخطط أعمال',
+  'استرداد ضريبي وتسويات جمركية',
+  'تأسيس وتسجيل الشركات',
+  'تحكيم مالي ومحاسبة قضائية',
+  'تنظيم الأنظمة والبرامج المحاسبية',
+  'احتساب مستحقات عمالية ورواتب',
+  'استشارات تمويل وإدارة مالية',
+];
+

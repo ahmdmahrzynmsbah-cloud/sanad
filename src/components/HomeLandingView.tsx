@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ShieldCheck,
   UserCheck,
@@ -21,9 +21,11 @@ import {
   PhoneCall,
   Bot
 } from 'lucide-react';
-import { SystemBranding, User, SubscriptionPlan } from '../types';
+import { SystemBranding, User, SubscriptionPlan, Supervisor } from '../types';
 import { SubscriptionPlansSection } from './SubscriptionPlansSection';
 import { VideosSection } from './VideosSection';
+import { useSync } from '../utils/sync';
+import { SEED_SUPERVISORS } from '../data/seedData';
 
 interface HomeLandingViewProps {
   branding?: SystemBranding;
@@ -54,6 +56,42 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
   onNavigateToChat,
   lawsCount,
 }) => {
+  const [supervisors, setSupervisors] = useState<Supervisor[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('sanad_cached_supervisors');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return (SEED_SUPERVISORS as unknown as Supervisor[]) || [];
+  });
+
+  const loadSupervisors = async () => {
+    try {
+      const res = await fetch(`/api/supervisors?t=${Date.now()}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.supervisors && Array.isArray(data.supervisors) && data.supervisors.length > 0) {
+          const sorted = [...data.supervisors].sort((a: Supervisor, b: Supervisor) => (a.order || 0) - (b.order || 0));
+          setSupervisors(sorted);
+          try {
+            localStorage.setItem('sanad_cached_supervisors', JSON.stringify(sorted));
+          } catch {}
+        }
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    loadSupervisors();
+  }, []);
+
+  useSync(['supervisors', 'all'], () => {
+    loadSupervisors();
+  });
   // Founder details with robust fallbacks
   const founderName = branding?.founderName || 'المستشار القانوني أ. محمد ناصر خليل';
   const founderTitle = branding?.founderTitle || 'مستشار السياسات الجمركية والتشريعات الضريبية';
@@ -375,6 +413,89 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
 
         </div>
       </section>
+
+      {/* SUPERVISORS SHOWCASE SECTION (هيئة المشرفين والخبراء المعتمدين في الصفحة الرئيسية) */}
+      {supervisors.length > 0 && (
+        <section className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm relative overflow-hidden text-right">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6 border-b border-slate-100 pb-5">
+            <div className="space-y-1.5 text-right">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-800 text-xs font-bold rounded-full border border-emerald-200">
+                <Users className="w-3.5 h-3.5 text-emerald-600" />
+                <span>هيئة المشرفين والخبراء المعتمدين</span>
+              </div>
+              <h3 className="text-xl sm:text-2xl font-black text-slate-900">
+                نخبة من المستشارين والخبراء القانونيين والضريبيين
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-600 font-medium max-w-2xl">
+                فريق الإشراف والتدقيق المعتمد لمراجعة التشريعات والسياسات المالية والجمركية وتقديم الدعم التخصصي لكافة المستفيدين.
+              </p>
+            </div>
+
+            <button
+              onClick={onNavigateToSupervisors}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs transition-all cursor-pointer self-start sm:self-auto shrink-0"
+            >
+              <span>استعراض كافة أعضاء الهيئة ({supervisors.length})</span>
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Grid of Supervisors */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+            {supervisors.slice(0, 6).map((sup) => (
+              <div
+                key={sup.id}
+                onClick={onNavigateToSupervisors}
+                className="group p-4 sm:p-5 rounded-2xl bg-slate-50/80 hover:bg-emerald-50/40 border border-slate-200 hover:border-emerald-300 transition-all duration-200 flex flex-col justify-between text-right cursor-pointer hover:shadow-md"
+              >
+                <div className="flex items-start gap-3.5 mb-3">
+                  <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden bg-slate-200 border-2 border-emerald-500/30 shrink-0 shadow-xs">
+                    {sup.photoUrl ? (
+                      <img
+                        src={sup.photoUrl}
+                        alt={sup.name}
+                        className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-300"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-emerald-600 to-teal-800 text-white font-black text-xl">
+                        {sup.name.slice(0, 1)}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-1 min-w-0 flex-1">
+                    <h4 className="text-base font-black text-slate-900 group-hover:text-emerald-800 transition-colors truncate">
+                      {sup.name}
+                    </h4>
+                    <p className="text-xs font-semibold text-emerald-700 leading-snug line-clamp-1">
+                      {sup.title}
+                    </p>
+                    {sup.department && (
+                      <span className="inline-block px-2 py-0.5 bg-slate-200/80 text-slate-700 text-[10px] font-bold rounded-md">
+                        {sup.department}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {sup.bio && (
+                  <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed mb-3">
+                    {sup.bio}
+                  </p>
+                )}
+
+                <div className="pt-2.5 border-t border-slate-200/60 flex items-center justify-between text-xs font-bold text-emerald-700 group-hover:text-emerald-800">
+                  <span>عرض الملف الكامل</span>
+                  <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-1 transition-transform" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* SUBSCRIPTION PLANS SECTION (خطط وباقات الاشتراك) */}
       <SubscriptionPlansSection

@@ -8,6 +8,7 @@ import { RelatedSitesView } from './components/RelatedSitesView';
 import { PartnersView } from './components/PartnersView';
 import { AboutPlatformView } from './components/AboutPlatformView';
 import { ContactUsView } from './components/ContactUsView';
+import { ProfessionalsDirectoryView } from './components/ProfessionalsDirectoryView';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { User, SystemBranding, PlatformAboutData, ContactInfo } from './types';
 import { Scale, ShieldAlert, Clock, LogOut, ArrowRight, BookOpen, Loader2 } from 'lucide-react';
@@ -455,6 +456,16 @@ export default function App() {
         {activeView === 'related-sites' && (
           <div className="w-full">
             <RelatedSitesView
+              onBackToHome={() => setActiveView('home')}
+              onGoToProfessionalsDirectory={() => setActiveView('professionals-directory')}
+            />
+          </div>
+        )}
+
+        {/* VIEW 0.22: Professional Directory Page (دليل المحاسبين والمدققين والمكاتب) */}
+        {activeView === 'professionals-directory' && (
+          <div className="w-full">
+            <ProfessionalsDirectoryView
               onBackToHome={() => setActiveView('home')}
             />
           </div>

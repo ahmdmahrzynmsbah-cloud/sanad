@@ -25,11 +25,12 @@ import {
   Eye,
   PhoneCall,
   CreditCard,
-  ChevronDown
+  ChevronDown,
+  Briefcase
 } from 'lucide-react';
 import { User, SystemBranding } from '../types';
 
-export type ActiveView = 'home' | 'supervisors' | 'related-sites' | 'partners' | 'about' | 'contact' | 'chat' | 'auth' | 'admin-login' | 'admin-portal' | 'plans';
+export type ActiveView = 'home' | 'supervisors' | 'related-sites' | 'partners' | 'about' | 'contact' | 'chat' | 'auth' | 'admin-login' | 'admin-portal' | 'plans' | 'professionals-directory';
 
 interface HeaderProps {
   currentUser: User | null;
@@ -236,6 +237,20 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Globe className="w-3.5 h-3.5 shrink-0" />
               <span>مواقع ذات صلة</span>
+            </button>
+
+            <button
+              id="header-nav-professionals-btn"
+              onClick={() => handleNav('professionals-directory')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                activeView === 'professionals-directory'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-white/5 text-slate-200 hover:bg-white/10 hover:text-white border border-white/10'
+              }`}
+              title="دليل المحاسبين والمدققين ومكاتب المحاسبة والتدقيق"
+            >
+              <Briefcase className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>الدليل المهني</span>
             </button>
 
             {/* Quick Links: Partners, Vision, Contact (with Responsive More Dropdown) */}
@@ -593,6 +608,22 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="flex items-center gap-2.5">
                 <Globe className="w-4 h-4 text-emerald-300" />
                 <span>مواقع ذات صلة</span>
+              </span>
+              <ChevronLeft className="w-4 h-4 text-slate-400" />
+            </button>
+
+            <button
+              id="header-nav-professionals-mobile-btn"
+              onClick={() => handleNav('professionals-directory')}
+              className={`w-full p-3 rounded-xl text-xs font-bold flex items-center justify-between transition-all text-right cursor-pointer ${
+                activeView === 'professionals-directory'
+                  ? 'bg-emerald-700/80 text-white border border-emerald-500/40'
+                  : 'bg-white/5 hover:bg-white/10 text-slate-200'
+              }`}
+            >
+              <span className="flex items-center gap-2.5">
+                <Briefcase className="w-4 h-4 text-emerald-300" />
+                <span>دليل المحاسبين والمدققين والمكاتب</span>
               </span>
               <ChevronLeft className="w-4 h-4 text-slate-400" />
             </button>

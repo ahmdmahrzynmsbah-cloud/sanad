@@ -1829,3 +1829,64 @@ export async function directDeleteVideoFromFirestore(id: string): Promise<boolea
     return false;
   }
 }
+
+// ==========================================
+// Professional Directory (المحاسبين والمدققين والمكاتب)
+// ==========================================
+export async function directFetchProfessionalsFromFirestore(): Promise<any[] | null> {
+  const db = getClientDb();
+  if (!db) return null;
+
+  try {
+    const col = collection(db, 'professionals');
+    const snapshot = await getDocs(col);
+    if (snapshot.empty) return null;
+    const items: any[] = [];
+    snapshot.forEach((d) => items.push({ id: d.id, ...d.data() }));
+    return items;
+  } catch (err) {
+    handleClientFirestoreError('directFetchProfessionalsFromFirestore', err);
+    return null;
+  }
+}
+
+export async function directSaveProfessionalToFirestore(prof: any): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+
+  try {
+    const profId = prof.id || 'prof-' + Date.now();
+    const docRef = doc(db, 'professionals', profId);
+    await setDoc(docRef, {
+      ...prof,
+      id: profId,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+    return true;
+  } catch (err) {
+    handleClientFirestoreError('directSaveProfessionalToFirestore', err);
+    return false;
+  }
+}
+
+export async function directDeleteProfessionalFromFirestore(id: string): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+
+  try {
+    await deleteDoc(doc(db, 'professionals', id)).catch(() => {});
+    try {
+      const col = collection(db, 'professionals');
+      const q = query(col, where('id', '==', id));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+      }
+    } catch {}
+    return true;
+  } catch (err) {
+    handleClientFirestoreError('directDeleteProfessionalFromFirestore', err);
+    return false;
+  }
+}
+

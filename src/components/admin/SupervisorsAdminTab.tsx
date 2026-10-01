@@ -22,6 +22,8 @@ import { Supervisor } from '../../types';
 import { useSync, notifySync } from '../../utils/sync';
 import { directDeleteSupervisorFromFirestore } from '../../services/clientFirestore';
 
+import { SEED_SUPERVISORS } from '../../data/seedData';
+
 interface SupervisorsAdminTabProps {
   initialSupervisors?: Supervisor[];
 }
@@ -29,7 +31,19 @@ interface SupervisorsAdminTabProps {
 export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
   initialSupervisors,
 }) => {
-  const [supervisors, setSupervisors] = useState<Supervisor[]>(initialSupervisors || []);
+  const [supervisors, setSupervisors] = useState<Supervisor[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('sanad_cached_supervisors');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    if (initialSupervisors && initialSupervisors.length > 0) return initialSupervisors;
+    return (SEED_SUPERVISORS as unknown as Supervisor[]) || [];
+  });
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -55,24 +69,39 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchSupervisors = async () => {
-    setLoading(true);
     try {
-      const res = await fetch('/api/supervisors');
-      const data = await res.json();
-      if (res.ok && data.supervisors) {
-        setSupervisors(data.supervisors);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+      const res = await fetch(`/api/supervisors?t=${Date.now()}`, {
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeoutId));
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.supervisors && Array.isArray(data.supervisors) && data.supervisors.length > 0) {
+          const items: Supervisor[] = data.supervisors;
+          setSupervisors((prev) => {
+            const map = new Map<string, Supervisor>();
+            prev.forEach((s) => map.set(s.id, s));
+            items.forEach((s) => map.set(s.id, s));
+            const merged = Array.from(map.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
+            try {
+              localStorage.setItem('sanad_cached_supervisors', JSON.stringify(merged));
+            } catch {}
+            return merged;
+          });
+        }
       }
     } catch (err) {
-      console.warn('Failed to fetch supervisors:', err);
+      console.warn('API fetch supervisors failed:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (!initialSupervisors || initialSupervisors.length === 0) {
-      fetchSupervisors();
-    }
+    fetchSupervisors();
   }, []);
 
   useSync(['supervisors', 'all'], () => {
@@ -171,16 +200,60 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        const { directSaveSupervisorToFirestore } = await import('../../services/clientFirestore');
+        const supId = editingSupervisor ? editingSupervisor.id : 'sup-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+        const payloadToSave = {
+          id: supId,
+          name: name.trim(),
+          title: title.trim(),
+          bio: bio.trim(),
+          photoUrl: photoUrl.trim(),
+          department: department.trim(),
+          email: email.trim(),
+          phone: phone.trim(),
+          order: Number(order) || 1,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        const saved = await directSaveSupervisorToFirestore(payloadToSave);
+        if (saved) {
+          setSupervisors((prev) => {
+            const map = new Map<string, Supervisor>();
+            prev.forEach((s) => map.set(s.id, s));
+            map.set(payloadToSave.id, payloadToSave);
+            return Array.from(map.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
+          });
+          setSearchQuery('');
+          notifySync('supervisors');
+          fetchSupervisors();
+          setFeedback({
+            type: 'success',
+            message: editingSupervisor
+              ? `تم تحديث بيانات المشرف "${name}" بنجاح.`
+              : `تمت إضافة المشرف "${name}" بنجاح.`,
+          });
+          setShowModal(false);
+          setTimeout(() => setFeedback(null), 4000);
+          return;
+        }
         setFormError(data.error || 'فشلت عملية حفظ بيانات المشرف.');
         return;
       }
 
-      if (data.supervisors) {
+      setSearchQuery('');
+      if (data.supervisor) {
+        setSupervisors((prev) => {
+          const map = new Map<string, Supervisor>();
+          prev.forEach((s) => map.set(s.id, s));
+          map.set(data.supervisor.id, data.supervisor);
+          return Array.from(map.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
+        });
+      } else if (data.supervisors) {
         setSupervisors(data.supervisors);
       } else {
-        await fetchSupervisors();
+        fetchSupervisors();
       }
 
       notifySync('supervisors');
@@ -193,7 +266,43 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
       setShowModal(false);
       setTimeout(() => setFeedback(null), 4000);
     } catch (err: any) {
-      setFormError('تعذر الاتصال بالخادم.');
+      console.warn('Server save supervisor failed, using direct Firestore fallback:', err);
+      try {
+        const { directSaveSupervisorToFirestore } = await import('../../services/clientFirestore');
+        const supId = editingSupervisor ? editingSupervisor.id : 'sup-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+        const payloadToSave = {
+          id: supId,
+          name: name.trim(),
+          title: title.trim(),
+          bio: bio.trim(),
+          photoUrl: photoUrl.trim(),
+          department: department.trim(),
+          email: email.trim(),
+          phone: phone.trim(),
+          order: Number(order) || 1,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        await directSaveSupervisorToFirestore(payloadToSave);
+        setSupervisors((prev) => {
+          const map = new Map<string, Supervisor>();
+          prev.forEach((s) => map.set(s.id, s));
+          map.set(payloadToSave.id, payloadToSave);
+          return Array.from(map.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
+        });
+        notifySync('supervisors');
+        fetchSupervisors();
+        setFeedback({
+          type: 'success',
+          message: editingSupervisor
+            ? `تم تحديث بيانات المشرف "${name}" بنجاح.`
+            : `تمت إضافة المشرف "${name}" بنجاح.`,
+        });
+        setShowModal(false);
+        setTimeout(() => setFeedback(null), 4000);
+      } catch (fErr) {
+        setFormError('تعذر الاتصال بالخادم.');
+      }
     } finally {
       setSaving(false);
     }

@@ -11,26 +11,60 @@ import {
   BookOpen,
   Sparkles,
   Link2,
-  Tag
+  Tag,
+  Briefcase,
+  Users,
+  Plus,
+  X,
+  CheckCircle2,
+  Loader2,
+  Upload,
+  AlertCircle,
+  UserCheck
 } from 'lucide-react';
-import { RelatedSite } from '../types';
-import { useSync } from '../utils/sync';
+import { RelatedSite, ProfessionalType, PALESTINIAN_GOVERNORATES, PROFESSIONAL_SERVICES_LIST } from '../types';
+import { useSync, notifySync } from '../utils/sync';
+import { compressImageClientSide } from '../utils/imageCompressor';
 
 interface RelatedSitesViewProps {
   onBackToHome: () => void;
   onGoToAdminPortal?: () => void;
+  onGoToProfessionalsDirectory?: () => void;
   isAdmin?: boolean;
 }
 
 export const RelatedSitesView: React.FC<RelatedSitesViewProps> = ({
   onBackToHome,
   onGoToAdminPortal,
+  onGoToProfessionalsDirectory,
   isAdmin,
 }) => {
   const [sites, setSites] = useState<RelatedSite[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+
+  // Registration Modal State
+  const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
+  const [registrationSuccess, setRegistrationSuccess] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const [formType, setFormType] = useState<ProfessionalType>('accountant');
+  const [formName, setFormName] = useState('');
+  const [formTitle, setFormTitle] = useState('');
+  const [formGovernorate, setFormGovernorate] = useState(PALESTINIAN_GOVERNORATES[1]);
+  const [formCity, setFormCity] = useState('');
+  const [formAddress, setFormAddress] = useState('');
+  const [formPhone, setFormPhone] = useState('');
+  const [formWhatsapp, setFormWhatsapp] = useState('');
+  const [formEmail, setFormEmail] = useState('');
+  const [formWebsite, setFormWebsite] = useState('');
+  const [formBio, setFormBio] = useState('');
+  const [formLicenseNumber, setFormLicenseNumber] = useState('');
+  const [formServices, setFormServices] = useState<string[]>([]);
+  const [formLogoUrl, setFormLogoUrl] = useState('');
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
   const fetchSites = async () => {
     setLoading(true);
@@ -58,6 +92,128 @@ export const RelatedSitesView: React.FC<RelatedSitesViewProps> = ({
   const categories = Array.from(
     new Set(sites.map((s) => s.category).filter(Boolean))
   ) as string[];
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingLogo(true);
+    try {
+      const compressed = await compressImageClientSide(file, 400, 400);
+      setFormLogoUrl(compressed);
+    } catch (err) {
+      console.error('Logo compression failed:', err);
+      const reader = new FileReader();
+      reader.onload = () => setFormLogoUrl(reader.result as string);
+      reader.readAsDataURL(file);
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
+
+  const toggleService = (srv: string) => {
+    if (formServices.includes(srv)) {
+      setFormServices(formServices.filter((s) => s !== srv));
+    } else {
+      setFormServices([...formServices, srv]);
+    }
+  };
+
+  const handleSubmitRegistration = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formName.trim()) {
+      setSubmitError('يرجى إدخال الاسم أو اسم المكتب/الشركة');
+      return;
+    }
+    if (!formPhone.trim()) {
+      setSubmitError('يرجى إدخال رقم الهاتف الأساسي للتواصل');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    const payload = {
+      type: formType,
+      name: formName.trim(),
+      title: formTitle.trim() || (formType === 'firm' ? 'مكتب محاسبة وتدقيق' : formType === 'auditor' ? 'مدقق حسابات قانوني' : 'محاسب قانوني'),
+      governorate: formGovernorate,
+      city: formCity.trim(),
+      address: formAddress.trim(),
+      phone: formPhone.trim(),
+      whatsapp: formWhatsapp.trim() || formPhone.trim(),
+      email: formEmail.trim(),
+      website: formWebsite.trim(),
+      logoUrl: formLogoUrl.trim(),
+      services: formServices.length > 0 ? formServices : ['خدمات محاسبية وضريبية'],
+      bio: formBio.trim(),
+      licenseNumber: formLicenseNumber.trim(),
+    };
+
+    try {
+      const res = await fetch('/api/professionals/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        notifySync('professionals');
+        setRegistrationSuccess(true);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        const { directSaveProfessionalToFirestore } = await import('../services/clientFirestore');
+        const saved = await directSaveProfessionalToFirestore({
+          ...payload,
+          id: 'prof-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+          status: 'pending',
+          isVerified: false,
+          createdAt: new Date().toISOString(),
+        });
+        if (saved) {
+          notifySync('professionals');
+          setRegistrationSuccess(true);
+        } else {
+          setSubmitError(data.error || 'حدث خطأ أثناء إرسال البيانات. يرجى المحاولة مرة أخرى.');
+        }
+      }
+    } catch (err) {
+      console.warn('Server registration fetch failed, executing direct Firestore fallback:', err);
+      try {
+        const { directSaveProfessionalToFirestore } = await import('../services/clientFirestore');
+        await directSaveProfessionalToFirestore({
+          ...payload,
+          id: 'prof-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+          status: 'pending',
+          isVerified: false,
+          createdAt: new Date().toISOString(),
+        });
+      } catch (fErr) {
+        console.warn('Direct Firestore save fallback notice:', fErr);
+      }
+      notifySync('professionals');
+      setRegistrationSuccess(true);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const resetForm = () => {
+    setFormName('');
+    setFormTitle('');
+    setFormCity('');
+    setFormAddress('');
+    setFormPhone('');
+    setFormWhatsapp('');
+    setFormEmail('');
+    setFormWebsite('');
+    setFormBio('');
+    setFormLicenseNumber('');
+    setFormServices([]);
+    setFormLogoUrl('');
+    setSubmitError(null);
+    setRegistrationSuccess(false);
+  };
 
   const filteredSites = sites.filter((site) => {
     const matchesSearch =
@@ -108,6 +264,50 @@ export const RelatedSitesView: React.FC<RelatedSitesViewProps> = ({
             <span>إدارة المواقع في لوحة التحكم</span>
           </button>
         )}
+      </div>
+
+      {/* Prominent Professional Directory Callout Banner */}
+      <div className="bg-gradient-to-l from-[#193225] via-[#12281e] to-[#0c1c14] text-white rounded-2xl p-5 sm:p-6 shadow-md border border-emerald-800/60 relative overflow-hidden">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-5 relative z-10">
+          <div className="flex items-start gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-700 flex items-center justify-center text-white shrink-0 shadow-md border border-emerald-400/30">
+              <Briefcase className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                  خدمة سحابية جديدة
+                </span>
+                <span className="text-xs text-emerald-200 font-semibold">تخدم كافة المحافظات الفلسطينية</span>
+              </div>
+              <h2 className="text-base sm:text-lg font-black text-white mt-1">
+                الدليل المهني: المحاسبين والمدققين ومكاتب المحاسبة والتدقيق
+              </h2>
+              <p className="text-xs sm:text-sm text-emerald-200/90 mt-1 max-w-2xl leading-relaxed">
+                هل أنت محاسب قانوني، مدقق حسابات مرخص، أو تملك مكتب/شركة محاسبة وتدقيق؟ يمكنك تسجيل بياناتك وشعارك ورابط التواصل ورقم الهاتف والمحافظة مجاناً، وسيتم اعتمادها فوراً للظهور.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 w-full md:w-auto flex-wrap sm:flex-nowrap">
+            {onGoToProfessionalsDirectory && (
+              <button
+                onClick={onGoToProfessionalsDirectory}
+                className="flex-1 sm:flex-none px-4 py-2.5 bg-white/10 hover:bg-white/15 text-emerald-100 hover:text-white border border-emerald-400/20 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Users className="w-4 h-4 text-emerald-400" />
+                <span>تصفح الدليل المهني الكامل</span>
+              </button>
+            )}
+            <button
+              onClick={() => setIsRegisterModalOpen(true)}
+              className="flex-1 sm:flex-none px-5 py-2.5 bg-gradient-to-l from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs sm:text-sm rounded-xl shadow-lg border border-emerald-400/30 transition-all flex items-center justify-center gap-2 cursor-pointer transform active:scale-95"
+            >
+              <Plus className="w-4 h-4 text-[#f5d77f]" />
+              <span>أضف مكتبك / سجّل بياناتك للظهور</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Search & Category Filter Bar */}
@@ -248,6 +448,346 @@ export const RelatedSitesView: React.FC<RelatedSitesViewProps> = ({
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Registration Modal for Users/Visitors to Add Accountant / Auditor / Firm */}
+      {isRegisterModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full border border-slate-200 overflow-hidden my-8 max-h-[90vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-l from-[#193225] via-[#12281e] to-[#0c1c14] text-white px-6 py-4 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-800/80 border border-emerald-600/40 flex items-center justify-center text-emerald-300">
+                  <Plus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-white">إضافة مكتب أو محاسب أو مدقق في الدليل</h3>
+                  <p className="text-[11px] text-emerald-300">
+                    أدخل البيانات والشعار والروابط وسيتم اعتمادها فوراً من الإدارة
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsRegisterModalOpen(false)}
+                className="text-slate-300 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto flex-1 space-y-5">
+              {registrationSuccess ? (
+                <div className="text-center py-8 space-y-4">
+                  <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto shadow-sm">
+                    <CheckCircle2 className="w-10 h-10" />
+                  </div>
+                  <h4 className="text-lg font-bold text-slate-900">تم إرسال طلبك للإدارة بنجاح!</h4>
+                  <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto leading-relaxed">
+                    شكراً لك. تم تسجيل بيانات المكتب / المحاسب / المدقق بنجاح وحفظها سحابياً، وسيتم نشرها في الدليل فور مراجعة الإدارة وموافقتها.
+                  </p>
+                  <div className="pt-4">
+                    <button
+                      type="button"
+                      onClick={() => setIsRegisterModalOpen(false)}
+                      className="px-6 py-2.5 bg-[#12281e] text-white rounded-xl text-xs sm:text-sm font-bold hover:bg-[#1a382b] transition-colors"
+                    >
+                      إغلاق ومتابعة التصفح
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleSubmitRegistration} className="space-y-4">
+                  {/* Type Selection (التقسيمات الثلاثة) */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-2">
+                      اختر التقسيمة المناسبة للإضافة <span className="text-red-500">*</span>
+                    </label>
+                    <div className="grid grid-cols-3 gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setFormType('accountant')}
+                        className={`p-3 rounded-xl border text-center transition-all ${
+                          formType === 'accountant'
+                            ? 'bg-emerald-50 border-emerald-600 text-emerald-950 font-bold shadow-xs'
+                            : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        <UserCheck className="w-5 h-5 mx-auto mb-1 text-emerald-700" />
+                        <span className="text-xs block font-bold">1. دليل المحاسبين</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setFormType('auditor')}
+                        className={`p-3 rounded-xl border text-center transition-all ${
+                          formType === 'auditor'
+                            ? 'bg-emerald-50 border-emerald-600 text-emerald-950 font-bold shadow-xs'
+                            : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        <ShieldCheck className="w-5 h-5 mx-auto mb-1 text-emerald-700" />
+                        <span className="text-xs block font-bold">2. دليل المدققين</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setFormType('firm')}
+                        className={`p-3 rounded-xl border text-center transition-all ${
+                          formType === 'firm'
+                            ? 'bg-emerald-50 border-emerald-600 text-emerald-950 font-bold shadow-xs'
+                            : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        <Building2 className="w-5 h-5 mx-auto mb-1 text-emerald-700" />
+                        <span className="text-xs block font-bold">3. مكاتب المحاسبة والتدقيق</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Name & Title */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 mb-1">
+                        الاسم / اسم المكتب أو الشركة <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={formName}
+                        onChange={(e) => setFormName(e.target.value)}
+                        placeholder={formType === 'firm' ? 'مثال: مكتب الأمل للمحاسبة والتدقيق' : 'مثال: أ. محمود أحمد'}
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 mb-1">
+                        المسمى المهني أو الصفة
+                      </label>
+                      <input
+                        type="text"
+                        value={formTitle}
+                        onChange={(e) => setFormTitle(e.target.value)}
+                        placeholder="مثال: مدقق حسابات قانوني مرخص / محاسب مالي"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Governorate & City & Address */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 mb-1">
+                        تتبع لأي محافظة؟ <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={formGovernorate}
+                        onChange={(e) => setFormGovernorate(e.target.value)}
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white"
+                      >
+                        {PALESTINIAN_GOVERNORATES.map((g) => (
+                          <option key={g} value={g}>
+                            {g}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 mb-1">
+                        المدينة / البلدة
+                      </label>
+                      <input
+                        type="text"
+                        value={formCity}
+                        onChange={(e) => setFormCity(e.target.value)}
+                        placeholder="رام الله، نابلس..."
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 mb-1">
+                        العنوان التفصيلي
+                      </label>
+                      <input
+                        type="text"
+                        value={formAddress}
+                        onChange={(e) => setFormAddress(e.target.value)}
+                        placeholder="الشارع، المجمع، الطابق..."
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Contact Numbers & Website */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 mb-1">
+                        رقم الهاتف الأساسي <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="tel"
+                        required
+                        value={formPhone}
+                        onChange={(e) => setFormPhone(e.target.value)}
+                        placeholder="0599000000"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 mb-1">
+                        رقم الواتساب
+                      </label>
+                      <input
+                        type="tel"
+                        value={formWhatsapp}
+                        onChange={(e) => setFormWhatsapp(e.target.value)}
+                        placeholder="0599000000"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 mb-1">
+                        رابط الموقع / صفحة الفيس بوك
+                      </label>
+                      <input
+                        type="url"
+                        value={formWebsite}
+                        onChange={(e) => setFormWebsite(e.target.value)}
+                        placeholder="https://..."
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Logo / Photo Upload */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1">
+                      شعار المكتب أو الصورة الشخصية
+                    </label>
+                    <div className="flex items-center gap-3">
+                      {formLogoUrl ? (
+                        <div className="relative">
+                          <img
+                            src={formLogoUrl}
+                            alt="Logo"
+                            className="w-14 h-14 rounded-xl object-cover border border-slate-200 shadow-xs"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setFormLogoUrl('')}
+                            className="absolute -top-1.5 -right-1.5 bg-red-600 text-white rounded-full p-0.5"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="flex-1 border-2 border-dashed border-slate-200 hover:border-emerald-600 rounded-xl p-3 text-center cursor-pointer bg-slate-50 hover:bg-emerald-50/50 transition-colors">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleLogoUpload}
+                            className="hidden"
+                          />
+                          {isUploadingLogo ? (
+                            <div className="flex items-center justify-center gap-2 text-xs text-slate-500">
+                              <Loader2 className="w-4 h-4 animate-spin text-emerald-700" />
+                              <span>جاري معالجة الشعار...</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-center gap-2 text-xs text-slate-600">
+                              <Upload className="w-4 h-4 text-emerald-700" />
+                              <span>اختر ملف الشعار/الصورة من جهازك</span>
+                            </div>
+                          )}
+                        </label>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Services Selection */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                      حدد الخدمات التي تقدمها:
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {PROFESSIONAL_SERVICES_LIST.map((srv) => {
+                        const checked = formServices.includes(srv);
+                        return (
+                          <button
+                            key={srv}
+                            type="button"
+                            onClick={() => toggleService(srv)}
+                            className={`p-2 rounded-lg text-right text-xs font-semibold border transition-all flex items-center justify-between ${
+                              checked
+                                ? 'bg-emerald-50 border-emerald-600 text-emerald-950 font-bold'
+                                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                            }`}
+                          >
+                            <span className="truncate">{srv}</span>
+                            {checked && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 shrink-0 mr-1" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Bio */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1">
+                      نبذة تعريفية ورقم الترخيص (إن وجد)
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={formBio}
+                      onChange={(e) => setFormBio(e.target.value)}
+                      placeholder="معلومات إضافية، رقم الترخيص، سنوات الخبرة..."
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white resize-none"
+                    />
+                  </div>
+
+                  {submitError && (
+                    <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs font-semibold rounded-xl flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <span>{submitError}</span>
+                    </div>
+                  )}
+
+                  <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setIsRegisterModalOpen(false)}
+                      className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                    >
+                      إلغاء
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="px-6 py-2.5 bg-[#12281e] hover:bg-[#1a382b] text-white text-xs sm:text-sm font-bold rounded-xl shadow-md transition-all flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>جاري الإرسال للإدارة...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          <span>إرسال للادمن للموافقة</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

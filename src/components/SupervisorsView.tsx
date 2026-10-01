@@ -17,6 +17,8 @@ import {
 import { Supervisor } from '../types';
 import { useSync } from '../utils/sync';
 
+import { SEED_SUPERVISORS } from '../data/seedData';
+
 interface SupervisorsViewProps {
   onBackToHome: () => void;
   onGoToAdminPortal?: () => void;
@@ -30,21 +32,44 @@ export const SupervisorsView: React.FC<SupervisorsViewProps> = ({
   isAdmin,
   onNavigateToAuth,
 }) => {
-  const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [supervisors, setSupervisors] = useState<Supervisor[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('sanad_cached_supervisors');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return (SEED_SUPERVISORS as unknown as Supervisor[]) || [];
+  });
+  const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDept, setSelectedDept] = useState<string>('all');
 
   const fetchSupervisors = async () => {
-    setLoading(true);
     try {
-      const res = await fetch('/api/supervisors');
-      const data = await res.json();
-      if (res.ok && data.supervisors) {
-        setSupervisors(data.supervisors);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+      const res = await fetch(`/api/supervisors?t=${Date.now()}`, {
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeoutId));
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.supervisors && Array.isArray(data.supervisors) && data.supervisors.length > 0) {
+          const items: Supervisor[] = data.supervisors;
+          items.sort((a, b) => (a.order || 0) - (b.order || 0));
+          setSupervisors(items);
+          try {
+            localStorage.setItem('sanad_cached_supervisors', JSON.stringify(items));
+          } catch {}
+        }
       }
     } catch (err) {
-      console.warn('Failed to load supervisors:', err);
+      console.warn('Failed to load supervisors from API:', err);
     } finally {
       setLoading(false);
     }

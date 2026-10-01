@@ -36,10 +36,31 @@ export const PartnersView: React.FC<PartnersViewProps> = ({
   const fetchPartners = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/partners');
-      const data = await res.json();
-      if (res.ok && data.partners) {
-        setPartners(data.partners);
+      let items: Partner[] = [];
+      const res = await fetch(`/api/partners?t=${Date.now()}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.partners && Array.isArray(data.partners)) {
+          items = data.partners;
+        }
+      }
+      try {
+        const { directFetchPartnersFromFirestore } = await import('../services/clientFirestore');
+        const cloudItems = await directFetchPartnersFromFirestore();
+        if (cloudItems && cloudItems.length > 0) {
+          const map = new Map<string, Partner>();
+          items.forEach((p) => map.set(p.id, p));
+          cloudItems.forEach((p) => map.set(p.id, p));
+          items = Array.from(map.values());
+        }
+      } catch {}
+
+      if (items.length > 0) {
+        items.sort((a, b) => (a.order || 0) - (b.order || 0));
+        setPartners(items);
+        try {
+          localStorage.setItem('sanad_cached_partners', JSON.stringify(items));
+        } catch {}
       }
     } catch (err) {
       console.warn('Failed to load partners:', err);

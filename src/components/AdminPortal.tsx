@@ -6,6 +6,7 @@ import {
   XCircle,
   Clock,
   Plus,
+  Briefcase,
   Edit2,
   Trash2,
   AlertCircle,
@@ -53,7 +54,7 @@ import {
   User as UserIcon,
   Bot,
 } from 'lucide-react';
-import { User, Law, LawCategory, LegalCategory, DEFAULT_LEGAL_CATEGORIES, SystemBranding, PlatformAboutData, ContactInfo, Video, RelatedSite, Partner, SubscriptionPlan, Supervisor } from '../types';
+import { User, Law, LawCategory, LegalCategory, DEFAULT_LEGAL_CATEGORIES, SystemBranding, PlatformAboutData, ContactInfo, Video, RelatedSite, Partner, SubscriptionPlan, Supervisor, ProfessionalProfile } from '../types';
 import { formatBytes, sanitizeLawTitle, PDFProgress } from '../utils/pdfParser';
 import { extractTextFromAnyDocument } from '../utils/documentParser';
 import { findKnownPalestinianDecree } from '../utils/palestinianDecrees';
@@ -67,6 +68,7 @@ import { AboutPlatformAdminTab } from './admin/AboutPlatformAdminTab';
 import { VideosAdminTab } from './admin/VideosAdminTab';
 import { ContactAdminTab } from './admin/ContactAdminTab';
 import { LawRequestsAdminTab } from './admin/LawRequestsAdminTab';
+import { ProfessionalsAdminTab } from './admin/ProfessionalsAdminTab';
 import { UserDetailsModal } from './admin/UserDetailsModal';
 import { useSync, notifySync } from '../utils/sync';
 import { safeFetchJson } from '../utils/safeApi';
@@ -124,7 +126,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   const isSupervisor = currentAdmin?.role === 'supervisor';
 
   const [videos, setVideos] = useState<Video[]>([]);
-  const [activeTab, setActiveTab] = useState<'requests' | 'laws' | 'law-requests' | 'supervisors' | 'related-sites' | 'partners' | 'plans' | 'about' | 'contact' | 'settings' | 'videos'>(() => isSupervisor ? 'laws' : 'requests');
+  const [professionals, setProfessionals] = useState<ProfessionalProfile[]>([]);
+  const [activeTab, setActiveTab] = useState<'requests' | 'laws' | 'law-requests' | 'professionals' | 'supervisors' | 'related-sites' | 'partners' | 'plans' | 'about' | 'contact' | 'settings' | 'videos'>(() => isSupervisor ? 'laws' : 'requests');
 
   // Admin Daily Upload Limit & Quota (40 files max, 40MB per file, 800MB total quota per day)
   const ADMIN_DAILY_LIMIT = 40;
@@ -426,6 +429,29 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         const v = await directFetchVideosFromFirestore();
         setVideos(v);
       } catch (e) {}
+    }
+  };
+
+  const fetchProfessionals = async () => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+      const res = await fetch(`/api/professionals?t=${Date.now()}`, {
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeoutId));
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.professionals && Array.isArray(data.professionals) && data.professionals.length > 0) {
+          setProfessionals(data.professionals);
+          try {
+            localStorage.setItem('sanad_cached_professionals', JSON.stringify(data.professionals));
+          } catch {}
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch professionals from API:', err);
     }
   };
 
@@ -956,6 +982,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         if (data.systemStatus) {
           setSystemStatus(data.systemStatus);
         }
+        if (data.professionals && Array.isArray(data.professionals)) {
+          setProfessionals(data.professionals);
+        } else {
+          fetchProfessionals();
+        }
         if (data.lawRequests && Array.isArray(data.lawRequests)) {
           const pending = data.lawRequests.filter((r: any) => r.status === 'pending').length;
           setPendingLawRequestsCount(pending);
@@ -971,8 +1002,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
           fetchSystemStatus(),
           fetchSettings(),
           fetchBranding(),
-        fetchVideos(),
           fetchVideos(),
+          fetchProfessionals(),
           fetchPendingLawRequestsCount(),
         ]);
       }
@@ -985,6 +1016,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         fetchSystemStatus(),
         fetchSettings(),
         fetchBranding(),
+        fetchVideos(),
+        fetchProfessionals(),
         fetchPendingLawRequestsCount(),
       ]);
     } finally {
@@ -1340,7 +1373,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     loadAllAdminData();
   }, []);
 
-  useSync(['users', 'laws', 'categories', 'system_settings', 'supervisors', 'related_sites', 'partners', 'subscription_plans', 'law_requests', 'platform_about', 'contact_info', 'all'], () => {
+  useSync(['users', 'laws', 'categories', 'system_settings', 'supervisors', 'related_sites', 'partners', 'subscription_plans', 'law_requests', 'professionals', 'platform_about', 'contact_info', 'all'], () => {
     loadAllAdminData(true);
   });
 
@@ -2795,6 +2828,39 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         </button>
       </div>
 
+      {/* Prominent Alert Banner for Pending Office / Professional Registrations */}
+      {professionals.filter((p) => p.status === 'pending').length > 0 && (
+        <div className="bg-gradient-to-l from-amber-500/15 via-amber-500/10 to-amber-500/5 border-2 border-amber-400/60 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-amber-950 shadow-sm animate-in fade-in duration-200">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center font-black text-xl shrink-0 shadow-md border border-amber-300">
+              {professionals.filter((p) => p.status === 'pending').length}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="bg-amber-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full animate-pulse">
+                  تنبيه هام / طلبات قيد المراجعة
+                </span>
+                <span className="text-xs font-bold text-amber-900">الدليل المهني</span>
+              </div>
+              <h4 className="font-extrabold text-sm sm:text-base text-slate-900 mt-1">
+                يوجد {professionals.filter((p) => p.status === 'pending').length} طلب إضافة مكتب/محاسب/مدقق جديد بانتظار موافقتك واعتمادها
+              </h4>
+              <p className="text-xs text-slate-600 mt-0.5">
+                قام مستخدمون/زوار بإضافة بيانات مكاتبهم أو حساباتهم المهنية في الدليل المهني. انقر على الزر لمعاينتها واعتمادها فوراً.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setActiveTab('professionals')}
+            className="w-full sm:w-auto px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-md transition-all shrink-0 flex items-center justify-center gap-2 cursor-pointer border border-amber-500 transform active:scale-95"
+          >
+            <Briefcase className="w-4 h-4 text-amber-200" />
+            <span>انتقال للدليل المهني للاعتماد والموافقة</span>
+          </button>
+        </div>
+      )}
+
       {/* Main Tabs Navigation */}
       <div className="flex overflow-x-auto whitespace-nowrap border-b border-slate-200 bg-white rounded-2xl px-2 sm:px-4 pt-3 shadow-xs scrollbar-none touch-scroll overscroll-x-contain">
         {!isSupervisor && (
@@ -2853,6 +2919,30 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
             </span>
           )}
         </button>
+
+        {!isSupervisor && (
+        <button
+          id="admin-tab-professionals"
+          onClick={() => setActiveTab('professionals')}
+          className={`pb-3 px-3.5 sm:px-5 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 transition-all shrink-0 cursor-pointer ${
+            activeTab === 'professionals'
+              ? 'border-emerald-700 text-emerald-800'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
+          }`}
+        >
+          <Briefcase className="w-4 h-4" />
+          <span>الدليل المهني</span>
+          {professionals.filter((p) => p.status === 'pending').length > 0 ? (
+            <span className="bg-amber-500 text-white text-[10px] sm:text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full font-extrabold animate-pulse">
+              {professionals.filter((p) => p.status === 'pending').length} جديد
+            </span>
+          ) : (
+            <span className="bg-slate-100 text-slate-600 text-[10px] sm:text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full font-bold">
+              {professionals.length}
+            </span>
+          )}
+        </button>
+        )}
 
         {!isSupervisor && (
         <button
@@ -6034,6 +6124,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
 
           </div>
         </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* TAB 3.5: PROFESSIONAL DIRECTORY MANAGEMENT (الدليل المهني) */}
+      {/* ======================================================== */}
+      {activeTab === 'professionals' && (
+        <ProfessionalsAdminTab
+          professionals={professionals}
+          onRefresh={fetchProfessionals}
+        />
       )}
 
       {/* ======================================================== */}

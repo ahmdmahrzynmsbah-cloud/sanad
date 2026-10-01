@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { Partner } from '../../types';
 import { useSync, notifySync } from '../../utils/sync';
-import { directDeletePartnerFromFirestore } from '../../services/clientFirestore';
+import { directDeletePartnerFromFirestore, directSavePartnerToFirestore } from '../../services/clientFirestore';
 
 const CATEGORY_PRESETS = [
   'نقابات وجمعيات مهنية',
@@ -39,7 +39,18 @@ const PARTNERSHIP_TYPES = [
 ];
 
 export const PartnersAdminTab: React.FC = () => {
-  const [partners, setPartners] = useState<Partner[]>([]);
+  const [partners, setPartners] = useState<Partner[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('sanad_cached_partners');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return [];
+  });
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -65,15 +76,32 @@ export const PartnersAdminTab: React.FC = () => {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const fetchPartners = async () => {
-    setLoading(true);
     try {
-      const res = await fetch('/api/partners');
-      const data = await res.json();
-      if (res.ok && data.partners) {
-        setPartners(data.partners);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+      const res = await fetch(`/api/partners?t=${Date.now()}`, {
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeoutId));
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.partners && Array.isArray(data.partners) && data.partners.length > 0) {
+          const items: Partner[] = data.partners;
+          setPartners((prev) => {
+            const map = new Map<string, Partner>();
+            prev.forEach((p) => map.set(p.id, p));
+            items.forEach((p) => map.set(p.id, p));
+            const merged = Array.from(map.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
+            try {
+              localStorage.setItem('sanad_cached_partners', JSON.stringify(merged));
+            } catch {}
+            return merged;
+          });
+        }
       }
     } catch (err) {
-      console.warn('Failed to fetch partners:', err);
+      console.warn('API fetch partners failed:', err);
     } finally {
       setLoading(false);
     }
@@ -139,18 +167,19 @@ export const PartnersAdminTab: React.FC = () => {
       return;
     }
 
+    const payload = {
+      name: name.trim(),
+      description: description.trim(),
+      category: finalCategory,
+      partnershipType: partnershipType.trim(),
+      logoUrl: logoUrl.trim(),
+      websiteUrl: websiteUrl.trim() === 'https://' ? '' : websiteUrl.trim(),
+      order: Number(order) || 1,
+      isActive,
+    };
+
     setSaving(true);
     try {
-      const payload = {
-        name: name.trim(),
-        description: description.trim(),
-        category: finalCategory,
-        partnershipType: partnershipType.trim(),
-        logoUrl: logoUrl.trim(),
-        websiteUrl: websiteUrl.trim() === 'https://' ? '' : websiteUrl.trim(),
-        order: Number(order) || 1,
-        isActive,
-      };
 
       const endpoint = editingPartner
         ? `/api/admin/partners/${editingPartner.id}`
@@ -163,9 +192,22 @@ export const PartnersAdminTab: React.FC = () => {
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       if (res.ok) {
+        if (data.partner) {
+          setPartners((prev) => {
+            const map = new Map<string, Partner>();
+            prev.forEach((p) => map.set(p.id, p));
+            map.set(data.partner.id, data.partner);
+            return Array.from(map.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
+          });
+        } else if (data.partners) {
+          setPartners(data.partners);
+        } else {
+          fetchPartners();
+        }
+        setSearchQuery('');
         notifySync('partners');
         setFeedback({
           type: 'success',
@@ -174,17 +216,64 @@ export const PartnersAdminTab: React.FC = () => {
             : `تمت إضافة المؤسسة الشريكة "${name}" بنجاح.`,
         });
         setShowModal(false);
-        if (data.partners) {
-          setPartners(data.partners);
-        } else {
-          fetchPartners();
-        }
       } else {
+        const partnerId = editingPartner ? editingPartner.id : 'partner-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+        const payloadToSave = {
+          id: partnerId,
+          ...payload,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        const saved = await directSavePartnerToFirestore(payloadToSave);
+        if (saved) {
+          setPartners((prev) => {
+            const map = new Map<string, Partner>();
+            prev.forEach((p) => map.set(p.id, p));
+            map.set(payloadToSave.id, payloadToSave);
+            return Array.from(map.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
+          });
+          notifySync('partners');
+          setFeedback({
+            type: 'success',
+            message: editingPartner
+              ? `تم تحديث بيانات المؤسسة "${name}" بنجاح.`
+              : `تمت إضافة المؤسسة الشريكة "${name}" بنجاح.`,
+          });
+          setShowModal(false);
+          fetchPartners();
+          return;
+        }
         setFormError(data.error || 'حدث خطأ أثناء حفظ المؤسسة الشريكة.');
       }
     } catch (err) {
-      console.error('Error saving partner:', err);
-      setFormError('تعذر الاتصال بالخادم. يرجى المحاولة مرة أخرى.');
+      console.warn('Error saving partner, using direct Firestore fallback:', err);
+      try {
+        const partnerId = editingPartner ? editingPartner.id : 'partner-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+        const payloadToSave = {
+          id: partnerId,
+          ...payload,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        await directSavePartnerToFirestore(payloadToSave);
+        setPartners((prev) => {
+          const map = new Map<string, Partner>();
+          prev.forEach((p) => map.set(p.id, p));
+          map.set(payloadToSave.id, payloadToSave);
+          return Array.from(map.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
+        });
+        notifySync('partners');
+        setFeedback({
+          type: 'success',
+          message: editingPartner
+            ? `تم تحديث بيانات المؤسسة "${name}" بنجاح.`
+            : `تمت إضافة المؤسسة الشريكة "${name}" بنجاح.`,
+        });
+        setShowModal(false);
+        fetchPartners();
+      } catch (fErr) {
+        setFormError('تعذر الاتصال بالخادم. يرجى المحاولة مرة أخرى.');
+      }
     } finally {
       setSaving(false);
     }

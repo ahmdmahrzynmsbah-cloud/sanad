@@ -53,6 +53,11 @@ service cloud.firestore {
     match /videos/{videoId} {
       allow read, write: if true;
     }
+
+    // Professional Directory
+    match /professionals/{profId} {
+      allow read, write: if true;
+    }
     
     // Conversations history
     match /conversations/{conversationId} {
