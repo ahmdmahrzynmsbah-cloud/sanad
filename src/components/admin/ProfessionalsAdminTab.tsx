@@ -34,6 +34,7 @@ import {
 } from '../../types';
 import { compressImageClientSide } from '../../utils/imageCompressor';
 import { useSync } from '../../utils/sync';
+import { SkeletonProfessionalRow } from '../common/Skeleton';
 
 interface ProfessionalsAdminTabProps {
   professionals: ProfessionalProfile[];
@@ -60,7 +61,12 @@ export const ProfessionalsAdminTab: React.FC<ProfessionalsAdminTabProps> = ({
     return [];
   });
 
+  const [loading, setLoading] = useState(false);
+  const PAGE_SIZE = 12;
+  const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
+
   const loadItems = async () => {
+    setLoading(true);
     try {
       const res = await fetch(`/api/professionals?t=${Date.now()}`);
       if (res.ok) {
@@ -74,7 +80,9 @@ export const ProfessionalsAdminTab: React.FC<ProfessionalsAdminTabProps> = ({
           } catch {}
         }
       }
-    } catch {}
+    } catch {} finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -96,6 +104,10 @@ export const ProfessionalsAdminTab: React.FC<ProfessionalsAdminTabProps> = ({
   const [typeFilter, setTypeFilter] = useState<'all' | ProfessionalType>('all');
   const [govFilter, setGovFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [statusFilter, typeFilter, govFilter, searchQuery]);
 
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -538,7 +550,27 @@ export const ProfessionalsAdminTab: React.FC<ProfessionalsAdminTabProps> = ({
 
       {/* Table / List View */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        {filteredList.length === 0 ? (
+        {loading && items.length === 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-right text-xs">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold">
+                <tr>
+                  <th className="px-4 py-3.5">الاسم / المنشأة</th>
+                  <th className="px-4 py-3.5">التصنيف</th>
+                  <th className="px-4 py-3.5">المحافظة / المدينة</th>
+                  <th className="px-4 py-3.5">الهاتف والتواصل</th>
+                  <th className="px-4 py-3.5">الحالة والاعتماد</th>
+                  <th className="px-4 py-3.5 text-center">الإجراءات</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {Array.from({ length: 6 }).map((_, idx) => (
+                  <SkeletonProfessionalRow key={idx} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : filteredList.length === 0 ? (
           <div className="p-12 text-center text-slate-400 text-xs">
             لا توجد سجلات تطابق الفلاتر المحددة.
           </div>
@@ -556,7 +588,7 @@ export const ProfessionalsAdminTab: React.FC<ProfessionalsAdminTabProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredList.map((item) => (
+                {filteredList.slice(0, visibleCount).map((item) => (
                   <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-3">
@@ -675,6 +707,24 @@ export const ProfessionalsAdminTab: React.FC<ProfessionalsAdminTabProps> = ({
                 ))}
               </tbody>
             </table>
+
+            {/* Lazy Load More Bar */}
+            {visibleCount < filteredList.length && (
+              <div className="p-3.5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <p className="text-xs text-slate-500 font-medium order-2 sm:order-1">
+                  معروض <strong className="text-slate-900">{Math.min(visibleCount, filteredList.length)}</strong> من إجمالي{' '}
+                  <strong className="text-slate-900">{filteredList.length}</strong> سجل
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, filteredList.length))}
+                  className="order-1 sm:order-2 px-4 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 hover:border-emerald-600 text-slate-800 hover:text-emerald-800 text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span>تحميل وعرض المزيد (+{Math.min(PAGE_SIZE, filteredList.length - visibleCount)})</span>
+                  <Briefcase className="w-3.5 h-3.5 text-emerald-700" />
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

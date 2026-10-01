@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { initializeFirestore, getFirestore, collection, doc, setDoc, getDocs, deleteDoc, updateDoc, setLogLevel, query, where, onSnapshot } from 'firebase/firestore';
+import { initializeFirestore, getFirestore, collection, doc, setDoc, getDocs, deleteDoc, updateDoc, setLogLevel, query, where, onSnapshot, limit, startAfter, orderBy } from 'firebase/firestore';
 import type { Law, User, LawRequest, SubscriptionPlan, LegalCategory } from '../types';
 import { DEFAULT_LEGAL_CATEGORIES } from '../types';
 import { normalizeAuthIdentifier, isMatchingUser } from '../utils/authUtils';
@@ -178,7 +178,8 @@ export async function directFetchLawsFromFirestore(): Promise<Law[]> {
   if (db) {
     try {
       const col = collection(db, 'laws');
-      const snapshot = await getDocs(col);
+      const q = query(col, limit(100));
+      const snapshot = await getDocs(q);
       if (!snapshot.empty) {
         snapshot.forEach((d) => {
           const data = d.data();
@@ -274,6 +275,68 @@ export async function directFetchLawsFromFirestore(): Promise<Law[]> {
   }
 
   return uniqueLaws;
+}
+
+export interface PaginatedLawsResult {
+  items: Law[];
+  lastDoc: any;
+  hasMore: boolean;
+  total?: number;
+}
+
+/**
+ * Direct client-side paginated fetch from Firestore to reduce data payload.
+ */
+export async function directFetchLawsPaginatedFromFirestore(options: {
+  pageSize?: number;
+  lastDoc?: any;
+  category?: string;
+}): Promise<PaginatedLawsResult> {
+  const db = getClientDb();
+  const pageSize = options.pageSize || 20;
+  if (!db) {
+    return { items: [], lastDoc: null, hasMore: false };
+  }
+
+  try {
+    const col = collection(db, 'laws');
+    const constraints: any[] = [];
+    if (options.category && options.category !== 'all') {
+      constraints.push(where('category', '==', options.category));
+    }
+    constraints.push(limit(pageSize));
+    if (options.lastDoc) {
+      constraints.push(startAfter(options.lastDoc));
+    }
+
+    const q = query(col, ...constraints);
+    const snapshot = await getDocs(q);
+    const items: Law[] = [];
+    snapshot.forEach((d) => {
+      const data = d.data();
+      if (data.title && (data.content || data.summary)) {
+        items.push({
+          id: data.id || d.id,
+          title: data.title || '',
+          category: data.category || 'جمارك',
+          content: data.content || '',
+          sourceFileName: data.sourceFileName || undefined,
+          sourceFileSize: data.sourceFileSize || undefined,
+          pageCount: data.pageCount || undefined,
+          createdAt: data.createdAt || new Date().toISOString(),
+          updatedAt: data.updatedAt || new Date().toISOString(),
+        });
+      }
+    });
+
+    const newLastDoc = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
+    const hasMore = snapshot.docs.length >= pageSize;
+
+    return { items, lastDoc: newLastDoc, hasMore };
+  } catch (err) {
+    handleClientFirestoreError('directFetchLawsPaginatedFromFirestore', err);
+    return { items: [], lastDoc: null, hasMore: false };
+  }
 }
 
 /**
@@ -1262,7 +1325,8 @@ export async function directFetchSupervisorsFromFirestore(): Promise<any[] | nul
 
   try {
     const col = collection(db, 'supervisors');
-    const snapshot = await getDocs(col);
+    const q = query(col, limit(50));
+    const snapshot = await getDocs(q);
     const items: any[] = [];
     snapshot.forEach((d) => {
       items.push({ id: d.id, ...d.data() });
@@ -1271,6 +1335,99 @@ export async function directFetchSupervisorsFromFirestore(): Promise<any[] | nul
   } catch (err) {
     handleClientFirestoreError('directFetchSupervisorsFromFirestore', err);
     return null;
+  }
+}
+
+export interface PaginatedSupervisorsResult {
+  items: any[];
+  lastDoc: any;
+  hasMore: boolean;
+  total?: number;
+}
+
+export async function directFetchSupervisorsPaginatedFromFirestore(options: {
+  pageSize?: number;
+  lastDoc?: any;
+  department?: string;
+}): Promise<PaginatedSupervisorsResult> {
+  const db = getClientDb();
+  const pageSize = options.pageSize || 12;
+  if (!db) return { items: [], lastDoc: null, hasMore: false };
+
+  try {
+    const col = collection(db, 'supervisors');
+    const constraints: any[] = [];
+    if (options.department && options.department !== 'all') {
+      constraints.push(where('department', '==', options.department));
+    }
+    constraints.push(limit(pageSize));
+    if (options.lastDoc) {
+      constraints.push(startAfter(options.lastDoc));
+    }
+    const q = query(col, ...constraints);
+    const snapshot = await getDocs(q);
+    const items: any[] = [];
+    snapshot.forEach((d) => items.push({ id: d.id, ...d.data() }));
+    const newLastDoc = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
+    const hasMore = snapshot.docs.length >= pageSize;
+    return { items, lastDoc: newLastDoc, hasMore };
+  } catch (err) {
+    handleClientFirestoreError('directFetchSupervisorsPaginatedFromFirestore', err);
+    return { items: [], lastDoc: null, hasMore: false };
+  }
+}
+
+export interface PaginatedUsersResult {
+  items: User[];
+  lastDoc: any;
+  hasMore: boolean;
+  total?: number;
+}
+
+export async function directFetchUsersPaginatedFromFirestore(options: {
+  pageSize?: number;
+  lastDoc?: any;
+  status?: string;
+}): Promise<PaginatedUsersResult> {
+  const db = getClientDb();
+  const pageSize = options.pageSize || 15;
+  if (!db) return { items: [], lastDoc: null, hasMore: false };
+
+  try {
+    const col = collection(db, 'users');
+    const constraints: any[] = [];
+    if (options.status && options.status !== 'all') {
+      constraints.push(where('status', '==', options.status));
+    }
+    constraints.push(limit(pageSize));
+    if (options.lastDoc) {
+      constraints.push(startAfter(options.lastDoc));
+    }
+    const q = query(col, ...constraints);
+    const snapshot = await getDocs(q);
+    const items: User[] = [];
+    snapshot.forEach((d) => {
+      const data = d.data();
+      items.push({
+        id: data.id || d.id,
+        username: data.username || '',
+        fullName: data.fullName || '',
+        phone: data.phone || '',
+        role: data.role || 'user',
+        status: data.status || 'pending',
+        isSubscribed: !!data.isSubscribed,
+        subscribedAt: data.subscribedAt,
+        trialDays: data.trialDays,
+        trialEndsAt: data.trialEndsAt,
+        createdAt: data.createdAt || new Date().toISOString(),
+      });
+    });
+    const newLastDoc = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
+    const hasMore = snapshot.docs.length >= pageSize;
+    return { items, lastDoc: newLastDoc, hasMore };
+  } catch (err) {
+    handleClientFirestoreError('directFetchUsersPaginatedFromFirestore', err);
+    return { items: [], lastDoc: null, hasMore: false };
   }
 }
 
@@ -1288,7 +1445,8 @@ export async function directFetchUsersFromFirestore(): Promise<User[] | null> {
 
   try {
     const col = collection(db, 'users');
-    const snapshot = await getDocs(col);
+    const q = query(col, limit(100));
+    const snapshot = await getDocs(q);
     if (snapshot.empty) return [];
 
     const now = Date.now();
@@ -1568,7 +1726,8 @@ export async function directFetchLawRequestsFromFirestore(): Promise<LawRequest[
 
   try {
     const col = collection(db, 'law_requests');
-    const snapshot = await getDocs(col);
+    const q = query(col, limit(60));
+    const snapshot = await getDocs(q);
     if (snapshot.empty) return [];
 
     const items: LawRequest[] = [];
@@ -1599,6 +1758,71 @@ export async function directFetchLawRequestsFromFirestore(): Promise<LawRequest[
   } catch (err) {
     handleClientFirestoreError('directFetchLawRequestsFromFirestore', err);
     return [];
+  }
+}
+
+export interface PaginatedLawRequestsResult {
+  items: LawRequest[];
+  lastDoc: any;
+  hasMore: boolean;
+  total?: number;
+}
+
+export async function directFetchLawRequestsPaginatedFromFirestore(options: {
+  pageSize?: number;
+  lastDoc?: any;
+  status?: string;
+  category?: string;
+}): Promise<PaginatedLawRequestsResult> {
+  const db = getClientDb();
+  const pageSize = options.pageSize || 10;
+  if (!db) return { items: [], lastDoc: null, hasMore: false };
+
+  try {
+    const col = collection(db, 'law_requests');
+    const constraints: any[] = [];
+    if (options.status && options.status !== 'all') {
+      constraints.push(where('status', '==', options.status));
+    }
+    if (options.category && options.category !== 'all') {
+      constraints.push(where('category', '==', options.category));
+    }
+    constraints.push(limit(pageSize));
+    if (options.lastDoc) {
+      constraints.push(startAfter(options.lastDoc));
+    }
+    const q = query(col, ...constraints);
+    const snapshot = await getDocs(q);
+    const items: LawRequest[] = [];
+    snapshot.forEach((d) => {
+      const data = d.data();
+      items.push({
+        id: data.id || d.id,
+        title: data.title || '',
+        category: data.category || 'جمارك',
+        content: data.content || '',
+        description: data.description || '',
+        sourceFileName: data.sourceFileName || undefined,
+        sourceFileSize: data.sourceFileSize || undefined,
+        pageCount: data.pageCount || undefined,
+        userId: data.userId || '',
+        userName: data.userName || '',
+        userFullName: data.userFullName || undefined,
+        userPhone: data.userPhone || undefined,
+        status: data.status || 'pending',
+        rejectionReason: data.rejectionReason || undefined,
+        createdAt: data.createdAt || new Date().toISOString(),
+        updatedAt: data.updatedAt || data.createdAt || new Date().toISOString(),
+        reviewedAt: data.reviewedAt || undefined,
+        reviewedBy: data.reviewedBy || undefined,
+      });
+    });
+    const newLastDoc = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
+    const hasMore = snapshot.docs.length >= pageSize;
+    return { items, lastDoc: newLastDoc, hasMore };
+  } catch (err) {
+    handleClientFirestoreError('directFetchLawRequestsPaginatedFromFirestore', err);
+    return { items: [], lastDoc: null, hasMore: false };
   }
 }
 
@@ -1839,7 +2063,8 @@ export async function directFetchProfessionalsFromFirestore(): Promise<any[] | n
 
   try {
     const col = collection(db, 'professionals');
-    const snapshot = await getDocs(col);
+    const q = query(col, limit(100));
+    const snapshot = await getDocs(q);
     if (snapshot.empty) return null;
     const items: any[] = [];
     snapshot.forEach((d) => items.push({ id: d.id, ...d.data() }));
@@ -1847,6 +2072,48 @@ export async function directFetchProfessionalsFromFirestore(): Promise<any[] | n
   } catch (err) {
     handleClientFirestoreError('directFetchProfessionalsFromFirestore', err);
     return null;
+  }
+}
+
+export interface PaginatedProfessionalsResult {
+  items: any[];
+  lastDoc: any;
+  hasMore: boolean;
+  total?: number;
+}
+
+export async function directFetchProfessionalsPaginatedFromFirestore(options: {
+  pageSize?: number;
+  lastDoc?: any;
+  type?: string;
+}): Promise<PaginatedProfessionalsResult> {
+  const db = getClientDb();
+  const pageSize = options.pageSize || 12;
+  if (!db) return { items: [], lastDoc: null, hasMore: false };
+
+  try {
+    const col = collection(db, 'professionals');
+    const constraints: any[] = [];
+    if (options.type && options.type !== 'all') {
+      constraints.push(where('type', '==', options.type));
+    }
+    constraints.push(limit(pageSize));
+    if (options.lastDoc) {
+      constraints.push(startAfter(options.lastDoc));
+    }
+
+    const q = query(col, ...constraints);
+    const snapshot = await getDocs(q);
+    const items: any[] = [];
+    snapshot.forEach((d) => items.push({ id: d.id, ...d.data() }));
+
+    const newLastDoc = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
+    const hasMore = snapshot.docs.length >= pageSize;
+
+    return { items, lastDoc: newLastDoc, hasMore };
+  } catch (err) {
+    handleClientFirestoreError('directFetchProfessionalsPaginatedFromFirestore', err);
+    return { items: [], lastDoc: null, hasMore: false };
   }
 }
 

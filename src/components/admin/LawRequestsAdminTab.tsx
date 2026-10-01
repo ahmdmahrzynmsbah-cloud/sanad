@@ -32,6 +32,7 @@ import {
   directDeleteLawRequestFromFirestore,
   directSaveLawToFirestore,
 } from '../../services/clientFirestore';
+import { SkeletonLawRequestCard } from '../common/Skeleton';
 
 interface LawRequestsAdminTabProps {
   categories: LegalCategory[];
@@ -65,6 +66,12 @@ export const LawRequestsAdminTab: React.FC<LawRequestsAdminTabProps> = ({
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const PAGE_SIZE = 8;
+  const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [filterStatus, filterCategory, searchQuery]);
 
   // Preview & Review Modal State
   const [selectedRequest, setSelectedRequest] = useState<LawRequest | null>(null);
@@ -681,10 +688,11 @@ export const LawRequestsAdminTab: React.FC<LawRequestsAdminTabProps> = ({
       </div>
 
       {/* Requests List */}
-      {loading ? (
-        <div className="py-16 text-center bg-white rounded-2xl border border-gray-200">
-          <Loader2 className="w-8 h-8 text-[#12281e] animate-spin mx-auto mb-3" />
-          <p className="text-sm font-bold text-gray-700">جاري تحميل طلبات القوانين من قاعدة البيانات السحابية...</p>
+      {loading && requests.length === 0 ? (
+        <div className="space-y-4">
+          {Array.from({ length: 4 }).map((_, idx) => (
+            <SkeletonLawRequestCard key={idx} />
+          ))}
         </div>
       ) : filteredRequests.length === 0 ? (
         <div className="py-16 px-4 text-center bg-white rounded-2xl border border-gray-200">
@@ -700,7 +708,7 @@ export const LawRequestsAdminTab: React.FC<LawRequestsAdminTabProps> = ({
         </div>
       ) : (
         <div className="space-y-4">
-          {filteredRequests.map((req) => {
+          {filteredRequests.slice(0, visibleCount).map((req) => {
             const isPending = req.status === 'pending';
             const isApproved = req.status === 'approved';
             const isRejected = req.status === 'rejected';
@@ -880,6 +888,23 @@ export const LawRequestsAdminTab: React.FC<LawRequestsAdminTabProps> = ({
               </div>
             );
           })}
+          {/* Lazy Load More Bar */}
+          {visibleCount < filteredRequests.length && (
+            <div className="pt-4 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-gray-200">
+              <p className="text-xs text-gray-500 font-medium order-2 sm:order-1">
+                معروض <strong className="text-gray-900">{Math.min(visibleCount, filteredRequests.length)}</strong> من إجمالي{' '}
+                <strong className="text-gray-900">{filteredRequests.length}</strong> طلب قانون
+              </p>
+              <button
+                type="button"
+                onClick={() => setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, filteredRequests.length))}
+                className="order-1 sm:order-2 px-5 py-2 bg-white hover:bg-gray-50 border border-gray-300 hover:border-emerald-600 text-gray-800 hover:text-emerald-800 text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer"
+              >
+                <span>تحميل وعرض المزيد (+{Math.min(PAGE_SIZE, filteredRequests.length - visibleCount)})</span>
+                <FileText className="w-3.5 h-3.5 text-emerald-700" />
+              </button>
+            </div>
+          )}
         </div>
       )}
 

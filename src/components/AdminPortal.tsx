@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Users,
   BookOpen,
@@ -95,7 +95,8 @@ import {
   directSaveCategoryToFirestore,
   directFetchCategoriesFromFirestore,
 } from '../services/clientFirestore';
-import { fetchSupervisors, getCachedSupervisors } from '../services/supervisorsService';
+import { fetchSupervisors, getCachedSupervisors, cleanSupervisorsList, syncSupervisorsToLocalStorage } from '../services/supervisorsService';
+import { SkeletonLawCard, SkeletonLawRow, SkeletonUserRow, Skeleton } from './common/Skeleton';
 
 export interface QueuedLawItem {
   id: string;
@@ -1008,9 +1009,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         } else {
           fetchPendingLawRequestsCount();
         }
-        fetchSupervisors().then((items) => {
-          if (items && items.length > 0) setSupervisors(items);
-        }).catch(() => {});
+        if (data.supervisors && Array.isArray(data.supervisors)) {
+          const cleaned = cleanSupervisorsList(data.supervisors);
+          setSupervisors(cleaned);
+          syncSupervisorsToLocalStorage(cleaned);
+        } else {
+          fetchSupervisors().then((items) => {
+            if (items && items.length > 0) setSupervisors(items);
+          }).catch(() => {});
+        }
       } else {
         // Fallback to parallel execution
         await Promise.all([
@@ -2735,6 +2742,18 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     return u.status === usersFilter;
   });
 
+  // Users Pagination
+  const USERS_PER_PAGE = 12;
+  const [usersPage, setUsersPage] = useState<number>(1);
+  useEffect(() => {
+    setUsersPage(1);
+  }, [usersFilter]);
+  const totalUsersPages = Math.ceil(filteredUsers.length / USERS_PER_PAGE) || 1;
+  const paginatedUsers = useMemo(() => {
+    const start = (usersPage - 1) * USERS_PER_PAGE;
+    return filteredUsers.slice(start, start + USERS_PER_PAGE);
+  }, [filteredUsers, usersPage]);
+
   const pendingCount = users.filter((u) => u.status === 'pending').length;
   const approvedCount = users.filter((u) => u.status === 'approved').length;
   const rejectedCount = users.filter((u) => u.status === 'rejected').length;
@@ -2766,6 +2785,18 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       lawCategoryFilter === 'الكل' || l.category === lawCategoryFilter;
     return matchesSearch && matchesCategory;
   });
+
+  // Laws Pagination & Lazy Loading
+  const LAWS_PER_PAGE = 20;
+  const [lawsPage, setLawsPage] = useState<number>(1);
+  useEffect(() => {
+    setLawsPage(1);
+  }, [lawSearch, lawCategoryFilter]);
+  const totalLawsPages = Math.ceil(filteredLaws.length / LAWS_PER_PAGE) || 1;
+  const paginatedLaws = useMemo(() => {
+    const start = (lawsPage - 1) * LAWS_PER_PAGE;
+    return filteredLaws.slice(start, start + LAWS_PER_PAGE);
+  }, [filteredLaws, lawsPage]);
 
   const toggleAllLaws = (expand: boolean) => {
     const updated: Record<string, boolean> = {};
@@ -3325,7 +3356,27 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
 
           {/* User Requests Table / Cards */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-xs overflow-hidden">
-            {filteredUsers.length === 0 ? (
+            {usersLoading && users.length === 0 ? (
+              <div className="overflow-x-auto touch-scroll overscroll-x-contain pb-2">
+                <table className="w-full text-right text-xs min-w-[680px]">
+                  <thead className="bg-[#f8fafc] text-gray-600 border-b border-gray-200 font-bold">
+                    <tr>
+                      <th className="py-3 px-4">مقدم الطلب / الحساب</th>
+                      <th className="py-3 px-4">رقم الجوال</th>
+                      <th className="py-3 px-4">تاريخ التسجيل</th>
+                      <th className="py-3 px-4">حالة الحساب</th>
+                      <th className="py-3 px-4">حالة الاشتراك والتجربة</th>
+                      <th className="py-3 px-4 text-center">إدارة الاشتراك والإجراءات</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {Array.from({ length: 6 }).map((_, idx) => (
+                      <SkeletonUserRow key={idx} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : filteredUsers.length === 0 ? (
               <div className="p-12 text-center">
                 <div className="w-12 h-12 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center mx-auto mb-3">
                   <Users className="w-6 h-6" />
@@ -3370,7 +3421,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {filteredUsers.map((user) => {
+                    {paginatedUsers.map((user) => {
                       const isProcessing = processingUserId === user.id;
                       const isUserFrozen = user.status === 'frozen' || user.subscriptionStatus === 'frozen';
                       return (
@@ -3586,6 +3637,56 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                     })}
                   </tbody>
                 </table>
+
+                {/* Users Pagination Bar */}
+                {totalUsersPages > 1 && (
+                  <div className="p-3.5 bg-slate-50 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                    <p className="text-gray-500 font-medium order-2 sm:order-1">
+                      عرض الصفحة <strong className="text-slate-900">{usersPage}</strong> من إجمالي <strong className="text-slate-900">{totalUsersPages}</strong> ({filteredUsers.length} مستخدم)
+                    </p>
+                    <div className="flex items-center gap-1.5 order-1 sm:order-2">
+                      <button
+                        type="button"
+                        onClick={() => setUsersPage((p) => Math.max(1, p - 1))}
+                        disabled={usersPage === 1}
+                        className="px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:pointer-events-none font-bold"
+                      >
+                        السابق
+                      </button>
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: totalUsersPages }, (_, i) => i + 1)
+                          .filter((p) => p === 1 || p === totalUsersPages || Math.abs(p - usersPage) <= 1)
+                          .map((p, idx, arr) => {
+                            const prev = arr[idx - 1];
+                            return (
+                              <React.Fragment key={p}>
+                                {prev && p - prev > 1 && <span className="px-1 text-gray-400">...</span>}
+                                <button
+                                  type="button"
+                                  onClick={() => setUsersPage(p)}
+                                  className={`w-7 h-7 rounded-lg text-xs font-bold transition-all ${
+                                    usersPage === p
+                                      ? 'bg-emerald-800 text-white shadow-xs'
+                                      : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
+                                  }`}
+                                >
+                                  {p}
+                                </button>
+                              </React.Fragment>
+                            );
+                          })}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setUsersPage((p) => Math.min(totalUsersPages, p + 1))}
+                        disabled={usersPage === totalUsersPages}
+                        className="px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:pointer-events-none font-bold"
+                      >
+                        التالي
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -4316,15 +4417,22 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
               )}
             </div>
 
-            {/* Laws Cards */}
-            {filteredLaws.length === 0 ? (
+            {/* Laws Cards with Skeleton & Pagination */}
+            {lawsLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 5 }).map((_, idx) => (
+                  <SkeletonLawCard key={idx} />
+                ))}
+              </div>
+            ) : filteredLaws.length === 0 ? (
               <div className="text-center py-10">
                 <FileText className="w-10 h-10 text-gray-300 mx-auto mb-2" />
                 <p className="text-xs text-gray-500">لم يتم العثور على أي قوانين مطابقة للبحث.</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {filteredLaws.map((law) => {
+              <div className="space-y-4">
+                <div className="space-y-3">
+                  {paginatedLaws.map((law) => {
                   const isExpanded = !!expandedLawIds[law.id];
                   return (
                     <div
@@ -4456,7 +4564,70 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                   );
                 })}
               </div>
-            )}
+
+              {/* Laws Pagination Controls */}
+              {totalLawsPages > 1 && (
+                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                  <span className="text-slate-600 font-medium">
+                    عرض الصفحة <strong className="text-slate-900">{lawsPage}</strong> من إجمالي <strong className="text-slate-900">{totalLawsPages}</strong> صفحة ({filteredLaws.length} قانون)
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      disabled={lawsPage <= 1}
+                      onClick={() => setLawsPage((p) => Math.max(1, p - 1))}
+                      className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer shadow-2xs"
+                    >
+                      السابق
+                    </button>
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: Math.min(5, totalLawsPages) }).map((_, idx) => {
+                        const pageNum = idx + 1;
+                        return (
+                          <button
+                            key={pageNum}
+                            type="button"
+                            onClick={() => setLawsPage(pageNum)}
+                            className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                              lawsPage === pageNum
+                                ? 'bg-emerald-700 text-white shadow-xs'
+                                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                            }`}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      })}
+                      {totalLawsPages > 5 && (
+                        <span className="text-slate-400 px-1">...</span>
+                      )}
+                      {totalLawsPages > 5 && (
+                        <button
+                          type="button"
+                          onClick={() => setLawsPage(totalLawsPages)}
+                          className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            lawsPage === totalLawsPages
+                              ? 'bg-emerald-700 text-white shadow-xs'
+                              : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                          }`}
+                        >
+                          {totalLawsPages}
+                        </button>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={lawsPage >= totalLawsPages}
+                      onClick={() => setLawsPage((p) => Math.min(totalLawsPages, p + 1))}
+                      className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer shadow-2xs"
+                    >
+                      التالي
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           </div>
         </div>
       )}
@@ -6161,7 +6332,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       {/* TAB 4: SUPERVISORS MANAGEMENT (هيئة المشرفين)            */}
       {/* ======================================================== */}
       {activeTab === 'supervisors' && (
-        <SupervisorsAdminTab initialSupervisors={supervisors} />
+        <SupervisorsAdminTab
+          initialSupervisors={supervisors}
+          onSupervisorsUpdated={setSupervisors}
+        />
       )}
 
       {/* ======================================================== */}

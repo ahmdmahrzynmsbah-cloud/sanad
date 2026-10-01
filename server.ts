@@ -4623,13 +4623,44 @@ function isDuplicateLawServer(candidate: { title?: string; sourceFileName?: stri
   });
 }
 
-// Get all laws
+// Get all laws with pagination support
 app.get('/api/laws', (req, res) => {
+  const page = req.query.page ? parseInt(req.query.page as string, 10) : undefined;
+  const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+  const category = req.query.category as string;
+  const search = req.query.search as string;
+
+  let filtered = (db.laws || [])
+    .filter((l) => !db.deletedLawIds?.includes(l.id) && !db.deletedLawIds?.includes(l.title));
+
+  if (category && category !== 'all') {
+    filtered = filtered.filter((l) => l.category === category);
+  }
+
+  if (search && typeof search === 'string' && search.trim()) {
+    const q = search.trim().toLowerCase();
+    filtered = filtered.filter((l) => l.title?.toLowerCase().includes(q) || (l as any).summary?.toLowerCase().includes(q));
+  }
+
+  const total = filtered.length;
+
+  if (page && limit) {
+    const startIndex = (page - 1) * limit;
+    const paginated = filtered.slice(startIndex, startIndex + limit).map((l) => ({ ...l, content: '' }));
+    return res.json({
+      laws: paginated,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      hasMore: startIndex + limit < total,
+      deletedLawIds: db.deletedLawIds || []
+    });
+  }
+
   // Omit content to prevent hitting Vercel 4.5MB payload limit
-  const lightweightLaws = (db.laws || [])
-    .filter((l) => !db.deletedLawIds?.includes(l.id) && !db.deletedLawIds?.includes(l.title))
-    .map((l) => ({ ...l, content: '' }));
-  res.json({ laws: lightweightLaws, deletedLawIds: db.deletedLawIds || [] });
+  const lightweightLaws = filtered.map((l) => ({ ...l, content: '' }));
+  res.json({ laws: lightweightLaws, total, deletedLawIds: db.deletedLawIds || [] });
 });
 
 app.get('/api/laws/:id', (req, res) => {
@@ -6805,8 +6836,36 @@ app.get('/api/professionals', (req, res) => {
     db.professionals = [];
   }
   const mockProfIds = ['prof-firm-1', 'prof-firm-2', 'prof-firm-3', 'prof-firm-4', 'prof-auditor-1', 'prof-auditor-2', 'prof-auditor-3', 'prof-accountant-1', 'prof-accountant-2', 'prof-accountant-3'];
-  const realOnly = db.professionals.filter(p => !mockProfIds.includes(p.id) && !p.id.startsWith('prof-firm-') && !p.id.startsWith('prof-auditor-') && !p.id.startsWith('prof-accountant-'));
-  res.json({ ok: true, professionals: realOnly });
+  let realOnly = db.professionals.filter(p => !mockProfIds.includes(p.id) && !p.id.startsWith('prof-firm-') && !p.id.startsWith('prof-auditor-') && !p.id.startsWith('prof-accountant-'));
+
+  const page = req.query.page ? parseInt(req.query.page as string, 10) : undefined;
+  const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+  const type = req.query.type as string;
+  const governorate = req.query.governorate as string;
+
+  if (type && type !== 'all') {
+    realOnly = realOnly.filter(p => p.type === type);
+  }
+  if (governorate && governorate !== 'all') {
+    realOnly = realOnly.filter(p => p.governorate === governorate);
+  }
+
+  const total = realOnly.length;
+  if (page && limit) {
+    const startIndex = (page - 1) * limit;
+    const paginated = realOnly.slice(startIndex, startIndex + limit);
+    return res.json({
+      ok: true,
+      professionals: paginated,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      hasMore: startIndex + limit < total
+    });
+  }
+
+  res.json({ ok: true, professionals: realOnly, total });
 });
 
 app.post('/api/professionals/register', async (req, res) => {

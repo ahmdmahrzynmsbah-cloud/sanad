@@ -1,8 +1,24 @@
 import { Supervisor } from '../types';
-import { directFetchSupervisorsFromFirestore } from './clientFirestore';
-import { SEED_SUPERVISORS } from '../data/seedData';
+import {
+  directFetchSupervisorsFromFirestore,
+  directFetchSupervisorsPaginatedFromFirestore,
+  PaginatedSupervisorsResult,
+} from './clientFirestore';
 
 export const SUPERVISORS_CACHE_KEY = 'sanad_cached_supervisors';
+export const MOCK_SUPERVISOR_IDS = ['sup-1', 'sup-2', 'sup-3'];
+
+/**
+ * تنقية قائمة المشرفين واستبعاد البيانات الوهمية القديمة عند وجود مشرفين حقيقيين
+ */
+export function cleanSupervisorsList(list: any[]): Supervisor[] {
+  if (!Array.isArray(list)) return [];
+  const hasReal = list.some((s) => !MOCK_SUPERVISOR_IDS.includes(s.id));
+  if (hasReal) {
+    return list.filter((s) => !MOCK_SUPERVISOR_IDS.includes(s.id));
+  }
+  return list;
+}
 
 /**
  * دالة قراءة فورية من الـ LocalStorage (0 مللي ثانية)
@@ -14,14 +30,15 @@ export function getCachedSupervisors(): Supervisor[] {
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.sort((a, b) => (a.order || 0) - (b.order || 0));
+          const cleaned = cleanSupervisorsList(parsed);
+          return cleaned.sort((a, b) => (a.order || 0) - (b.order || 0));
         }
       }
     } catch (e) {
       console.warn('[supervisorsService] Error reading cached supervisors:', e);
     }
   }
-  return (SEED_SUPERVISORS as unknown as Supervisor[]) || [];
+  return [];
 }
 
 /**
@@ -30,7 +47,8 @@ export function getCachedSupervisors(): Supervisor[] {
 export function syncSupervisorsToLocalStorage(supervisors: Supervisor[]): void {
   if (typeof window !== 'undefined' && Array.isArray(supervisors)) {
     try {
-      const sorted = [...supervisors].sort((a, b) => (a.order || 0) - (b.order || 0));
+      const cleaned = cleanSupervisorsList(supervisors);
+      const sorted = [...cleaned].sort((a, b) => (a.order || 0) - (b.order || 0));
       localStorage.setItem(SUPERVISORS_CACHE_KEY, JSON.stringify(sorted));
     } catch (e) {
       console.warn('[supervisorsService] Error syncing supervisors to localStorage:', e);
@@ -75,18 +93,39 @@ export async function fetchSupervisors(options?: { preferCacheFirst?: boolean })
     }
   }
 
-  // 3. الفرز حسب حقل الترتيب order
+  // 3. تنقية واستبعاد المشرفين الوهميين والفرز حسب حقل الترتيب order
   if (items.length > 0) {
+    items = cleanSupervisorsList(items);
     items.sort((a, b) => (a.order || 0) - (b.order || 0));
   } else {
-    // استرجاع الكاش المحلي كحماية من انقطاع الاتصال
     items = getCachedSupervisors();
   }
 
-  // 4. تحديث الـ LocalStorage متزامناً مع النتائج المجلوبة
-  if (items.length > 0) {
-    syncSupervisorsToLocalStorage(items);
-  }
+  // 4. تحديث الـ LocalStorage متزامناً مع النتائج الحقيقية المجلوبة
+  syncSupervisorsToLocalStorage(items);
 
   return items;
+}
+
+/**
+ * دالة جلب مجزأ ومباشر (Paginated Lazy Load) للمشرفين من Firestore
+ * لتخفيض حجم البيانات المجلوبة ووحدات القراءة السحابية
+ */
+export async function fetchSupervisorsPaginated(options: {
+  pageSize?: number;
+  lastDoc?: any;
+  department?: string;
+}): Promise<PaginatedSupervisorsResult> {
+  try {
+    const res = await directFetchSupervisorsPaginatedFromFirestore(options);
+    const cleaned = cleanSupervisorsList(res.items);
+    return {
+      items: cleaned,
+      lastDoc: res.lastDoc,
+      hasMore: res.hasMore,
+    };
+  } catch (err) {
+    console.warn('[supervisorsService] Paginated fetch failed:', err);
+    return { items: [], lastDoc: null, hasMore: false };
+  }
 }

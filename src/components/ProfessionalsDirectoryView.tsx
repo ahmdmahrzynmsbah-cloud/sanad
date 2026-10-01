@@ -34,6 +34,8 @@ import {
 } from '../types';
 import { compressImageClientSide } from '../utils/imageCompressor';
 import { notifySync } from '../utils/sync';
+import { SkeletonProfessionalCard } from './common/Skeleton';
+import { directFetchProfessionalsPaginatedFromFirestore } from '../services/clientFirestore';
 
 interface ProfessionalsDirectoryViewProps {
   initialType?: ProfessionalType | 'all';
@@ -76,6 +78,14 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
   });
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const PAGE_SIZE = 9;
+  const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
+
+  // Reset pagination when search or filters change
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [activeTypeTab, selectedGovernorate, selectedService, searchQuery]);
+
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState<boolean>(false);
   const [registrationSuccess, setRegistrationSuccess] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -99,9 +109,10 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
   const [formLogoUrl, setFormLogoUrl] = useState<string>('');
   const [isUploadingLogo, setIsUploadingLogo] = useState<boolean>(false);
 
-  // Fetch approved professionals from backend / Firestore
+  // Fetch approved professionals from backend / Firestore with bounded pagination
   const fetchProfessionals = async () => {
     setIsLoading(true);
+    let loadedItems: any[] | null = null;
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000);
@@ -113,20 +124,34 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
       if (res.ok) {
         const data = await res.json();
         if (data.professionals && Array.isArray(data.professionals)) {
-          const mockIds = ['prof-firm-1', 'prof-firm-2', 'prof-firm-3', 'prof-firm-4', 'prof-auditor-1', 'prof-auditor-2', 'prof-auditor-3', 'prof-accountant-1', 'prof-accountant-2', 'prof-accountant-3'];
-          const realItems = data.professionals.filter((p: any) => !mockIds.includes(p.id) && !p.id.startsWith('prof-firm-') && !p.id.startsWith('prof-auditor-') && !p.id.startsWith('prof-accountant-'));
-          const approvedOnly = realItems.filter((p: ProfessionalProfile) => p.status === 'approved');
-          setProfessionals(approvedOnly);
-          try {
-            localStorage.setItem('sanad_cached_professionals', JSON.stringify(realItems));
-          } catch {}
+          loadedItems = data.professionals;
         }
       }
     } catch (err) {
-      console.warn('Failed to fetch professionals:', err);
-    } finally {
-      setIsLoading(false);
+      console.warn('API fetch professionals notice, trying direct Firestore:', err);
     }
+
+    if (!loadedItems || loadedItems.length === 0) {
+      try {
+        const paged = await directFetchProfessionalsPaginatedFromFirestore({ pageSize: 50 });
+        if (paged.items && paged.items.length > 0) {
+          loadedItems = paged.items;
+        }
+      } catch (fsErr) {
+        console.warn('Direct Firestore fetch professionals error:', fsErr);
+      }
+    }
+
+    if (loadedItems && Array.isArray(loadedItems)) {
+      const mockIds = ['prof-firm-1', 'prof-firm-2', 'prof-firm-3', 'prof-firm-4', 'prof-auditor-1', 'prof-auditor-2', 'prof-auditor-3', 'prof-accountant-1', 'prof-accountant-2', 'prof-accountant-3'];
+      const realItems = loadedItems.filter((p: any) => !mockIds.includes(p.id) && !p.id.startsWith('prof-firm-') && !p.id.startsWith('prof-auditor-') && !p.id.startsWith('prof-accountant-'));
+      const approvedOnly = realItems.filter((p: ProfessionalProfile) => p.status === 'approved');
+      setProfessionals(approvedOnly);
+      try {
+        localStorage.setItem('sanad_cached_professionals', JSON.stringify(realItems));
+      } catch {}
+    }
+    setIsLoading(false);
   };
 
   useEffect(() => {
@@ -552,7 +577,13 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
         </div>
 
         {/* Directory Grid */}
-        {filteredProfessionals.length === 0 ? (
+        {isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {Array.from({ length: 6 }).map((_, idx) => (
+              <SkeletonProfessionalCard key={idx} />
+            ))}
+          </div>
+        ) : filteredProfessionals.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-xs border border-slate-200 p-12 text-center max-w-lg mx-auto">
             <div className="w-16 h-16 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-4">
               <Briefcase className="w-8 h-8" />
@@ -569,7 +600,7 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
                   setSearchQuery('');
                   setActiveTypeTab('all');
                 }}
-                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors"
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
               >
                 عرض كافة المسجلين
               </button>
@@ -578,7 +609,7 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
                   resetForm();
                   setIsRegisterModalOpen(true);
                 }}
-                className="px-4 py-2 rounded-xl bg-[#12281e] hover:bg-[#1a382b] text-white text-xs font-bold transition-colors flex items-center gap-1.5"
+                className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
               >
                 <Plus className="w-4 h-4" />
                 <span>سجّل مكتبك الآن</span>
@@ -586,9 +617,10 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredProfessionals.map((prof) => {
-              const cleanWhatsapp = (prof.whatsapp || prof.phone || '').replace(/[^\d+]/g, '');
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredProfessionals.slice(0, visibleCount).map((prof) => {
+                const cleanWhatsapp = (prof.whatsapp || prof.phone || '').replace(/[^\d+]/g, '');
               const waLink = cleanWhatsapp.startsWith('0')
                 ? `https://wa.me/970${cleanWhatsapp.substring(1)}`
                 : cleanWhatsapp.startsWith('+')
@@ -750,7 +782,26 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
               );
             })}
           </div>
-        )}
+
+          {/* Pagination / Lazy Load More */}
+          {visibleCount < filteredProfessionals.length && (
+            <div className="pt-6 pb-2 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-200">
+              <p className="text-xs text-slate-500 font-medium order-2 sm:order-1">
+                معروض <strong className="text-slate-900">{Math.min(visibleCount, filteredProfessionals.length)}</strong> من إجمالي{' '}
+                <strong className="text-slate-900">{filteredProfessionals.length}</strong> سجل معتمد
+              </p>
+              <button
+                type="button"
+                onClick={() => setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, filteredProfessionals.length))}
+                className="order-1 sm:order-2 px-6 py-2.5 bg-white hover:bg-slate-50 border border-slate-300 hover:border-emerald-600 text-slate-800 hover:text-emerald-800 text-xs sm:text-sm font-bold rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer"
+              >
+                <span>تحميل وعرض المزيد (+{Math.min(PAGE_SIZE, filteredProfessionals.length - visibleCount)})</span>
+                <ArrowRight className="w-4 h-4 rotate-90 text-emerald-700" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
       </div>
 
       {/* Public Registration Modal (انضم للدليل المهني) */}
