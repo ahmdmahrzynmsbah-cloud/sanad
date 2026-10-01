@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { setupFirestoreRealtimeListeners } from '../services/clientFirestore';
 
 let activeEventSource: EventSource | null = null;
@@ -223,15 +223,25 @@ export function initGlobalSync() {
 }
 
 export function useSync(collectionName: string | string[], onUpdate: () => void) {
+  const onUpdateRef = useRef(onUpdate);
+  onUpdateRef.current = onUpdate;
+
+  const key = Array.isArray(collectionName) ? [...collectionName].sort().join(',') : collectionName;
+
   useEffect(() => {
     const handleUpdate = (e: any) => {
+      const col = e.detail?.collection;
       const cols = Array.isArray(collectionName) ? collectionName : [collectionName];
-      if (cols.includes(e.detail?.collection) || e.detail?.collection === 'all' || cols.includes('all')) {
-        onUpdate();
+      if (!col || col === 'all' || cols.includes('all') || cols.includes(col)) {
+        try {
+          onUpdateRef.current();
+        } catch (err) {
+          console.warn('[useSync] onUpdate error:', err);
+        }
       }
     };
 
     window.addEventListener('sync_update', handleUpdate);
     return () => window.removeEventListener('sync_update', handleUpdate);
-  }, [collectionName, onUpdate]);
+  }, [key]);
 }

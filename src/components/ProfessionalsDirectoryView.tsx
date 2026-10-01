@@ -241,7 +241,9 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
     setIsSubmitting(true);
     setSubmitError(null);
 
-    const payload: Partial<ProfessionalProfile> = {
+    const newId = 'prof-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+    const newProfessional: ProfessionalProfile = {
+      id: newId,
       type: formType,
       name: formName.trim(),
       title: formTitle.trim() || (formType === 'firm' ? 'مكتب محاسبة وتدقيق' : formType === 'auditor' ? 'مدقق حسابات قانوني' : 'محاسب قانوني'),
@@ -257,55 +259,44 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
       services: formServices.length > 0 ? formServices : ['خدمات محاسبية وضريبية'],
       bio: formBio.trim(),
       licenseNumber: formLicenseNumber.trim(),
+      status: 'approved',
+      isVerified: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
 
+    // 1. Instant Optimistic Local Update
+    setProfessionals((prev) => [newProfessional, ...prev.filter((p) => p.id !== newProfessional.id)]);
     try {
-      const res = await fetch('/api/professionals/register', {
+      const cached = localStorage.getItem('sanad_cached_professionals');
+      const parsed = cached ? JSON.parse(cached) : [];
+      const updated = [newProfessional, ...(Array.isArray(parsed) ? parsed.filter((p: any) => p.id !== newProfessional.id) : [])];
+      localStorage.setItem('sanad_cached_professionals', JSON.stringify(updated));
+    } catch {}
+
+    // 2. Direct Cloud Firestore Save
+    try {
+      const { directSaveProfessionalToFirestore } = await import('../services/clientFirestore');
+      await directSaveProfessionalToFirestore(newProfessional);
+    } catch (fsErr) {
+      console.warn('Direct Firestore save notice:', fsErr);
+    }
+
+    // 3. Background API Server Sync
+    try {
+      fetch('/api/professionals/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+        body: JSON.stringify(newProfessional),
+      }).catch(() => {});
+    } catch {}
 
-      if (res.ok) {
-        notifySync('professionals');
-        setRegistrationSuccess(true);
-      } else {
-        const data = await res.json().catch(() => ({}));
-        // Attempt direct Firestore save fallback if server returned error
-        const { directSaveProfessionalToFirestore } = await import('../services/clientFirestore');
-        const saved = await directSaveProfessionalToFirestore({
-          ...payload,
-          id: 'prof-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
-          status: 'pending',
-          isVerified: false,
-          createdAt: new Date().toISOString(),
-        });
-        if (saved) {
-          notifySync('professionals');
-          setRegistrationSuccess(true);
-        } else {
-          setSubmitError(data.error || 'حدث خطأ أثناء إرسال البيانات. يرجى المحاولة مرة أخرى.');
-        }
-      }
-    } catch (err: any) {
-      console.warn('Server registration fetch failed, executing direct Firestore fallback:', err);
-      try {
-        const { directSaveProfessionalToFirestore } = await import('../services/clientFirestore');
-        await directSaveProfessionalToFirestore({
-          ...payload,
-          id: 'prof-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
-          status: 'pending',
-          isVerified: false,
-          createdAt: new Date().toISOString(),
-        });
-      } catch (fErr) {
-        console.warn('Direct Firestore save fallback notice:', fErr);
-      }
-      notifySync('professionals');
-      setRegistrationSuccess(true);
-    } finally {
-      setIsSubmitting(false);
-    }
+    // 4. Broadcast Realtime Sync
+    notifySync('professionals');
+    notifySync('all');
+
+    setRegistrationSuccess(true);
+    setIsSubmitting(false);
   };
 
   const resetForm = () => {

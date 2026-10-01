@@ -1776,6 +1776,22 @@ export async function deleteVideoFromFirestore(id: string): Promise<boolean> {
 }
 
 // Professional Directory Server Firestore Helpers
+function cleanDataForFirestore(obj: any): any {
+  if (obj === null || obj === undefined) return null;
+  if (typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(cleanDataForFirestore);
+  }
+  const clean: Record<string, any> = {};
+  for (const key of Object.keys(obj)) {
+    const val = obj[key];
+    if (val !== undefined) {
+      clean[key] = cleanDataForFirestore(val);
+    }
+  }
+  return clean;
+}
+
 export async function fetchProfessionalsFromFirestore(): Promise<any[] | null> {
   if (isQuotaExceeded()) return null;
   const db = initFirestore();
@@ -1792,7 +1808,7 @@ export async function fetchProfessionalsFromFirestore(): Promise<any[] | null> {
       items.push({ id: docSnap.id, ...docSnap.data() });
     });
     const mockProfIds = ['prof-firm-1', 'prof-firm-2', 'prof-firm-3', 'prof-firm-4', 'prof-auditor-1', 'prof-auditor-2', 'prof-auditor-3', 'prof-accountant-1', 'prof-accountant-2', 'prof-accountant-3'];
-    return items.filter((p) => !mockProfIds.includes(p.id) && !p.id.startsWith('prof-firm-') && !p.id.startsWith('prof-auditor-') && !p.id.startsWith('prof-accountant-'));
+    return items.filter((p) => p && p.name && !mockProfIds.includes(p.id));
   } catch (err) {
     handleFirestoreError('fetchProfessionalsFromFirestore', err);
     return null;
@@ -1805,11 +1821,14 @@ export async function saveProfessionalToFirestore(prof: any): Promise<boolean> {
   if (!db) return false;
 
   try {
-    const docRef = doc(db, 'professionals', prof.id);
-    await setDoc(docRef, {
+    const profId = prof.id || 'prof-' + Date.now();
+    const docRef = doc(db, 'professionals', profId);
+    const cleaned = cleanDataForFirestore({
       ...prof,
+      id: profId,
       updatedAt: new Date().toISOString(),
-    }, { merge: true });
+    });
+    await setDoc(docRef, cleaned, { merge: true });
     notifyChange('professionals');
     return true;
   } catch (err) {

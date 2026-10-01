@@ -2162,11 +2162,12 @@ export async function directSaveProfessionalToFirestore(prof: any): Promise<bool
   try {
     const profId = prof.id || 'prof-' + Date.now();
     const docRef = doc(db, 'professionals', profId);
-    await setDoc(docRef, {
+    const cleaned = cleanDataForFirestore({
       ...prof,
       id: profId,
       updatedAt: new Date().toISOString(),
-    }, { merge: true });
+    });
+    await setDoc(docRef, cleaned, { merge: true });
     return true;
   } catch (err) {
     handleClientFirestoreError('directSaveProfessionalToFirestore', err);
