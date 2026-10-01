@@ -71,7 +71,7 @@ export const ProfessionalsAdminTab: React.FC<ProfessionalsAdminTabProps> = ({
     const mockProfIds = ['prof-firm-1', 'prof-firm-2', 'prof-firm-3', 'prof-firm-4', 'prof-auditor-1', 'prof-auditor-2', 'prof-auditor-3', 'prof-accountant-1', 'prof-accountant-2', 'prof-accountant-3'];
 
     try {
-      const res = await fetch(`/api/professionals?t=${Date.now()}`);
+      const res = await fetch(`/api/professionals?status=all&t=${Date.now()}`);
       if (res.ok) {
         const data = await res.json();
         if (data.professionals && Array.isArray(data.professionals)) {

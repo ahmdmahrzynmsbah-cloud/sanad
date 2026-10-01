@@ -150,21 +150,13 @@ export const RelatedSitesView: React.FC<RelatedSitesViewProps> = ({
       services: formServices.length > 0 ? formServices : ['خدمات محاسبية وضريبية'],
       bio: formBio.trim(),
       licenseNumber: formLicenseNumber.trim(),
-      status: 'approved',
-      isVerified: true,
+      status: 'pending', // Awaits admin approval
+      isVerified: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
-    // 1. Instant Optimistic Local Storage Update
-    try {
-      const cached = localStorage.getItem('sanad_cached_professionals');
-      const parsed = cached ? JSON.parse(cached) : [];
-      const updated = [newProfessional, ...(Array.isArray(parsed) ? parsed.filter((p: any) => p.id !== newProfessional.id) : [])];
-      localStorage.setItem('sanad_cached_professionals', JSON.stringify(updated));
-    } catch {}
-
-    // 2. Direct Cloud Firestore Save
+    // 1. Direct Cloud Firestore Save as pending
     try {
       const { directSaveProfessionalToFirestore } = await import('../services/clientFirestore');
       await directSaveProfessionalToFirestore(newProfessional);
@@ -172,7 +164,7 @@ export const RelatedSitesView: React.FC<RelatedSitesViewProps> = ({
       console.warn('Direct Firestore save notice:', fsErr);
     }
 
-    // 3. Background API Server Sync
+    // 2. Background API Server Sync
     try {
       fetch('/api/professionals/register', {
         method: 'POST',
@@ -181,7 +173,7 @@ export const RelatedSitesView: React.FC<RelatedSitesViewProps> = ({
       }).catch(() => {});
     } catch {}
 
-    // 4. Realtime Broadcast
+    // 3. Realtime Broadcast
     notifySync('professionals');
     notifySync('all');
 

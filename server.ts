@@ -6857,9 +6857,15 @@ app.get('/api/professionals', async (req, res) => {
   const governorate = req.query.governorate as string;
   const status = req.query.status as string;
 
-  if (status && status !== 'all') {
-    realOnly = realOnly.filter(p => p.status === status);
+  if (status) {
+    if (status !== 'all') {
+      realOnly = realOnly.filter(p => p.status === status);
+    }
+  } else {
+    // By default for public directory, only approved records are visible
+    realOnly = realOnly.filter(p => p.status === 'approved');
   }
+
   if (type && type !== 'all') {
     realOnly = realOnly.filter(p => p.type === type);
   }
@@ -6897,7 +6903,7 @@ app.post('/api/professionals/register', async (req, res) => {
 
     if (!db.professionals) db.professionals = [];
     const newProf = {
-      id: 'prof-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+      id: req.body.id || ('prof-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6)),
       type: type || 'accountant',
       name: name.trim(),
       title: (title || '').trim() || (type === 'firm' ? 'مكتب محاسبة وتدقيق' : type === 'auditor' ? 'مدقق حسابات قانوني' : 'محاسب قانوني'),
@@ -6913,8 +6919,8 @@ app.post('/api/professionals/register', async (req, res) => {
       services: Array.isArray(services) && services.length > 0 ? services : ['خدمات محاسبية وضريبية'],
       bio: (bio || '').trim(),
       licenseNumber: (licenseNumber || '').trim(),
-      status: 'approved', // Auto-approved for instant visibility in directory and admin
-      isVerified: true,
+      status: 'pending', // Pending admin approval and review
+      isVerified: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -6923,7 +6929,7 @@ app.post('/api/professionals/register', async (req, res) => {
     saveDB('professionals');
     saveProfessionalToFirestore(newProf).catch(e => console.error('Firestore save error:', e));
     broadcastSync('professionals');
-    res.status(201).json({ message: 'تم إدراج بياناتك في الدليل المهني بنجاح', professional: newProf });
+    res.status(201).json({ message: 'تم إرسال طلبك بنجاح وهو قيد المراجعة والاعتماد من قبل الإدارة', professional: newProf });
   } catch (err: any) {
     console.error('Register professional error:', err);
     res.status(500).json({ error: 'تعذر تسجيل البيانات: ' + (err?.message || '') });

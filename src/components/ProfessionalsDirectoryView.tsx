@@ -70,7 +70,7 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
         const mockIds = ['prof-firm-1', 'prof-firm-2', 'prof-firm-3', 'prof-firm-4', 'prof-auditor-1', 'prof-auditor-2', 'prof-auditor-3', 'prof-accountant-1', 'prof-accountant-2', 'prof-accountant-3'];
         const real = Array.isArray(parsed) ? parsed.filter((p: any) => p && p.name && !mockIds.includes(p.id)) : [];
         if (real.length > 0) {
-          return real.filter((p: any) => p.status !== 'rejected');
+          return real.filter((p: any) => p.status === 'approved');
         }
       }
     } catch {}
@@ -145,8 +145,8 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
     if (loadedItems && Array.isArray(loadedItems)) {
       const mockIds = ['prof-firm-1', 'prof-firm-2', 'prof-firm-3', 'prof-firm-4', 'prof-auditor-1', 'prof-auditor-2', 'prof-auditor-3', 'prof-accountant-1', 'prof-accountant-2', 'prof-accountant-3'];
       const realItems = loadedItems.filter((p: any) => p && p.name && !mockIds.includes(p.id));
-      const visibleItems = realItems.filter((p: ProfessionalProfile) => p.status !== 'rejected');
-      setProfessionals(visibleItems);
+      const approvedOnly = realItems.filter((p: ProfessionalProfile) => p.status === 'approved');
+      setProfessionals(approvedOnly);
       try {
         localStorage.setItem('sanad_cached_professionals', JSON.stringify(realItems));
       } catch {}
@@ -165,8 +165,8 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
   // Filtered list
   const filteredProfessionals = useMemo(() => {
     return professionals.filter((item) => {
-      // Status check (exclude rejected)
-      if (item.status === 'rejected') return false;
+      // Status check (only approved in public directory)
+      if (item.status !== 'approved') return false;
 
       // Type tab check
       if (activeTypeTab !== 'all' && item.type !== activeTypeTab) return false;
@@ -259,22 +259,13 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
       services: formServices.length > 0 ? formServices : ['خدمات محاسبية وضريبية'],
       bio: formBio.trim(),
       licenseNumber: formLicenseNumber.trim(),
-      status: 'approved',
-      isVerified: true,
+      status: 'pending', // Awaits admin review & approval
+      isVerified: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
-    // 1. Instant Optimistic Local Update
-    setProfessionals((prev) => [newProfessional, ...prev.filter((p) => p.id !== newProfessional.id)]);
-    try {
-      const cached = localStorage.getItem('sanad_cached_professionals');
-      const parsed = cached ? JSON.parse(cached) : [];
-      const updated = [newProfessional, ...(Array.isArray(parsed) ? parsed.filter((p: any) => p.id !== newProfessional.id) : [])];
-      localStorage.setItem('sanad_cached_professionals', JSON.stringify(updated));
-    } catch {}
-
-    // 2. Direct Cloud Firestore Save
+    // 1. Direct Cloud Firestore Save as pending
     try {
       const { directSaveProfessionalToFirestore } = await import('../services/clientFirestore');
       await directSaveProfessionalToFirestore(newProfessional);
@@ -282,7 +273,7 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
       console.warn('Direct Firestore save notice:', fsErr);
     }
 
-    // 3. Background API Server Sync
+    // 2. Background API Server Sync
     try {
       fetch('/api/professionals/register', {
         method: 'POST',
@@ -291,7 +282,7 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
       }).catch(() => {});
     } catch {}
 
-    // 4. Broadcast Realtime Sync
+    // 3. Broadcast Realtime Sync to Admin
     notifySync('professionals');
     notifySync('all');
 

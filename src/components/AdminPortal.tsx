@@ -453,7 +453,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000);
 
-      const res = await fetch(`/api/professionals?t=${Date.now()}`, {
+      const res = await fetch(`/api/professionals?status=all&t=${Date.now()}`, {
         signal: controller.signal,
       }).finally(() => clearTimeout(timeoutId));
 
