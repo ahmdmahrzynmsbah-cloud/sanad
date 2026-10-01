@@ -139,12 +139,41 @@ export const ProfessionalsAdminTab: React.FC<ProfessionalsAdminTabProps> = ({
   useEffect(() => {
     loadItems();
 
+    // 1. Direct Realtime Firestore onSnapshot listener
+    let unsubFirestore: (() => void) | null = null;
+    import('../../services/clientFirestore')
+      .then(({ subscribeToProfessionalsInFirestore }) => {
+        unsubFirestore = subscribeToProfessionalsInFirestore((cloudItems) => {
+          if (cloudItems && Array.isArray(cloudItems)) {
+            setItems((prev) => {
+              const map = new Map<string, ProfessionalProfile>();
+              prev.forEach((p) => map.set(p.id, p));
+              cloudItems.forEach((p) => map.set(p.id, p));
+              const merged = Array.from(map.values()).sort((a, b) => {
+                const aPending = a.status === 'pending' ? 1 : 0;
+                const bPending = b.status === 'pending' ? 1 : 0;
+                if (aPending !== bPending) return bPending - aPending;
+                return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+              });
+              try {
+                localStorage.setItem('sanad_cached_professionals', JSON.stringify(merged));
+              } catch {}
+              return merged;
+            });
+          }
+        });
+      })
+      .catch(() => {});
+
+    // 2. Custom local window events & storage events
     const handleCustomUpdate = () => {
       loadItems();
     };
     window.addEventListener('sanad_professionals_updated', handleCustomUpdate);
     window.addEventListener('storage', handleCustomUpdate);
+
     return () => {
+      if (unsubFirestore) unsubFirestore();
       window.removeEventListener('sanad_professionals_updated', handleCustomUpdate);
       window.removeEventListener('storage', handleCustomUpdate);
     };

@@ -2348,3 +2348,44 @@ export async function directDeleteProfessionalFromFirestore(id: string): Promise
   }
 }
 
+/**
+ * Realtime Firestore onSnapshot listener for the Professionals collection
+ */
+export function subscribeToProfessionalsInFirestore(
+  onUpdate: (professionals: any[]) => void
+): () => void {
+  const db = getClientDb();
+  if (!db) return () => {};
+
+  try {
+    const col = collection(db, 'professionals');
+    const unsub = onSnapshot(
+      col,
+      (snapshot) => {
+        const mockProfIds = ['prof-firm-1', 'prof-firm-2', 'prof-firm-3', 'prof-firm-4', 'prof-auditor-1', 'prof-auditor-2', 'prof-auditor-3', 'prof-accountant-1', 'prof-accountant-2', 'prof-accountant-3'];
+        const items: any[] = [];
+        snapshot.forEach((docSnap) => {
+          const d = docSnap.data();
+          if (d && d.name && !mockProfIds.includes(docSnap.id)) {
+            items.push({ id: docSnap.id, ...d });
+          }
+        });
+        items.sort((a, b) => {
+          const aPending = a.status === 'pending' ? 1 : 0;
+          const bPending = b.status === 'pending' ? 1 : 0;
+          if (aPending !== bPending) return bPending - aPending;
+          return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+        });
+        onUpdate(items);
+      },
+      (err) => {
+        handleClientFirestoreError('onSnapshot:professionals', err);
+      }
+    );
+    return unsub;
+  } catch {
+    return () => {};
+  }
+}
+
+

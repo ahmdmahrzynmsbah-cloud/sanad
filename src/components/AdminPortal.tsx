@@ -1431,6 +1431,24 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
 
   useEffect(() => {
     loadAllAdminData();
+
+    let unsubProfs: (() => void) | null = null;
+    import('../services/clientFirestore')
+      .then(({ subscribeToProfessionalsInFirestore }) => {
+        unsubProfs = subscribeToProfessionalsInFirestore((cloudProfs) => {
+          if (cloudProfs && Array.isArray(cloudProfs)) {
+            setProfessionals(cloudProfs);
+            try {
+              localStorage.setItem('sanad_cached_professionals', JSON.stringify(cloudProfs));
+            } catch {}
+          }
+        });
+      })
+      .catch(() => {});
+
+    return () => {
+      if (unsubProfs) unsubProfs();
+    };
   }, []);
 
   useSync(['users', 'laws', 'categories', 'system_settings', 'supervisors', 'related_sites', 'partners', 'subscription_plans', 'law_requests', 'professionals', 'platform_about', 'contact_info', 'all'], () => {

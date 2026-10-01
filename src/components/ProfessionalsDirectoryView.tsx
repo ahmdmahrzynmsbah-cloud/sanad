@@ -148,7 +148,12 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
       const approvedOnly = realItems.filter((p: ProfessionalProfile) => p.status === 'approved');
       setProfessionals(approvedOnly);
       try {
-        localStorage.setItem('sanad_cached_professionals', JSON.stringify(realItems));
+        const cachedRaw = localStorage.getItem('sanad_cached_professionals');
+        const cached: ProfessionalProfile[] = cachedRaw ? JSON.parse(cachedRaw) : [];
+        const map = new Map<string, ProfessionalProfile>();
+        cached.forEach((p) => { if (p && p.id) map.set(p.id, p); });
+        realItems.forEach((p) => { if (p && p.id) map.set(p.id, p); });
+        localStorage.setItem('sanad_cached_professionals', JSON.stringify(Array.from(map.values())));
       } catch {}
     }
     setIsLoading(false);
