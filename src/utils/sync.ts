@@ -75,20 +75,11 @@ export function initGlobalSync() {
     window.dispatchEvent(new CustomEvent('sync_update', { detail: { collection, timestamp: Date.now() } }));
   });
 
-  // 2. Server-Sent Events (SSE) stream listener with safe reconnection
-  let sseErrorCount = 0;
+  // 2. Server-Sent Events (SSE) stream listener (single connection attempt, silent fallback)
   function connectSSE() {
-    // If SSE has failed multiple times (common on proxies/mobile/serverless), let polling handle it
-    if (sseErrorCount >= 3) return;
-
     try {
-      const appUrl = import.meta.env.VITE_APP_URL || '';
-      const url = `${appUrl.replace(/\/$/, '')}/api/sync`;
+      const url = '/api/sync';
       activeEventSource = new EventSource(url);
-
-      activeEventSource.onopen = () => {
-        sseErrorCount = 0;
-      };
 
       activeEventSource.onmessage = (event) => {
         try {
@@ -110,31 +101,37 @@ export function initGlobalSync() {
       activeEventSource.onerror = () => {
         try { activeEventSource?.close(); } catch {}
         activeEventSource = null;
-        sseErrorCount++;
-        if (sseErrorCount < 3 && !reconnectTimer) {
-          reconnectTimer = setTimeout(() => {
-            reconnectTimer = null;
-            connectSSE();
-          }, 4000);
-        }
       };
     } catch {
-      sseErrorCount++;
+      activeEventSource = null;
     }
   }
 
   connectSSE();
 
-  // 3. Fast Version-Polling Engine (Checks /api/sync/version every 2s)
-  // Ensures 100% sync reliability on every device, mobile screen, and browser
+  // 3. One-time initial server sync check on mount (no aggressive polling interval)
   let isFirstCheck = true;
+  let isServerVersionReachable = true;
+
   const checkServerVersion = async () => {
+    if (!isServerVersionReachable) return;
+
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+
       const res = await fetch(`/api/sync/version?_t=${Date.now()}`, {
+        signal: controller.signal,
         cache: 'no-store',
         headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
-      });
-      if (!res.ok) return;
+      }).finally(() => clearTimeout(timeoutId));
+
+      if (!res.ok) {
+        isServerVersionReachable = false;
+        console.info('Working in offline/standalone mode');
+        return;
+      }
+
       const data = await res.json();
       if (data && data.timestamps) {
         const timestamps = data.timestamps as Record<string, number>;
@@ -163,13 +160,13 @@ export function initGlobalSync() {
         }
       }
     } catch {
-      // Ignore network errors in background poll
+      isServerVersionReachable = false;
+      console.info('Working in offline/standalone mode');
     }
   };
 
-  // Run initial version check
+  // Run one-time initial version check on mount
   checkServerVersion();
-  pollTimer = setInterval(checkServerVersion, 2000);
 
   // 4. Multi-tab storage sync handler
   const handleStorageEvent = (e: StorageEvent) => {
@@ -197,10 +194,12 @@ export function initGlobalSync() {
   };
   window.addEventListener('storage', handleStorageEvent);
 
-  // 5. Visibility / Window Focus handler (triggers instant check when user switches back)
+  // 5. Visibility / Window Focus handler (single quiet check when user switches back)
   const handleVisibilityOrFocus = () => {
     if (document.visibilityState === 'visible' || document.hasFocus()) {
-      checkServerVersion();
+      if (isServerVersionReachable) {
+        checkServerVersion();
+      }
     }
   };
   document.addEventListener('visibilitychange', handleVisibilityOrFocus);
