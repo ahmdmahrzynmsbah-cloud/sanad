@@ -1994,13 +1994,51 @@ export async function directDeleteSubscriptionPlanFromFirestore(id: string): Pro
 }
 
 /**
- * Setup Realtime sync listener.
- * The application's server-authoritative SSE stream (/api/sync) and version-polling (/api/sync/version)
- * handle cross-tab and cross-device synchronization with 100% reliability, avoiding
- * browser-side WebSocket exhaustion or Firebase "Could not reach Cloud Firestore backend" errors.
+ * Setup Realtime Cloud Firestore sync listeners with automatic lifecycle management.
  */
 export function setupFirestoreRealtimeListeners(onUpdate: (collectionName: string) => void): () => void {
-  return () => {};
+  const db = getClientDb();
+  if (!db) return () => {};
+
+  const unsubscribers: (() => void)[] = [];
+  const collectionsToWatch = [
+    'supervisors',
+    'professionals',
+    'laws',
+    'users',
+    'subscription_plans',
+    'partners',
+    'related_sites',
+    'law_requests',
+    'system_settings',
+    'videos',
+  ];
+
+  collectionsToWatch.forEach((colName) => {
+    try {
+      const colRef = collection(db, colName);
+      const unsub = onSnapshot(
+        colRef,
+        () => {
+          onUpdate(colName);
+        },
+        (error) => {
+          handleClientFirestoreError(`onSnapshot:${colName}`, error);
+        }
+      );
+      unsubscribers.push(unsub);
+    } catch (err) {
+      // Ignore initial setup errors
+    }
+  });
+
+  return () => {
+    unsubscribers.forEach((unsub) => {
+      try {
+        unsub();
+      } catch {}
+    });
+  };
 }
 
 

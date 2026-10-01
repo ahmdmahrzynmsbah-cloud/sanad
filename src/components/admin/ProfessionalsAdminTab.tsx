@@ -53,7 +53,7 @@ export const ProfessionalsAdminTab: React.FC<ProfessionalsAdminTabProps> = ({
         if (cached) {
           const parsed = JSON.parse(cached);
           const mockProfIds = ['prof-firm-1', 'prof-firm-2', 'prof-firm-3', 'prof-firm-4', 'prof-auditor-1', 'prof-auditor-2', 'prof-auditor-3', 'prof-accountant-1', 'prof-accountant-2', 'prof-accountant-3'];
-          const real = Array.isArray(parsed) ? parsed.filter((p: any) => !mockProfIds.includes(p.id) && !p.id.startsWith('prof-firm-') && !p.id.startsWith('prof-auditor-') && !p.id.startsWith('prof-accountant-')) : [];
+          const real = Array.isArray(parsed) ? parsed.filter((p: any) => p && p.name && !mockProfIds.includes(p.id)) : [];
           if (real.length > 0) return real;
         }
       } catch {}
@@ -67,22 +67,37 @@ export const ProfessionalsAdminTab: React.FC<ProfessionalsAdminTabProps> = ({
 
   const loadItems = async () => {
     setLoading(true);
+    let loaded: any[] | null = null;
+    const mockProfIds = ['prof-firm-1', 'prof-firm-2', 'prof-firm-3', 'prof-firm-4', 'prof-auditor-1', 'prof-auditor-2', 'prof-auditor-3', 'prof-accountant-1', 'prof-accountant-2', 'prof-accountant-3'];
+
     try {
       const res = await fetch(`/api/professionals?t=${Date.now()}`);
       if (res.ok) {
         const data = await res.json();
         if (data.professionals && Array.isArray(data.professionals)) {
-          const mockProfIds = ['prof-firm-1', 'prof-firm-2', 'prof-firm-3', 'prof-firm-4', 'prof-auditor-1', 'prof-auditor-2', 'prof-auditor-3', 'prof-accountant-1', 'prof-accountant-2', 'prof-accountant-3'];
-          const real = data.professionals.filter((p: any) => !mockProfIds.includes(p.id) && !p.id.startsWith('prof-firm-') && !p.id.startsWith('prof-auditor-') && !p.id.startsWith('prof-accountant-'));
-          setItems(real);
-          try {
-            localStorage.setItem('sanad_cached_professionals', JSON.stringify(real));
-          } catch {}
+          loaded = data.professionals;
         }
       }
-    } catch {} finally {
-      setLoading(false);
+    } catch {}
+
+    if (!loaded || loaded.length === 0) {
+      try {
+        const { directFetchProfessionalsFromFirestore } = await import('../../services/clientFirestore');
+        const fsItems = await directFetchProfessionalsFromFirestore();
+        if (fsItems && fsItems.length > 0) {
+          loaded = fsItems;
+        }
+      } catch {}
     }
+
+    if (loaded && Array.isArray(loaded)) {
+      const real = loaded.filter((p: any) => p && p.name && !mockProfIds.includes(p.id));
+      setItems(real);
+      try {
+        localStorage.setItem('sanad_cached_professionals', JSON.stringify(real));
+      } catch {}
+    }
+    setLoading(false);
   };
 
   useEffect(() => {

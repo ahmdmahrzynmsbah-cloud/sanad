@@ -6,18 +6,14 @@ import {
 } from './clientFirestore';
 
 export const SUPERVISORS_CACHE_KEY = 'sanad_cached_supervisors';
-export const MOCK_SUPERVISOR_IDS = ['sup-1', 'sup-2', 'sup-3'];
 
 /**
- * تنقية قائمة المشرفين واستبعاد البيانات الوهمية القديمة عند وجود مشرفين حقيقيين
+ * تنقية قائمة المشرفين والتحقق من صحة البيانات
  */
 export function cleanSupervisorsList(list: any[]): Supervisor[] {
   if (!Array.isArray(list)) return [];
-  const hasReal = list.some((s) => !MOCK_SUPERVISOR_IDS.includes(s.id));
-  if (hasReal) {
-    return list.filter((s) => !MOCK_SUPERVISOR_IDS.includes(s.id));
-  }
-  return list;
+  // Ensure every item is a valid supervisor object with at least a name
+  return list.filter((s) => s && typeof s === 'object' && (s.name || s.title));
 }
 
 /**

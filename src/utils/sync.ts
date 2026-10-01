@@ -183,6 +183,8 @@ export function initGlobalSync() {
       window.dispatchEvent(new CustomEvent('sync_update', { detail: { collection: 'system_settings', timestamp: Date.now() } }));
     } else if (e.key.includes('supervisor')) {
       window.dispatchEvent(new CustomEvent('sync_update', { detail: { collection: 'supervisors', timestamp: Date.now() } }));
+    } else if (e.key.includes('professional')) {
+      window.dispatchEvent(new CustomEvent('sync_update', { detail: { collection: 'professionals', timestamp: Date.now() } }));
     } else if (e.key.includes('partner')) {
       window.dispatchEvent(new CustomEvent('sync_update', { detail: { collection: 'partners', timestamp: Date.now() } }));
     } else if (e.key.includes('site') || e.key.includes('related')) {

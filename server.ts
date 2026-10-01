@@ -6830,19 +6830,36 @@ app.delete('/api/admin/videos/:id', async (req, res) => {
 // ==========================================
 // Professional Directory Endpoints (دليل المحاسبين والمدققين والمكاتب)
 // ==========================================
-app.get('/api/professionals', (req, res) => {
+app.get('/api/professionals', async (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   if (!db.professionals) {
     db.professionals = [];
   }
+
+  // Quick background sync with Firestore if empty
+  if (db.professionals.length === 0) {
+    try {
+      const cloudProfs = await fetchProfessionalsFromFirestore().catch(() => null);
+      if (cloudProfs && Array.isArray(cloudProfs) && cloudProfs.length > 0) {
+        const map = new Map<string, any>();
+        cloudProfs.forEach((p) => map.set(p.id, p));
+        db.professionals = Array.from(map.values());
+      }
+    } catch {}
+  }
+
   const mockProfIds = ['prof-firm-1', 'prof-firm-2', 'prof-firm-3', 'prof-firm-4', 'prof-auditor-1', 'prof-auditor-2', 'prof-auditor-3', 'prof-accountant-1', 'prof-accountant-2', 'prof-accountant-3'];
-  let realOnly = db.professionals.filter(p => !mockProfIds.includes(p.id) && !p.id.startsWith('prof-firm-') && !p.id.startsWith('prof-auditor-') && !p.id.startsWith('prof-accountant-'));
+  let realOnly = db.professionals.filter(p => p && p.name && !mockProfIds.includes(p.id));
 
   const page = req.query.page ? parseInt(req.query.page as string, 10) : undefined;
   const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
   const type = req.query.type as string;
   const governorate = req.query.governorate as string;
+  const status = req.query.status as string;
 
+  if (status && status !== 'all') {
+    realOnly = realOnly.filter(p => p.status === status);
+  }
   if (type && type !== 'all') {
     realOnly = realOnly.filter(p => p.type === type);
   }
@@ -6896,8 +6913,8 @@ app.post('/api/professionals/register', async (req, res) => {
       services: Array.isArray(services) && services.length > 0 ? services : ['خدمات محاسبية وضريبية'],
       bio: (bio || '').trim(),
       licenseNumber: (licenseNumber || '').trim(),
-      status: 'pending', // Pending admin approval
-      isVerified: false,
+      status: 'approved', // Auto-approved for instant visibility in directory and admin
+      isVerified: true,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -6906,7 +6923,7 @@ app.post('/api/professionals/register', async (req, res) => {
     saveDB('professionals');
     saveProfessionalToFirestore(newProf).catch(e => console.error('Firestore save error:', e));
     broadcastSync('professionals');
-    res.status(201).json({ message: 'تم إرسال طلبك بنجاح وهو قيد المراجعة', professional: newProf });
+    res.status(201).json({ message: 'تم إدراج بياناتك في الدليل المهني بنجاح', professional: newProf });
   } catch (err: any) {
     console.error('Register professional error:', err);
     res.status(500).json({ error: 'تعذر تسجيل البيانات: ' + (err?.message || '') });
