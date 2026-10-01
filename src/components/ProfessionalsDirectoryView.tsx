@@ -265,7 +265,15 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
       updatedAt: new Date().toISOString(),
     };
 
-    // 1. Direct Cloud Firestore Save as pending
+    // 1. Immediately store in client localStorage so Admin Portal and tabs see it instantly
+    try {
+      const cachedRaw = localStorage.getItem('sanad_cached_professionals');
+      const cachedList: ProfessionalProfile[] = cachedRaw ? JSON.parse(cachedRaw) : [];
+      const updatedList = [newProfessional, ...cachedList.filter((p) => p.id !== newProfessional.id)];
+      localStorage.setItem('sanad_cached_professionals', JSON.stringify(updatedList));
+    } catch {}
+
+    // 2. Direct Cloud Firestore Save as pending
     try {
       const { directSaveProfessionalToFirestore } = await import('../services/clientFirestore');
       await directSaveProfessionalToFirestore(newProfessional);
@@ -273,18 +281,34 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
       console.warn('Direct Firestore save notice:', fsErr);
     }
 
-    // 2. Background API Server Sync
+    // 3. API Server Registration
     try {
-      fetch('/api/professionals/register', {
+      const res = await fetch('/api/professionals/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newProfessional),
-      }).catch(() => {});
-    } catch {}
+      });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (data.professional) {
+          try {
+            const cachedRaw = localStorage.getItem('sanad_cached_professionals');
+            const cachedList: ProfessionalProfile[] = cachedRaw ? JSON.parse(cachedRaw) : [];
+            const merged = [data.professional, ...cachedList.filter((p) => p.id !== data.professional.id && p.id !== newProfessional.id)];
+            localStorage.setItem('sanad_cached_professionals', JSON.stringify(merged));
+          } catch {}
+        }
+      }
+    } catch (apiErr) {
+      console.warn('API registration sync notice:', apiErr);
+    }
 
-    // 3. Broadcast Realtime Sync to Admin
+    // 4. Broadcast Realtime Sync to Admin Portal and all open tabs
     notifySync('professionals');
     notifySync('all');
+    try {
+      window.dispatchEvent(new CustomEvent('sanad_professionals_updated', { detail: { professional: newProfessional } }));
+    } catch {}
 
     setRegistrationSuccess(true);
     setIsSubmitting(false);

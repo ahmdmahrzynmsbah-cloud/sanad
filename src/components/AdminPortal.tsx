@@ -449,6 +449,23 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   };
 
   const fetchProfessionals = async () => {
+    const mockProfIds = ['prof-firm-1', 'prof-firm-2', 'prof-firm-3', 'prof-firm-4', 'prof-auditor-1', 'prof-auditor-2', 'prof-auditor-3', 'prof-accountant-1', 'prof-accountant-2', 'prof-accountant-3'];
+    const map = new Map<string, any>();
+
+    // 1. Read from localStorage
+    try {
+      const cached = localStorage.getItem('sanad_cached_professionals');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((p: any) => {
+            if (p && p.name && !mockProfIds.includes(p.id)) map.set(p.id, p);
+          });
+        }
+      }
+    } catch {}
+
+    // 2. Fetch from API
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000);
@@ -459,15 +476,33 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
 
       if (res.ok) {
         const data = await res.json();
-        if (data.professionals && Array.isArray(data.professionals) && data.professionals.length > 0) {
-          setProfessionals(data.professionals);
-          try {
-            localStorage.setItem('sanad_cached_professionals', JSON.stringify(data.professionals));
-          } catch {}
+        if (data.professionals && Array.isArray(data.professionals)) {
+          data.professionals.forEach((p: any) => {
+            if (p && p.name && !mockProfIds.includes(p.id)) map.set(p.id, p);
+          });
         }
       }
     } catch (err) {
-      console.warn('Failed to fetch professionals from API:', err);
+      console.warn('API fetch professionals notice:', err);
+    }
+
+    // 3. Fallback to Firestore
+    try {
+      const { directFetchProfessionalsFromFirestore } = await import('../services/clientFirestore');
+      const fsProfs = await directFetchProfessionalsFromFirestore();
+      if (fsProfs && Array.isArray(fsProfs)) {
+        fsProfs.forEach((p: any) => {
+          if (p && p.name && !mockProfIds.includes(p.id)) map.set(p.id, p);
+        });
+      }
+    } catch {}
+
+    const result = Array.from(map.values());
+    if (result.length > 0) {
+      setProfessionals(result);
+      try {
+        localStorage.setItem('sanad_cached_professionals', JSON.stringify(result));
+      } catch {}
     }
   };
 

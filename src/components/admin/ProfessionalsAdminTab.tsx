@@ -46,7 +46,6 @@ export const ProfessionalsAdminTab: React.FC<ProfessionalsAdminTabProps> = ({
   onRefresh,
 }) => {
   const [items, setItems] = useState<ProfessionalProfile[]>(() => {
-    if (professionals && professionals.length > 0) return professionals;
     if (typeof window !== 'undefined') {
       try {
         const cached = localStorage.getItem('sanad_cached_professionals');
@@ -58,6 +57,7 @@ export const ProfessionalsAdminTab: React.FC<ProfessionalsAdminTabProps> = ({
         }
       } catch {}
     }
+    if (professionals && professionals.length > 0) return professionals;
     return [];
   });
 
@@ -67,46 +67,97 @@ export const ProfessionalsAdminTab: React.FC<ProfessionalsAdminTabProps> = ({
 
   const loadItems = async () => {
     setLoading(true);
-    let loaded: any[] | null = null;
     const mockProfIds = ['prof-firm-1', 'prof-firm-2', 'prof-firm-3', 'prof-firm-4', 'prof-auditor-1', 'prof-auditor-2', 'prof-auditor-3', 'prof-accountant-1', 'prof-accountant-2', 'prof-accountant-3'];
+    const map = new Map<string, ProfessionalProfile>();
 
+    // 1. Read from localStorage cache first
+    try {
+      const cached = localStorage.getItem('sanad_cached_professionals');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((p: any) => {
+            if (p && p.name && !mockProfIds.includes(p.id)) {
+              map.set(p.id, p);
+            }
+          });
+        }
+      }
+    } catch {}
+
+    // 2. Fetch from API endpoint (all statuses)
     try {
       const res = await fetch(`/api/professionals?status=all&t=${Date.now()}`);
       if (res.ok) {
         const data = await res.json();
         if (data.professionals && Array.isArray(data.professionals)) {
-          loaded = data.professionals;
+          data.professionals.forEach((p: any) => {
+            if (p && p.name && !mockProfIds.includes(p.id)) {
+              map.set(p.id, p);
+            }
+          });
         }
       }
     } catch {}
 
-    if (!loaded || loaded.length === 0) {
-      try {
-        const { directFetchProfessionalsFromFirestore } = await import('../../services/clientFirestore');
-        const fsItems = await directFetchProfessionalsFromFirestore();
-        if (fsItems && fsItems.length > 0) {
-          loaded = fsItems;
+    // 3. Direct Firestore Fallback / Complement
+    try {
+      const { directFetchProfessionalsFromFirestore } = await import('../../services/clientFirestore');
+      const fsItems = await directFetchProfessionalsFromFirestore();
+      if (fsItems && Array.isArray(fsItems)) {
+        fsItems.forEach((p: any) => {
+          if (p && p.name && !mockProfIds.includes(p.id)) {
+            map.set(p.id, p);
+          }
+        });
+      }
+    } catch {}
+
+    // 4. Incorporate props if any
+    if (professionals && Array.isArray(professionals)) {
+      professionals.forEach((p) => {
+        if (p && p.name && !mockProfIds.includes(p.id)) {
+          map.set(p.id, p);
         }
-      } catch {}
+      });
     }
 
-    if (loaded && Array.isArray(loaded)) {
-      const real = loaded.filter((p: any) => p && p.name && !mockProfIds.includes(p.id));
-      setItems(real);
-      try {
-        localStorage.setItem('sanad_cached_professionals', JSON.stringify(real));
-      } catch {}
-    }
+    const merged = Array.from(map.values()).sort((a, b) => {
+      const aPending = a.status === 'pending' ? 1 : 0;
+      const bPending = b.status === 'pending' ? 1 : 0;
+      if (aPending !== bPending) return bPending - aPending;
+      return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+    });
+
+    setItems(merged);
+    try {
+      localStorage.setItem('sanad_cached_professionals', JSON.stringify(merged));
+    } catch {}
     setLoading(false);
   };
 
   useEffect(() => {
     loadItems();
+
+    const handleCustomUpdate = () => {
+      loadItems();
+    };
+    window.addEventListener('sanad_professionals_updated', handleCustomUpdate);
+    window.addEventListener('storage', handleCustomUpdate);
+    return () => {
+      window.removeEventListener('sanad_professionals_updated', handleCustomUpdate);
+      window.removeEventListener('storage', handleCustomUpdate);
+    };
   }, []);
 
   useEffect(() => {
     if (professionals && professionals.length > 0) {
-      setItems(professionals);
+      setItems((prev) => {
+        const map = new Map<string, ProfessionalProfile>();
+        prev.forEach((p) => map.set(p.id, p));
+        professionals.forEach((p) => map.set(p.id, p));
+        return Array.from(map.values());
+      });
     }
   }, [professionals]);
 
@@ -390,75 +441,96 @@ export const ProfessionalsAdminTab: React.FC<ProfessionalsAdminTabProps> = ({
 
   // Quick Approve Status
   const handleQuickApprove = async (id: string) => {
+    const current = items.find((p) => p.id === id);
+    const updated = current ? { ...current, status: 'approved' as const, rejectionReason: undefined, updatedAt: new Date().toISOString() } : null;
+
+    if (updated) {
+      setItems((prev) => {
+        const next = prev.map((p) => (p.id === id ? updated : p));
+        try { localStorage.setItem('sanad_cached_professionals', JSON.stringify(next)); } catch {}
+        return next;
+      });
+    }
+
     try {
-      const res = await fetch(`/api/admin/professionals/${id}/status`, {
+      await fetch(`/api/admin/professionals/${id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'approved' }),
       });
-      if (res.ok) {
-        setItems((prev) => {
-          const next = prev.map((p) => (p.id === id ? { ...p, status: 'approved' as const, rejectionReason: undefined } : p));
-          try { localStorage.setItem('sanad_cached_professionals', JSON.stringify(next)); } catch {}
-          return next;
-        });
-        setActionSuccess('تمت الموافقة واعتماد الظهور في الدليل بنجاح');
-        import('../../utils/sync').then(({ notifySync }) => notifySync('professionals')).catch(() => {});
-        await onRefresh();
-        setTimeout(() => setActionSuccess(null), 3000);
-      }
-    } catch (err) {
-      console.error('Approve error:', err);
-    }
+    } catch {}
+
+    try {
+      const { directSaveProfessionalToFirestore } = await import('../../services/clientFirestore');
+      if (updated) await directSaveProfessionalToFirestore(updated);
+    } catch {}
+
+    setActionSuccess('تمت الموافقة واعتماد الظهور في الدليل بنجاح');
+    import('../../utils/sync').then(({ notifySync }) => notifySync('professionals')).catch(() => {});
+    await onRefresh();
+    setTimeout(() => setActionSuccess(null), 3000);
   };
 
   // Quick Reject Status
   const handleQuickReject = async (id: string) => {
+    const current = items.find((p) => p.id === id);
+    const updated = current ? { ...current, status: 'rejected' as const, updatedAt: new Date().toISOString() } : null;
+
+    if (updated) {
+      setItems((prev) => {
+        const next = prev.map((p) => (p.id === id ? updated : p));
+        try { localStorage.setItem('sanad_cached_professionals', JSON.stringify(next)); } catch {}
+        return next;
+      });
+    }
+
     try {
-      const res = await fetch(`/api/admin/professionals/${id}/status`, {
+      await fetch(`/api/admin/professionals/${id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'rejected' }),
       });
-      if (res.ok) {
-        setItems((prev) => {
-          const next = prev.map((p) => (p.id === id ? { ...p, status: 'rejected' as const } : p));
-          try { localStorage.setItem('sanad_cached_professionals', JSON.stringify(next)); } catch {}
-          return next;
-        });
-        setActionSuccess('تم رفض / تعليق الطلب');
-        import('../../utils/sync').then(({ notifySync }) => notifySync('professionals')).catch(() => {});
-        await onRefresh();
-        setTimeout(() => setActionSuccess(null), 3000);
-      }
-    } catch (err) {
-      console.error('Reject error:', err);
-    }
+    } catch {}
+
+    try {
+      const { directSaveProfessionalToFirestore } = await import('../../services/clientFirestore');
+      if (updated) await directSaveProfessionalToFirestore(updated);
+    } catch {}
+
+    setActionSuccess('تم رفض / تعليق الطلب');
+    import('../../utils/sync').then(({ notifySync }) => notifySync('professionals')).catch(() => {});
+    await onRefresh();
+    setTimeout(() => setActionSuccess(null), 3000);
   };
 
   // Delete
   const handleDelete = async (id: string, name: string) => {
     if (!window.confirm(`هل أنت متأكد من حذف «${name}» نهائياً من الدليل؟`)) return;
 
+    setItems((prev) => {
+      const next = prev.filter((p) => p.id !== id);
+      try { localStorage.setItem('sanad_cached_professionals', JSON.stringify(next)); } catch {}
+      return next;
+    });
+
     try {
-      const res = await fetch(`/api/admin/professionals/${id}`, {
+      await fetch(`/api/admin/professionals/${id}`, {
         method: 'DELETE',
       });
-      if (res.ok) {
-        setItems((prev) => {
-          const next = prev.filter((p) => p.id !== id);
-          try { localStorage.setItem('sanad_cached_professionals', JSON.stringify(next)); } catch {}
-          return next;
-        });
-        setActionSuccess(`تم حذف «${name}» بنجاح`);
-        import('../../utils/sync').then(({ notifySync }) => notifySync('professionals')).catch(() => {});
-        await onRefresh();
-        setTimeout(() => setActionSuccess(null), 3000);
-      }
-    } catch (err) {
-      console.error('Delete error:', err);
-    }
+    } catch {}
+
+    try {
+      const { directDeleteProfessionalFromFirestore } = await import('../../services/clientFirestore');
+      await directDeleteProfessionalFromFirestore(id);
+    } catch {}
+
+    setActionSuccess(`تم حذف «${name}» بنجاح`);
+    import('../../utils/sync').then(({ notifySync }) => notifySync('professionals')).catch(() => {});
+    await onRefresh();
+    setTimeout(() => setActionSuccess(null), 3000);
   };
+
+  const pendingItems = items.filter((p) => p.status === 'pending');
 
   return (
     <div className="space-y-6">
@@ -487,7 +559,7 @@ export const ProfessionalsAdminTab: React.FC<ProfessionalsAdminTabProps> = ({
 
         <button
           onClick={handleOpenAdd}
-          className="px-4 py-2.5 bg-[#12281e] hover:bg-[#1a382b] text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs transition-all flex items-center gap-2"
+          className="px-4 py-2.5 bg-[#12281e] hover:bg-[#1a382b] text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>إضافة محاسب / مدقق / مكتب جديد</span>
@@ -499,6 +571,118 @@ export const ProfessionalsAdminTab: React.FC<ProfessionalsAdminTabProps> = ({
         <div className="p-3.5 bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs font-bold rounded-xl flex items-center gap-2 shadow-2xs">
           <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-700" />
           <span>{actionSuccess}</span>
+        </div>
+      )}
+
+      {/* Pending Applications Alert & Quick Review Section */}
+      {pendingItems.length > 0 && (
+        <div className="bg-gradient-to-br from-amber-50 via-amber-50/70 to-orange-50/40 border-2 border-amber-300 rounded-2xl p-5 shadow-xs space-y-4 animate-in fade-in duration-300">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-amber-200/80">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-black text-lg shrink-0 shadow-xs">
+                {pendingItems.length}
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm sm:text-base text-amber-950 flex items-center gap-2">
+                  <span>طلبات جديدة بانتظار المراجعة والاعتماد</span>
+                  <span className="bg-amber-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full animate-pulse">
+                    جديد
+                  </span>
+                </h3>
+                <p className="text-xs text-amber-800 mt-0.5">
+                  تم تقديم هذه الطلبات للانضمام للدليل المهني. يمكنك مراجعتها واعتماد نشرها فوراً لتظهر لجميع الزوار.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setStatusFilter('pending')}
+              className="text-xs font-bold text-amber-900 hover:text-amber-950 bg-amber-200/80 hover:bg-amber-300 px-3 py-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
+            >
+              عرض في الجدول أدناه
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            {pendingItems.map((item) => (
+              <div key={item.id} className="bg-white rounded-xl p-4 border border-amber-200/90 shadow-2xs space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    {item.logoUrl ? (
+                      <img src={item.logoUrl} alt="" className="w-12 h-12 rounded-xl object-cover border border-slate-200 shrink-0" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold shrink-0">
+                        {item.type === 'firm' ? <Building2 className="w-6 h-6" /> : <UserCheck className="w-6 h-6" />}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <div className="font-black text-slate-900 text-sm truncate">{item.name}</div>
+                      <div className="text-xs text-slate-600 truncate">{item.title}</div>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${
+                          item.type === 'firm'
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                            : item.type === 'auditor'
+                            ? 'bg-teal-50 text-teal-800 border-teal-200'
+                            : 'bg-amber-50 text-amber-900 border-amber-200'
+                        }`}>
+                          {item.type === 'firm' ? 'مكتب / شركة' : item.type === 'auditor' ? 'مدقق قانوني' : 'محاسب'}
+                        </span>
+                        <span className="text-[11px] text-slate-600 flex items-center gap-0.5">
+                          <MapPin className="w-3 h-3 text-slate-400" />
+                          <span>{item.governorate} {item.city ? `(${item.city})` : ''}</span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-[11px] bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">الهاتف:</span>
+                    <span className="font-mono font-bold text-slate-800">{item.phone}</span>
+                  </div>
+                  {item.licenseNumber && (
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">رقم الترخيص:</span>
+                      <span className="font-mono text-slate-800">{item.licenseNumber}</span>
+                    </div>
+                  )}
+                  {item.email && (
+                    <div className="col-span-2 truncate">
+                      <span className="text-slate-400 block text-[10px]">البريد:</span>
+                      <span className="text-slate-700">{item.email}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    onClick={() => handleQuickApprove(item.id)}
+                    className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>موافقة واعتماد النشر</span>
+                  </button>
+                  <button
+                    onClick={() => handleOpenEdit(item)}
+                    className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                    title="تعديل التفاصيل"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span>تعديل</span>
+                  </button>
+                  <button
+                    onClick={() => handleQuickReject(item.id)}
+                    className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                    title="رفض الطلب"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span>رفض</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
