@@ -125,8 +125,8 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
     setShowModal(true);
   };
 
-  // Handle local image file upload (converts to base64 Data URL)
-  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle local image file upload (converts to base64 Data URL with automatic client-side compression)
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -135,20 +135,22 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      setFormError('حجم الصورة كبير جداً، يرجى اختيار صورة أقل من 5 ميجابايت.');
-      return;
+    try {
+      const { compressImageClientSide } = await import('../../utils/imageCompressor');
+      const compressed = await compressImageClientSide(file, 400, 400);
+      setPhotoUrl(compressed);
+      setFormError(null);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const result = event.target?.result as string;
+        if (result) {
+          setPhotoUrl(result);
+          setFormError(null);
+        }
+      };
+      reader.readAsDataURL(file);
     }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result as string;
-      if (result) {
-        setPhotoUrl(result);
-        setFormError(null);
-      }
-    };
-    reader.readAsDataURL(file);
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -166,141 +168,80 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
     }
 
     setSaving(true);
-    try {
-      const payload = {
-        name: name.trim(),
-        title: title.trim(),
-        bio: bio.trim(),
-        photoUrl: photoUrl.trim(),
-        department: department.trim(),
-        email: email.trim(),
-        phone: phone.trim(),
-        order: Number(order) || 1,
-      };
 
+    const supId = editingSupervisor ? editingSupervisor.id : 'sup-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+    const payloadToSave: Supervisor = {
+      id: supId,
+      name: name.trim(),
+      title: title.trim(),
+      bio: bio.trim(),
+      photoUrl: photoUrl.trim(),
+      department: department.trim(),
+      email: email.trim(),
+      phone: phone.trim(),
+      order: Number(order) || 1,
+      createdAt: editingSupervisor?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    // 1. Immediately store in local state and localStorage for zero-latency UI update
+    setSupervisors((prev) => {
+      const map = new Map<string, Supervisor>();
+      prev.forEach((s) => map.set(s.id, s));
+      map.set(payloadToSave.id, payloadToSave);
+      const next = Array.from(map.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
+      syncSupervisorsToLocalStorage(next);
+      if (onSupervisorsUpdated) onSupervisorsUpdated(next);
+      return next;
+    });
+
+    // 2. Background sync to Server API
+    try {
       const url = editingSupervisor
         ? `/api/admin/supervisors/${editingSupervisor.id}`
         : '/api/admin/supervisors';
       const method = editingSupervisor ? 'PUT' : 'POST';
 
-      const res = await fetch(url, {
+      fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const { directSaveSupervisorToFirestore } = await import('../../services/clientFirestore');
-        const supId = editingSupervisor ? editingSupervisor.id : 'sup-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
-        const payloadToSave = {
-          id: supId,
-          name: name.trim(),
-          title: title.trim(),
-          bio: bio.trim(),
-          photoUrl: photoUrl.trim(),
-          department: department.trim(),
-          email: email.trim(),
-          phone: phone.trim(),
-          order: Number(order) || 1,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        const saved = await directSaveSupervisorToFirestore(payloadToSave);
-        if (saved) {
-          setSupervisors((prev) => {
-            const map = new Map<string, Supervisor>();
-            prev.forEach((s) => map.set(s.id, s));
-            map.set(payloadToSave.id, payloadToSave);
-            return Array.from(map.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
-          });
-          setSearchQuery('');
-          notifySync('supervisors');
-          fetchSupervisors();
-          setFeedback({
-            type: 'success',
-            message: editingSupervisor
-              ? `تم تحديث بيانات المشرف "${name}" بنجاح.`
-              : `تمت إضافة المشرف "${name}" بنجاح.`,
-          });
-          setShowModal(false);
-          setTimeout(() => setFeedback(null), 4000);
-          return;
+        body: JSON.stringify(payloadToSave),
+      }).then(async (res) => {
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          if (data.supervisor) {
+            setSupervisors((prev) => {
+              const map = new Map<string, Supervisor>();
+              prev.forEach((s) => map.set(s.id, s));
+              map.set(data.supervisor.id, data.supervisor);
+              const next = Array.from(map.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
+              syncSupervisorsToLocalStorage(next);
+              if (onSupervisorsUpdated) onSupervisorsUpdated(next);
+              return next;
+            });
+          }
         }
-        setFormError(data.error || 'فشلت عملية حفظ بيانات المشرف.');
-        return;
-      }
+      }).catch(() => {});
+    } catch {}
 
-      setSearchQuery('');
-      if (data.supervisor) {
-        setSupervisors((prev) => {
-          const map = new Map<string, Supervisor>();
-          prev.forEach((s) => map.set(s.id, s));
-          map.set(data.supervisor.id, data.supervisor);
-          const next = Array.from(map.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
-          syncSupervisorsToLocalStorage(next);
-          return next;
-        });
-      } else if (data.supervisors) {
-        const next = [...data.supervisors].sort((a: Supervisor, b: Supervisor) => (a.order || 0) - (b.order || 0));
-        setSupervisors(next);
-        syncSupervisorsToLocalStorage(next);
-      } else {
-        loadSupervisorsData();
-      }
+    // 3. Background sync to Cloud Firestore
+    try {
+      const { directSaveSupervisorToFirestore } = await import('../../services/clientFirestore');
+      directSaveSupervisorToFirestore(payloadToSave).catch(() => {});
+    } catch {}
 
-      notifySync('supervisors');
-      setFeedback({
-        type: 'success',
-        message: data.message || (editingSupervisor
-          ? `تم تحديث بيانات المشرف "${name}" بنجاح.`
-          : `تمت إضافة المشرف "${name}" بنجاح.`),
-      });
-      setShowModal(false);
-      setTimeout(() => setFeedback(null), 4000);
-    } catch (err: any) {
-      console.warn('Server save supervisor failed, using direct Firestore fallback:', err);
-      try {
-        const { directSaveSupervisorToFirestore } = await import('../../services/clientFirestore');
-        const supId = editingSupervisor ? editingSupervisor.id : 'sup-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
-        const payloadToSave = {
-          id: supId,
-          name: name.trim(),
-          title: title.trim(),
-          bio: bio.trim(),
-          photoUrl: photoUrl.trim(),
-          department: department.trim(),
-          email: email.trim(),
-          phone: phone.trim(),
-          order: Number(order) || 1,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        await directSaveSupervisorToFirestore(payloadToSave);
-        setSupervisors((prev) => {
-          const map = new Map<string, Supervisor>();
-          prev.forEach((s) => map.set(s.id, s));
-          map.set(payloadToSave.id, payloadToSave);
-          const next = Array.from(map.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
-          syncSupervisorsToLocalStorage(next);
-          return next;
-        });
-        notifySync('supervisors');
-        loadSupervisorsData();
-        setFeedback({
-          type: 'success',
-          message: editingSupervisor
-            ? `تم تحديث بيانات المشرف "${name}" بنجاح.`
-            : `تمت إضافة المشرف "${name}" بنجاح.`,
-        });
-        setShowModal(false);
-        setTimeout(() => setFeedback(null), 4000);
-      } catch (fErr) {
-        setFormError('تعذر الاتصال بالخادم.');
-      }
-    } finally {
-      setSaving(false);
-    }
+    // 4. Broadcast Realtime Sync & Feedback
+    notifySync('supervisors');
+    setSearchQuery('');
+    setFeedback({
+      type: 'success',
+      message: editingSupervisor
+        ? `تم تحديث بيانات المشرف "${name}" بنجاح.`
+        : `تمت إضافة المشرف "${name}" بنجاح.`,
+    });
+    setShowModal(false);
+    setSaving(false);
+    setTimeout(() => setFeedback(null), 4000);
   };
 
   // Perform permanent deletion ONLY after explicit confirmation
