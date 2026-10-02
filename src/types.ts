@@ -189,6 +189,7 @@ export interface RelatedSite {
   isOfficial?: boolean;
   order?: number;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface Partner {

@@ -117,7 +117,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
 أنا مستشارك الذكي ومساعدك التفاعلي في كل ما يتعلق بالقوانين والأنظمة المالية والضريبية والجمركية، بالإضافة للإجابة على جميع تساؤلاتك واستفساراتك العامة بكل ترحيب.
 
 تفضل بكتابة استفسارك في الأسفل وسأقوم بالرد عليك وتوضيح كافة التفاصيل فوراً.`,
-    timestamp: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+    timestamp: new Date().toLocaleTimeString('ar-EG-u-nu-latn', { hour: '2-digit', minute: '2-digit' }),
   });
 
   // Responsive Sidebar States
@@ -506,7 +506,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
       id: 'msg-' + Date.now(),
       sender: 'user',
       text: query,
-      timestamp: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+      timestamp: new Date().toLocaleTimeString('ar-EG-u-nu-latn', { hour: '2-digit', minute: '2-digit' }),
       attachedDoc: currentAttachedDoc,
     };
 
@@ -644,7 +644,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
         id: 'bot-' + Date.now(),
         sender: 'bot',
         text: botResponseText,
-        timestamp: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+        timestamp: new Date().toLocaleTimeString('ar-EG-u-nu-latn', { hour: '2-digit', minute: '2-digit' }),
         isLegal: isQueryLegal,
         queryType: resQueryType,
         suggestedDetails: resSuggestedDetails,
@@ -687,7 +687,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
         id: 'err-' + Date.now(),
         sender: 'bot',
         text: fallbackText,
-        timestamp: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
+        timestamp: new Date().toLocaleTimeString('ar-EG-u-nu-latn', { hour: '2-digit', minute: '2-digit' }),
         isLegal: isQueryLegal,
         queryType: isQueryLegal ? 'legal' : 'general',
         suggestedDetails: isQueryLegal

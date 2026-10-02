@@ -893,7 +893,7 @@ export const SubmitLawModal: React.FC<SubmitLawModalProps> = ({
                         <span>التصنيف: <strong>{req.category}</strong></span>
                         <span>•</span>
                         <span>
-                          تاريخ التقديم: {new Date(req.createdAt).toLocaleDateString('ar-EG')}
+                          تاريخ التقديم: {new Date(req.createdAt).toLocaleDateString('ar-EG-u-nu-latn')}
                         </span>
                       </div>
 

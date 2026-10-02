@@ -250,7 +250,7 @@ export const SanadWelcomeModal: React.FC<SanadWelcomeModalProps> = ({
                   step === 1 ? 'bg-emerald-500 text-white shadow' : 'text-slate-400'
                 }`}
               >
-                ١. اسأل سَنَد
+                1. اسأل سَنَد
               </span>
               <span className="text-slate-500">←</span>
               <span
@@ -258,7 +258,7 @@ export const SanadWelcomeModal: React.FC<SanadWelcomeModalProps> = ({
                   step === 2 ? 'bg-emerald-500 text-white shadow' : 'text-slate-400'
                 }`}
               >
-                ٢. من هو سَنَد؟
+                2. من هو سَنَد؟
               </span>
             </div>
 

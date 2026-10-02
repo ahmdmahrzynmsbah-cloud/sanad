@@ -753,7 +753,7 @@ export const LawRequestsAdminTab: React.FC<LawRequestsAdminTabProps> = ({
 
                       <span className="text-[11px] text-gray-400 flex items-center gap-1">
                         <Calendar className="w-3 h-3" />
-                        {new Date(req.createdAt).toLocaleDateString('ar-EG', {
+                        {new Date(req.createdAt).toLocaleDateString('ar-EG-u-nu-latn', {
                           year: 'numeric',
                           month: 'short',
                           day: 'numeric',
@@ -821,7 +821,7 @@ export const LawRequestsAdminTab: React.FC<LawRequestsAdminTabProps> = ({
                         <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                         <span>تمت المراجعة والتدقيق بواسطة: <strong>{req.reviewedBy}</strong></span>
                         {req.reviewedAt && (
-                          <span>بتاريخ {new Date(req.reviewedAt).toLocaleDateString('ar-EG')}</span>
+                          <span>بتاريخ {new Date(req.reviewedAt).toLocaleDateString('ar-EG-u-nu-latn')}</span>
                         )}
                       </div>
                     )}

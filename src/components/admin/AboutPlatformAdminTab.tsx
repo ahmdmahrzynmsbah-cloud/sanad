@@ -336,7 +336,7 @@ export const AboutPlatformAdminTab: React.FC<AboutPlatformAdminTabProps> = ({ on
           </p>
           {updatedAt && (
             <span className="text-[11px] text-slate-400 mt-1 block">
-              آخر تحديث سحابي: {new Date(updatedAt).toLocaleString('ar-EG')}
+              آخر تحديث سحابي: {new Date(updatedAt).toLocaleString('ar-EG-u-nu-latn')}
             </span>
           )}
         </div>
@@ -407,7 +407,7 @@ export const AboutPlatformAdminTab: React.FC<AboutPlatformAdminTabProps> = ({ on
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div className="flex items-center gap-2">
             <span className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center justify-center font-bold text-xs">
-              ١
+              1
             </span>
             <div>
               <h4 className="text-sm sm:text-base font-black text-slate-900">

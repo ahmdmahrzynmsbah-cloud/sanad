@@ -736,6 +736,7 @@ interface DBData {
   videos?: any[];
   professionals?: any[];
   professionalTypes?: any[];
+  professionalServices?: string[];
   relatedSiteCategories?: any[];
   conversations?: any[];
 }
@@ -3861,7 +3862,7 @@ app.post('/api/admin/users/:id/trial', async (req, res) => {
   const safeUsers = db.users.map(toSafeUser);
   res.json({
     success: true,
-    message: `تم تحديث وتمديد الفترة التجريبية للمستخدم "${user.fullName || user.username}" حتى ${newEndDate.toLocaleDateString('ar-EG')} وتنشيط حسابه بنجاح.`,
+    message: `تم تحديث وتمديد الفترة التجريبية للمستخدم "${user.fullName || user.username}" حتى ${newEndDate.toLocaleDateString('ar-EG-u-nu-latn')} وتنشيط حسابه بنجاح.`,
     user: toSafeUser(user),
     users: safeUsers,
   });
@@ -6934,6 +6935,46 @@ app.delete('/api/admin/professionals/types/:id', (req, res) => {
   saveDB('settings');
   broadcastSync('professionals_types');
   res.json({ success: true, message: 'تم حذف المسمى بنجاح', types: db.professionalTypes });
+});
+
+// ==========================================
+// Dynamic Professional Services Endpoints
+// ==========================================
+const DEFAULT_PROFESSIONAL_SERVICES = [
+  'تدقيق حسابات قانوني',
+  'إعداد ومراجعة القوائم المالية',
+  'استشارات ضريبية ومقاصة',
+  'مسك دفاتر محاسبية وسجلات',
+  'إقرارات ضريبة الدخل والقيمة المضافة',
+  'دراسات جدوى وخطط أعمال',
+  'استرداد ضريبي وتسويات جمركية',
+  'تأسيس وتسجيل الشركات',
+  'تحكيم مالي ومحاسبة قضائية',
+  'تنظيم الأنظمة والبرامج المحاسبية',
+  'احتساب مستحقات عمالية ورواتب',
+  'استشارات تمويل وإدارة مالية',
+];
+
+app.get('/api/professionals/services', (req, res) => {
+  if (!db.professionalServices || !Array.isArray(db.professionalServices) || db.professionalServices.length === 0) {
+    db.professionalServices = [...DEFAULT_PROFESSIONAL_SERVICES];
+  }
+  res.json({ services: db.professionalServices });
+});
+
+app.post('/api/admin/professionals/services', async (req, res) => {
+  try {
+    const { services } = req.body;
+    if (Array.isArray(services)) {
+      db.professionalServices = services.map((s) => String(s).trim()).filter(Boolean);
+      saveDB('settings');
+      broadcastSync('professionals_services');
+      return res.json({ success: true, services: db.professionalServices });
+    }
+    return res.status(400).json({ error: 'قائمة خدمات غير صالحة' });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'خطأ أثناء حفظ الخدمات' });
+  }
 });
 
 // ==========================================

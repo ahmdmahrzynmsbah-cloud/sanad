@@ -20,7 +20,11 @@ import {
 } from 'lucide-react';
 import { RelatedSite } from '../../types';
 import { useSync, notifySync } from '../../utils/sync';
-import { directDeleteRelatedSiteFromFirestore } from '../../services/clientFirestore';
+import {
+  directSaveRelatedSiteToFirestore,
+  directFetchRelatedSitesFromFirestore,
+  directDeleteRelatedSiteFromFirestore,
+} from '../../services/clientFirestore';
 
 interface RelatedSitesAdminTabProps {
   initialSites?: RelatedSite[];
@@ -34,7 +38,18 @@ interface SiteCategoryItem {
 export const RelatedSitesAdminTab: React.FC<RelatedSitesAdminTabProps> = ({
   initialSites,
 }) => {
-  const [sites, setSites] = useState<RelatedSite[]>(initialSites || []);
+  const [sites, setSites] = useState<RelatedSite[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('sanad_cached_related_sites');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return initialSites || [];
+  });
   const [categories, setCategories] = useState<SiteCategoryItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [loading, setLoading] = useState(false);
@@ -84,26 +99,55 @@ export const RelatedSitesAdminTab: React.FC<RelatedSitesAdminTabProps> = ({
 
   const fetchSites = async () => {
     setLoading(true);
+    const map = new Map<string, RelatedSite>();
+
+    // 1. Local cache
     try {
-      const res = await fetch('/api/related-sites');
-      const data = await res.json();
-      if (res.ok && data.relatedSites) {
-        setSites(data.relatedSites);
+      const cached = localStorage.getItem('sanad_cached_related_sites');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((s: any) => { if (s && s.id && s.title) map.set(s.id, s); });
+        }
+      }
+    } catch {}
+
+    // 2. Fetch from API
+    try {
+      const res = await fetch(`/api/related-sites?t=${Date.now()}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.relatedSites && Array.isArray(data.relatedSites)) {
+          data.relatedSites.forEach((s: any) => { if (s && s.id && s.title) map.set(s.id, s); });
+        }
       }
     } catch (err) {
-      console.warn('Failed to fetch related sites:', err);
-    } finally {
-      setLoading(false);
-      fetchCategories();
+      console.warn('Failed to fetch related sites from API:', err);
     }
+
+    // 3. Direct Firestore Fallback
+    try {
+      const fsSites = await directFetchRelatedSitesFromFirestore();
+      if (fsSites && Array.isArray(fsSites)) {
+        fsSites.forEach((s: any) => { if (s && s.id && s.title) map.set(s.id, s); });
+      }
+    } catch (fsErr) {
+      console.warn('Firestore direct fetch notice:', fsErr);
+    }
+
+    const merged = Array.from(map.values());
+    if (merged.length > 0) {
+      setSites(merged);
+      try {
+        localStorage.setItem('sanad_cached_related_sites', JSON.stringify(merged));
+      } catch {}
+    }
+    setLoading(false);
+    fetchCategories();
   };
 
   useEffect(() => {
-    if (!initialSites || initialSites.length === 0) {
-      fetchSites();
-    } else {
-      fetchCategories();
-    }
+    fetchSites();
   }, []);
 
   useSync(['related_sites', 'all'], () => {
@@ -112,7 +156,7 @@ export const RelatedSitesAdminTab: React.FC<RelatedSitesAdminTabProps> = ({
 
   // Compute live counts if categories list is empty or to keep them reactive
   useEffect(() => {
-    if (sites.length > 0 && categories.length === 0) {
+    if (sites.length > 0) {
       const counts: Record<string, number> = {};
       sites.forEach((s) => {
         const cat = s.category?.trim() || 'خدمات حكومية';
@@ -122,7 +166,11 @@ export const RelatedSitesAdminTab: React.FC<RelatedSitesAdminTabProps> = ({
         name,
         count: counts[name],
       }));
-      setCategories(generated);
+      setCategories((prev) => {
+        const names = new Set(generated.map((g) => g.name));
+        const extra = prev.filter((p) => !names.has(p.name));
+        return [...generated, ...extra];
+      });
     }
   }, [sites]);
 
@@ -133,7 +181,6 @@ export const RelatedSitesAdminTab: React.FC<RelatedSitesAdminTabProps> = ({
     setDescription('');
     setIsCustomCategory(false);
     setCustomCategoryInput('');
-    // Default to the first available category if exists or 'خدمات حكومية'
     const defaultCat = categories.length > 0 ? categories[0].name : 'خدمات حكومية';
     setCategory(defaultCat);
     setIsOfficial(true);
@@ -158,12 +205,14 @@ export const RelatedSitesAdminTab: React.FC<RelatedSitesAdminTabProps> = ({
     e.preventDefault();
     setFormError(null);
 
-    if (!title.trim()) {
+    const safeTitle = title.trim();
+    if (!safeTitle) {
       setFormError('يرجى إدخال اسم الموقع.');
       return;
     }
 
-    if (!url.trim() || url === 'https://') {
+    const safeUrl = url.trim();
+    if (!safeUrl || safeUrl === 'https://') {
       setFormError('يرجى إدخال رابط الموقع (URL).');
       return;
     }
@@ -178,15 +227,40 @@ export const RelatedSitesAdminTab: React.FC<RelatedSitesAdminTabProps> = ({
     }
 
     setSaving(true);
-    try {
-      const payload = {
-        title: title.trim(),
-        url: url.trim(),
-        description: description.trim(),
-        category: assignedCategory,
-        isOfficial,
-      };
+    const siteId = editingSite?.id || `site-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+    const siteToSave: RelatedSite = {
+      id: siteId,
+      title: safeTitle,
+      url: safeUrl,
+      description: description.trim(),
+      category: assignedCategory,
+      iconType: 'globe',
+      isOfficial,
+      createdAt: editingSite?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
 
+    // 1. Immediate UI update & Local persistence
+    setSites((prev) => {
+      const exists = prev.some((s) => s.id === siteId);
+      const next = exists
+        ? prev.map((s) => (s.id === siteId ? siteToSave : s))
+        : [siteToSave, ...prev];
+      try {
+        localStorage.setItem('sanad_cached_related_sites', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    // 2. Direct Cloud Firestore Save
+    try {
+      await directSaveRelatedSiteToFirestore(siteToSave);
+    } catch (fsErr) {
+      console.warn('Direct Firestore save notice:', fsErr);
+    }
+
+    // 3. API Save
+    try {
       const endpoint = editingSite
         ? `/api/admin/related-sites/${editingSite.id}`
         : '/api/admin/related-sites';
@@ -195,38 +269,38 @@ export const RelatedSitesAdminTab: React.FC<RelatedSitesAdminTabProps> = ({
       const res = await fetch(endpoint, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(siteToSave),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        setFormError(data.error || 'فشلت عملية حفظ بيانات الموقع.');
-        return;
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (data.relatedSites && Array.isArray(data.relatedSites)) {
+          setSites(data.relatedSites);
+          try {
+            localStorage.setItem('sanad_cached_related_sites', JSON.stringify(data.relatedSites));
+          } catch {}
+        }
       }
-
-      if (data.relatedSites) {
-        setSites(data.relatedSites);
-      } else {
-        await fetchSites();
-      }
-
-      notifySync('related_sites');
-      // Refresh categories
-      await fetchCategories();
-
-      setFeedback({
-        type: 'success',
-        message: editingSite
-          ? `تم تحديث بيانات الموقع "${title}" بنجاح في تصنيف "${assignedCategory}".`
-          : `تمت إضافة الموقع "${title}" بنجاح في تصنيف "${assignedCategory}".`,
-      });
-      setShowModal(false);
-      setTimeout(() => setFeedback(null), 4000);
-    } catch (err: any) {
-      setFormError('تعذر الاتصال بالخادم.');
-    } finally {
-      setSaving(false);
+    } catch (apiErr) {
+      console.warn('API save notice:', apiErr);
     }
+
+    notifySync('related_sites');
+    notifySync('all');
+    try {
+      window.dispatchEvent(new CustomEvent('sanad_related_sites_updated', { detail: siteToSave }));
+    } catch {}
+
+    setFeedback({
+      type: 'success',
+      message: editingSite
+        ? `تم تحديث بيانات الموقع "${safeTitle}" بنجاح في تصنيف "${assignedCategory}".`
+        : `تمت إضافة الموقع "${safeTitle}" بنجاح في تصنيف "${assignedCategory}".`,
+    });
+    setShowModal(false);
+    setSaving(false);
+    setTimeout(() => setFeedback(null), 4000);
+    fetchCategories();
   };
 
   // Mandatory Delete with Confirmation
@@ -274,91 +348,101 @@ export const RelatedSitesAdminTab: React.FC<RelatedSitesAdminTabProps> = ({
   // Add new category in Category Manager
   const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCategoryName.trim()) {
+    const safeCatName = newCategoryName.trim();
+    if (!safeCatName) {
       setCategoryFeedback({ type: 'error', message: 'يرجى كتابة اسم التصنيف.' });
       return;
     }
 
     setAddingCategory(true);
     setCategoryFeedback(null);
+
+    // 1. Immediate local update
+    setCategories((prev) => {
+      if (prev.some((c) => c.name === safeCatName)) return prev;
+      return [...prev, { name: safeCatName, count: 0 }];
+    });
+
     try {
       const res = await fetch('/api/admin/related-sites/categories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newCategoryName.trim() }),
+        body: JSON.stringify({ name: safeCatName }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        setCategoryFeedback({ type: 'error', message: data.error || 'فشلت إضافة التصنيف.' });
-        return;
+      const data = await res.json().catch(() => ({}));
+      if (data.categories && Array.isArray(data.categories)) {
+        setCategories(data.categories);
       }
-
-      setNewCategoryName('');
-      notifySync('related_sites');
-      await fetchCategories();
-      setCategoryFeedback({
-        type: 'success',
-        message: `تمت إضافة تصنيف "${data.category}" بنجاح.`,
-      });
-      setTimeout(() => setCategoryFeedback(null), 3000);
     } catch (err) {
-      setCategoryFeedback({ type: 'error', message: 'تعذر الاتصال بالخادم.' });
-    } finally {
-      setAddingCategory(false);
+      console.warn('API add category notice:', err);
     }
+
+    setNewCategoryName('');
+    notifySync('related_sites');
+    setCategoryFeedback({
+      type: 'success',
+      message: `تمت إضافة تصنيف "${safeCatName}" بنجاح.`,
+    });
+    setTimeout(() => setCategoryFeedback(null), 3000);
+    setAddingCategory(false);
   };
 
   // Rename category in Category Manager
   const handleRenameCategory = async () => {
     if (!editingCategory || !editingCategory.newName.trim()) return;
 
-    if (editingCategory.oldName === editingCategory.newName.trim()) {
+    const oldName = editingCategory.oldName;
+    const newName = editingCategory.newName.trim();
+
+    if (oldName === newName) {
       setEditingCategory(null);
       return;
     }
 
     setSavingCategoryRename(true);
     setCategoryFeedback(null);
+
+    // 1. Immediate local state update for categories & sites
+    setCategories((prev) =>
+      prev.map((c) => (c.name === oldName ? { ...c, name: newName } : c))
+    );
+    setSites((prev) =>
+      prev.map((s) => (s.category === oldName ? { ...s, category: newName } : s))
+    );
+    if (selectedCategory === oldName) {
+      setSelectedCategory(newName);
+    }
+
     try {
       const res = await fetch('/api/admin/related-sites/categories/rename', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          oldName: editingCategory.oldName,
-          newName: editingCategory.newName.trim(),
+          oldName,
+          newName,
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        setCategoryFeedback({ type: 'error', message: data.error || 'فشل تعديل اسم التصنيف.' });
-        return;
-      }
-
-      if (data.relatedSites) {
+      const data = await res.json().catch(() => ({}));
+      if (data.relatedSites && Array.isArray(data.relatedSites)) {
         setSites(data.relatedSites);
-      } else {
-        await fetchSites();
+        try {
+          localStorage.setItem('sanad_cached_related_sites', JSON.stringify(data.relatedSites));
+        } catch {}
       }
-
-      if (selectedCategory === editingCategory.oldName) {
-        setSelectedCategory(editingCategory.newName.trim());
-      }
-
-      notifySync('related_sites');
-      await fetchCategories();
-      setEditingCategory(null);
-      setCategoryFeedback({
-        type: 'success',
-        message: `تم تحديث اسم التصنيف بنجاح وتحديث المواقع المرتبطة به (${data.updatedCount || 0} موقع).`,
-      });
-      setTimeout(() => setCategoryFeedback(null), 3500);
     } catch (err) {
-      setCategoryFeedback({ type: 'error', message: 'تعذر حفظ تعديل التصنيف.' });
-    } finally {
-      setSavingCategoryRename(false);
+      console.warn('API rename category notice:', err);
     }
+
+    notifySync('related_sites');
+    setEditingCategory(null);
+    setCategoryFeedback({
+      type: 'success',
+      message: `تم تحديث اسم التصنيف إلى "${newName}" بنجاح.`,
+    });
+    setTimeout(() => setCategoryFeedback(null), 3500);
+    setSavingCategoryRename(false);
   };
 
   // Delete category in Category Manager

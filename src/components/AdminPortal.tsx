@@ -3513,8 +3513,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                               <span className="text-gray-400 text-[11px]">غير محدد</span>
                             )}
                           </td>
-                          <td className="py-3.5 px-4 text-gray-500">
-                            {new Date(user.createdAt).toLocaleString('ar-EG', {
+                          <td className="py-3.5 px-4 text-gray-500 font-mono">
+                            {new Date(user.createdAt).toLocaleString('ar-EG-u-nu-latn', {
                               dateStyle: 'medium',
                               timeStyle: 'short',
                             })}
@@ -3554,7 +3554,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                                 </span>
                                 {user.subscribedAt && (
                                   <div className="text-[10px] text-gray-500 mt-0.5">
-                                    مشترك منذ {new Date(user.subscribedAt).toLocaleDateString('ar-EG')}
+                                    مشترك منذ {new Date(user.subscribedAt).toLocaleDateString('ar-EG-u-nu-latn')}
                                   </div>
                                 )}
                               </div>
@@ -3576,7 +3576,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                                 </span>
                                 {user.trialEndsAt && (
                                   <div className="text-[10px] text-gray-500 mt-0.5">
-                                    تنتهي: {new Date(user.trialEndsAt).toLocaleDateString('ar-EG')}
+                                    تنتهي: {new Date(user.trialEndsAt).toLocaleDateString('ar-EG-u-nu-latn')}
                                   </div>
                                 )}
                               </div>
@@ -4614,7 +4614,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                         <span>معرّف المرجع: {law.id}</span>
                         <span>
                           آخر تحديث:{' '}
-                          {new Date(law.updatedAt || law.createdAt).toLocaleDateString('ar-EG')}
+                          {new Date(law.updatedAt || law.createdAt).toLocaleDateString('ar-EG-u-nu-latn')}
                         </span>
                       </div>
                     </div>
@@ -6844,7 +6844,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                   <div className="flex justify-between text-gray-700">
                     <span className="text-gray-500">تاريخ انتهاء التجربة:</span>
                     <span className="font-mono text-[11px] font-bold">
-                      {new Date(trialModalUser.trialEndsAt).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' })}
+                      {new Date(trialModalUser.trialEndsAt).toLocaleString('ar-EG-u-nu-latn', { dateStyle: 'medium', timeStyle: 'short' })}
                     </span>
                   </div>
                 )}

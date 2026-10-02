@@ -22,9 +22,10 @@ import {
   AlertCircle,
   UserCheck
 } from 'lucide-react';
-import { RelatedSite, ProfessionalType, PALESTINIAN_GOVERNORATES, PROFESSIONAL_SERVICES_LIST } from '../types';
+import { RelatedSite, ProfessionalType, PALESTINIAN_GOVERNORATES } from '../types';
 import { useSync, notifySync } from '../utils/sync';
 import { compressImageClientSide } from '../utils/imageCompressor';
+import { getCachedProfessionalServices, fetchProfessionalServices } from '../services/professionalTypesService';
 
 interface RelatedSitesViewProps {
   onBackToHome: () => void;
@@ -65,27 +66,86 @@ export const RelatedSitesView: React.FC<RelatedSitesViewProps> = ({
   const [formServices, setFormServices] = useState<string[]>([]);
   const [formLogoUrl, setFormLogoUrl] = useState('');
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [dynamicServices, setDynamicServices] = useState<string[]>(() => getCachedProfessionalServices());
+
+  useEffect(() => {
+    fetchProfessionalServices().then((srvs) => {
+      if (srvs && srvs.length > 0) {
+        setDynamicServices(srvs);
+      }
+    });
+
+    const handleServicesUpdate = (e: any) => {
+      if (e.detail && Array.isArray(e.detail)) {
+        setDynamicServices(e.detail);
+      }
+    };
+    window.addEventListener('sanad_professional_services_updated', handleServicesUpdate);
+    return () => window.removeEventListener('sanad_professional_services_updated', handleServicesUpdate);
+  }, []);
+
+  useSync(['professionals_services', 'settings', 'all'], () => {
+    fetchProfessionalServices().then((srvs) => {
+      if (srvs && srvs.length > 0) {
+        setDynamicServices(srvs);
+      }
+    });
+  });
 
   const fetchSites = async () => {
     setLoading(true);
+    const map = new Map<string, RelatedSite>();
+
+    // 1. Cached sites
     try {
-      const res = await fetch('/api/related-sites');
-      const data = await res.json();
-      if (res.ok && data.relatedSites) {
-        setSites(data.relatedSites);
+      const cached = localStorage.getItem('sanad_cached_related_sites');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((s: any) => { if (s && s.id && s.title) map.set(s.id, s); });
+        }
+      }
+    } catch {}
+
+    // 2. API fetch
+    try {
+      const res = await fetch(`/api/related-sites?t=${Date.now()}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.relatedSites && Array.isArray(data.relatedSites)) {
+          data.relatedSites.forEach((s: any) => { if (s && s.id && s.title) map.set(s.id, s); });
+        }
       }
     } catch (err) {
-      console.warn('Failed to load related sites:', err);
-    } finally {
-      setLoading(false);
+      console.warn('API fetch related sites notice, trying Firestore fallback:', err);
     }
+
+    // 3. Direct Firestore Fallback
+    try {
+      const { directFetchRelatedSitesFromFirestore } = await import('../services/clientFirestore');
+      const fsSites = await directFetchRelatedSitesFromFirestore();
+      if (fsSites && Array.isArray(fsSites)) {
+        fsSites.forEach((s: any) => { if (s && s.id && s.title) map.set(s.id, s); });
+      }
+    } catch (fsErr) {
+      console.warn('Firestore fallback fetch notice:', fsErr);
+    }
+
+    const merged = Array.from(map.values());
+    if (merged.length > 0) {
+      setSites(merged);
+      try {
+        localStorage.setItem('sanad_cached_related_sites', JSON.stringify(merged));
+      } catch {}
+    }
+    setLoading(false);
   };
 
   useEffect(() => {
     fetchSites();
   }, []);
 
-  useSync(['related_sites'], () => {
+  useSync(['related_sites', 'all'], () => {
     fetchSites();
   });
 
@@ -699,7 +759,7 @@ export const RelatedSitesView: React.FC<RelatedSitesViewProps> = ({
                       حدد الخدمات التي تقدمها:
                     </label>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {PROFESSIONAL_SERVICES_LIST.map((srv) => {
+                      {dynamicServices.map((srv) => {
                         const checked = formServices.includes(srv);
                         return (
                           <button

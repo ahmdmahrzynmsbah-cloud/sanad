@@ -258,3 +258,15 @@ export function normalizeAndFixArabicText(rawText: string): string {
 
   return text;
 }
+
+/**
+ * Converts Eastern Arabic numerals (٠١٢٣٤٥٦٧٨٩) and Persian numerals (۰۱۲۳۴۵۶۷۸۹)
+ * to standard English/Latin numerals (0123456789) e.g. 22
+ */
+export function convertArabicNumeralsToEnglish(str: string | number | null | undefined): string {
+  if (str === null || str === undefined) return '';
+  const s = String(str);
+  return s
+    .replace(/[٠-٩]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 1632 + 48))
+    .replace(/[۰-۹]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 1776 + 48));
+}

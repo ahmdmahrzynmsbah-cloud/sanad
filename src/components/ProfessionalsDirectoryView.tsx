@@ -29,7 +29,10 @@ import {
   Edit3,
   Trash2,
   RotateCcw,
-  Check
+  Check,
+  Layers,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import {
   ProfessionalProfile,
@@ -46,7 +49,10 @@ import { directFetchProfessionalsPaginatedFromFirestore } from '../services/clie
 import {
   getCachedProfessionalTypes,
   fetchProfessionalTypes,
-  saveProfessionalTypesList
+  saveProfessionalTypesList,
+  getCachedProfessionalServices,
+  fetchProfessionalServices,
+  saveProfessionalServicesList
 } from '../services/professionalTypesService';
 
 interface ProfessionalsDirectoryViewProps {
@@ -107,6 +113,15 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
   const [newTypeIcon, setNewTypeIcon] = useState<string>('UserCheck');
   const [typeManagerFeedback, setTypeManagerFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+  // Dynamic Professional Services State
+  const [dynamicServices, setDynamicServices] = useState<string[]>(() => getCachedProfessionalServices());
+  const [showServicesManagerModal, setShowServicesManagerModal] = useState<boolean>(false);
+  const [editingServicesList, setEditingServicesList] = useState<string[]>([]);
+  const [newServiceName, setNewServiceName] = useState<string>('');
+  const [editingServiceIdx, setEditingServiceIdx] = useState<number | null>(null);
+  const [editingServiceValue, setEditingServiceValue] = useState<string>('');
+  const [servicesManagerFeedback, setServicesManagerFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
   // Sync and fetch dynamic types
   useEffect(() => {
     fetchProfessionalTypes().then((types) => {
@@ -124,10 +139,35 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
     return () => window.removeEventListener('sanad_professional_types_updated', handleTypesUpdate);
   }, []);
 
+  // Sync and fetch dynamic services
+  useEffect(() => {
+    fetchProfessionalServices().then((srvs) => {
+      if (srvs && srvs.length > 0) {
+        setDynamicServices(srvs);
+      }
+    });
+
+    const handleServicesUpdate = (e: any) => {
+      if (e.detail && Array.isArray(e.detail)) {
+        setDynamicServices(e.detail);
+      }
+    };
+    window.addEventListener('sanad_professional_services_updated', handleServicesUpdate);
+    return () => window.removeEventListener('sanad_professional_services_updated', handleServicesUpdate);
+  }, []);
+
   useSync(['professionals_types', 'settings', 'all'], () => {
     fetchProfessionalTypes().then((types) => {
       if (types && types.length > 0) {
         setDynamicTypes(types);
+      }
+    });
+  });
+
+  useSync(['professionals_services', 'settings', 'all'], () => {
+    fetchProfessionalServices().then((srvs) => {
+      if (srvs && srvs.length > 0) {
+        setDynamicServices(srvs);
       }
     });
   });
@@ -516,6 +556,93 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
     }
   };
 
+  // Professional Services Management Handlers
+  const handleOpenServicesManager = () => {
+    setEditingServicesList([...dynamicServices]);
+    setNewServiceName('');
+    setEditingServiceIdx(null);
+    setEditingServiceValue('');
+    setServicesManagerFeedback(null);
+    setShowServicesManagerModal(true);
+  };
+
+  const handleSaveCustomServices = async (servicesToSave: string[]) => {
+    const cleaned = servicesToSave.map((s) => s.trim()).filter(Boolean);
+    setDynamicServices(cleaned);
+    await saveProfessionalServicesList(cleaned);
+    notifySync('professionals_services');
+    setServicesManagerFeedback({ type: 'success', message: 'تم حفظ وتحديث قائمة الخدمات بنجاح!' });
+    setTimeout(() => {
+      setServicesManagerFeedback(null);
+    }, 3000);
+  };
+
+  const handleAddNewService = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = newServiceName.trim();
+    if (!trimmed) return;
+    if (editingServicesList.includes(trimmed)) {
+      setServicesManagerFeedback({ type: 'error', message: 'هذه الخدمة موجودة بالفعل في القائمة.' });
+      return;
+    }
+    const updated = [...editingServicesList, trimmed];
+    setEditingServicesList(updated);
+    setNewServiceName('');
+    await handleSaveCustomServices(updated);
+  };
+
+  const handleStartEditService = (idx: number, currentVal: string) => {
+    setEditingServiceIdx(idx);
+    setEditingServiceValue(currentVal);
+  };
+
+  const handleSaveEditService = async (idx: number) => {
+    const trimmed = editingServiceValue.trim();
+    if (!trimmed) return;
+    const updated = [...editingServicesList];
+    updated[idx] = trimmed;
+    setEditingServicesList(updated);
+    setEditingServiceIdx(null);
+    setEditingServiceValue('');
+    await handleSaveCustomServices(updated);
+  };
+
+  const handleDeleteService = async (idx: number) => {
+    if (editingServicesList.length <= 1) {
+      alert('يجب أن تتبقى خدمة واحدة على الأقل في القائمة.');
+      return;
+    }
+    const targetName = editingServicesList[idx];
+    if (!window.confirm(`هل أنت متأكد من حذف خدمة «${targetName}» نهائياً؟`)) return;
+    const updated = editingServicesList.filter((_, i) => i !== idx);
+    setEditingServicesList(updated);
+    if (editingServiceIdx === idx) {
+      setEditingServiceIdx(null);
+      setEditingServiceValue('');
+    }
+    await handleSaveCustomServices(updated);
+  };
+
+  const handleMoveService = async (idx: number, direction: 'up' | 'down') => {
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= editingServicesList.length) return;
+    const updated = [...editingServicesList];
+    const temp = updated[idx];
+    updated[idx] = updated[targetIdx];
+    updated[targetIdx] = temp;
+    setEditingServicesList(updated);
+    await handleSaveCustomServices(updated);
+  };
+
+  const handleResetServicesToDefault = async () => {
+    if (!window.confirm('هل تريد استعادة قائمة الخدمات الافتراضية للنظام؟')) return;
+    const updated = [...PROFESSIONAL_SERVICES_LIST];
+    setEditingServicesList(updated);
+    setEditingServiceIdx(null);
+    setEditingServiceValue('');
+    await handleSaveCustomServices(updated);
+  };
+
   return (
     <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-10 space-y-5 sm:space-y-8 animate-in fade-in duration-300 font-['IBM_Plex_Sans_Arabic',sans-serif]">
       {/* Top Header & Breadcrumb */}
@@ -557,6 +684,15 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
               >
                 <Settings className="w-3.5 h-3.5 text-emerald-700" />
                 <span>تخصيص المسميات</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenServicesManager}
+                title="تعديل وتخصيص قائمة الخدمات المقدمة"
+                className="px-3.5 py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <Layers className="w-3.5 h-3.5 text-emerald-700" />
+                <span>تخصيص الخدمات</span>
               </button>
               <button
                 onClick={handleShuffle}
@@ -682,7 +818,7 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
                 className="w-full pr-9 pl-3 py-2.5 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/20 rounded-xl text-xs sm:text-sm font-bold text-slate-800 transition-all cursor-pointer"
               >
                 <option value="all">كافة الخدمات والأنشطة</option>
-                {PROFESSIONAL_SERVICES_LIST.map((srv) => (
+                {dynamicServices.map((srv) => (
                   <option key={srv} value={srv}>
                     {srv}
                   </option>
@@ -1121,7 +1257,7 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
                   </div>
 
                   {/* Contact Numbers */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                     <div>
                       <label className="block text-xs font-bold text-slate-800 mb-1">
                         رقم الهاتف / الجوال الأساسي <span className="text-red-500">*</span>
@@ -1145,19 +1281,6 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
                         value={formWhatsapp}
                         onChange={(e) => setFormWhatsapp(e.target.value)}
                         placeholder="مثال: 0599123456"
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-800 mb-1">
-                        رقم ترخيص المزاولة / العضوية
-                      </label>
-                      <input
-                        type="text"
-                        value={formLicenseNumber}
-                        onChange={(e) => setFormLicenseNumber(e.target.value)}
-                        placeholder="مثال: JCPA-105"
                         className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:bg-white"
                       />
                     </div>
@@ -1239,11 +1362,23 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
 
                   {/* Services Selection */}
                   <div>
-                    <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                      الخدمات التي تقدمها (حدد ما ينطبق):
-                    </label>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-bold text-slate-800">
+                        الخدمات التي تقدمها (حدد ما ينطبق):
+                      </label>
+                      {isUserAdmin && (
+                        <button
+                          type="button"
+                          onClick={handleOpenServicesManager}
+                          className="text-[11px] font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                        >
+                          <Layers className="w-3 h-3 text-emerald-700" />
+                          <span>تعديل وإدارة الخدمات</span>
+                        </button>
+                      )}
+                    </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {PROFESSIONAL_SERVICES_LIST.map((srv) => {
+                      {dynamicServices.map((srv) => {
                         const checked = formServices.includes(srv);
                         return (
                           <button
@@ -1513,6 +1648,223 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
               >
                 <Check className="w-4 h-4 text-emerald-400" />
                 <span>حفظ واعتماد المسميات</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dynamic Services Manager Modal (إدارة وتخصيص قائمة الخدمات المقدمة) */}
+      {showServicesManagerModal && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 bg-[#12281e] text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-400">
+                  <Layers className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-white">إدارة وتخصيص قائمة الخدمات المقدمة</h3>
+                  <p className="text-[11px] text-emerald-300">
+                    يمكنك إضافة خدمات جديدة، تعديل مسميات الخدمات الحالية، إعادة ترتيبها، أو حذفها
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowServicesManagerModal(false)}
+                className="text-slate-300 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 sm:p-6 overflow-y-auto flex-1 space-y-6">
+              {servicesManagerFeedback && (
+                <div
+                  className={`p-3 border rounded-xl text-xs font-bold flex items-center gap-2 ${
+                    servicesManagerFeedback.type === 'success'
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                      : 'bg-red-50 border-red-200 text-red-700'
+                  }`}
+                >
+                  {servicesManagerFeedback.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                  )}
+                  <span>{servicesManagerFeedback.message}</span>
+                </div>
+              )}
+
+              {/* Add New Service Form */}
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+                <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <Plus className="w-4 h-4 text-emerald-700" />
+                  <span>إضافة خدمة جديدة إلى القائمة</span>
+                </h4>
+                <form onSubmit={handleAddNewService} className="flex gap-2">
+                  <input
+                    type="text"
+                    required
+                    value={newServiceName}
+                    onChange={(e) => setNewServiceName(e.target.value)}
+                    placeholder="مثال: استشارات ضريبة القيمة المضافة / تسويات بنكية..."
+                    className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-700"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!newServiceName.trim()}
+                    className="px-4 py-2 bg-[#12281e] hover:bg-[#1a382b] text-white text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>إضافة الخدمة</span>
+                  </button>
+                </form>
+              </div>
+
+              {/* Current Services List */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-slate-800">
+                    الخدمات المسجلة حالياً ({editingServicesList.length}):
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={handleResetServicesToDefault}
+                    className="text-[11px] font-bold text-slate-500 hover:text-red-700 flex items-center gap-1 cursor-pointer transition-colors"
+                    title="إعادة التعيين للخدمات الافتراضية"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>استعادة الافتراضية</span>
+                  </button>
+                </div>
+
+                <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+                  {editingServicesList.map((serviceName, idx) => {
+                    const isEditing = editingServiceIdx === idx;
+                    return (
+                      <div
+                        key={idx}
+                        className="p-2.5 sm:p-3 bg-white rounded-xl border border-slate-200 hover:border-emerald-300 shadow-2xs flex items-center justify-between gap-2 transition-colors"
+                      >
+                        {isEditing ? (
+                          <div className="flex items-center gap-2 flex-1">
+                            <input
+                              type="text"
+                              value={editingServiceValue}
+                              onChange={(e) => setEditingServiceValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleSaveEditService(idx);
+                                } else if (e.key === 'Escape') {
+                                  setEditingServiceIdx(null);
+                                  setEditingServiceValue('');
+                                }
+                              }}
+                              autoFocus
+                              className="flex-1 px-2.5 py-1.5 bg-slate-50 focus:bg-white border border-emerald-600 rounded-lg text-xs font-bold text-slate-900 focus:outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleSaveEditService(idx)}
+                              className="p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors cursor-pointer"
+                              title="حفظ التعديل"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingServiceIdx(null);
+                                setEditingServiceValue('');
+                              }}
+                              className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition-colors cursor-pointer"
+                              title="إلغاء"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                              <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-bold flex items-center justify-center shrink-0">
+                                {idx + 1}
+                              </span>
+                              <span className="text-xs font-bold text-slate-800 truncate">
+                                {serviceName}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1 shrink-0">
+                              {/* Move Up */}
+                              <button
+                                type="button"
+                                disabled={idx === 0}
+                                onClick={() => handleMoveService(idx, 'up')}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent transition-colors cursor-pointer"
+                                title="تحريك لأعلى"
+                              >
+                                <ArrowUp className="w-3.5 h-3.5" />
+                              </button>
+
+                              {/* Move Down */}
+                              <button
+                                type="button"
+                                disabled={idx === editingServicesList.length - 1}
+                                onClick={() => handleMoveService(idx, 'down')}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent transition-colors cursor-pointer"
+                                title="تحريك لأسفل"
+                              >
+                                <ArrowDown className="w-3.5 h-3.5" />
+                              </button>
+
+                              {/* Edit Name */}
+                              <button
+                                type="button"
+                                onClick={() => handleStartEditService(idx, serviceName)}
+                                className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 transition-colors cursor-pointer"
+                                title="تعديل مسمى الخدمة"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+
+                              {/* Delete */}
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteService(idx)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                                title="حذف هذه الخدمة"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+              <span className="text-[11px] text-slate-500">
+                يتم تطبيق التعديلات ومزامنتها على فلاتر البحث ونماذج التسجيل فوراً
+              </span>
+              <button
+                type="button"
+                onClick={async () => {
+                  await handleSaveCustomServices(editingServicesList);
+                  setShowServicesManagerModal(false);
+                }}
+                className="px-5 py-2.5 bg-[#12281e] hover:bg-[#1a382b] text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Check className="w-4 h-4 text-emerald-400" />
+                <span>حفظ وإغلاق</span>
               </button>
             </div>
           </div>

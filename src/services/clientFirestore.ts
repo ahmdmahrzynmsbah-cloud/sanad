@@ -2429,4 +2429,45 @@ export async function directSaveProfessionalTypesToFirestore(types: any[]): Prom
   }
 }
 
+/**
+ * Fetch dynamic professional services list from Firestore
+ */
+export async function directFetchProfessionalServicesFromFirestore(): Promise<string[] | null> {
+  const db = getClientDb();
+  if (!db) return null;
+  try {
+    const docRef = doc(db, 'system_settings', 'professional_services');
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      if (data && Array.isArray(data.services)) {
+        return data.services;
+      }
+    }
+    return null;
+  } catch (err) {
+    handleClientFirestoreError('directFetchProfessionalServicesFromFirestore', err);
+    return null;
+  }
+}
+
+/**
+ * Save dynamic professional services list to Firestore
+ */
+export async function directSaveProfessionalServicesToFirestore(services: string[]): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+  try {
+    const docRef = doc(db, 'system_settings', 'professional_services');
+    await setDoc(docRef, {
+      services,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+    return true;
+  } catch (err) {
+    handleClientFirestoreError('directSaveProfessionalServicesToFirestore', err);
+    return false;
+  }
+}
+
 

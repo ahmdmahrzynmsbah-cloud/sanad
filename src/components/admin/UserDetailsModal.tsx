@@ -66,7 +66,7 @@ export const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
     try {
       const d = new Date(dateStr);
       if (isNaN(d.getTime())) return 'غير متوفر';
-      return d.toLocaleString('ar-EG', {
+      return d.toLocaleString('ar-EG-u-nu-latn', {
         weekday: 'long',
         year: 'numeric',
         month: 'long',
@@ -544,7 +544,7 @@ export const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
                   </div>
                   {user.trialEndsAt && (
                     <span className="text-[10px] font-mono font-bold text-amber-900 bg-amber-100 px-2 py-1 rounded-md">
-                      ينتهي: {new Date(user.trialEndsAt).toLocaleDateString('ar-EG')}
+                      ينتهي: {new Date(user.trialEndsAt).toLocaleDateString('ar-EG-u-nu-latn')}
                     </span>
                   )}
                 </div>

@@ -10,6 +10,8 @@
   *, *::before, *::after {
     box-sizing: border-box;
     font-family: 'IBM Plex Sans Arabic', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-variant-numeric: normal;
+    font-feature-settings: "locl" 0;
   }
 
   html, body, #root {

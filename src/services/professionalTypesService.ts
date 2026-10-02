@@ -1,6 +1,7 @@
-import { ProfessionalTypeOption, DEFAULT_PROFESSIONAL_TYPES } from '../types';
+import { ProfessionalTypeOption, DEFAULT_PROFESSIONAL_TYPES, PROFESSIONAL_SERVICES_LIST } from '../types';
 
 export const PROFESSIONAL_TYPES_STORAGE_KEY = 'sanad_cached_professional_types';
+export const PROFESSIONAL_SERVICES_STORAGE_KEY = 'sanad_cached_professional_services';
 
 /**
  * Get cached professional types from localStorage or fallback to defaults
@@ -88,6 +89,97 @@ export async function saveProfessionalTypesList(types: ProfessionalTypeOption[])
   try {
     const { directSaveProfessionalTypesToFirestore } = await import('./clientFirestore');
     await directSaveProfessionalTypesToFirestore(sorted).catch(() => {});
+  } catch {}
+
+  return true;
+}
+
+/**
+ * Get cached professional services list from localStorage or fallback to defaults
+ */
+export function getCachedProfessionalServices(): string[] {
+  if (typeof window === 'undefined') return [...PROFESSIONAL_SERVICES_LIST];
+  try {
+    const raw = localStorage.getItem(PROFESSIONAL_SERVICES_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.filter((s) => typeof s === 'string' && s.trim());
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to parse cached professional services:', e);
+  }
+  return [...PROFESSIONAL_SERVICES_LIST];
+}
+
+/**
+ * Save cached professional services to localStorage and dispatch event
+ */
+export function saveCachedProfessionalServices(services: string[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const cleaned = services.map((s) => s.trim()).filter(Boolean);
+    localStorage.setItem(PROFESSIONAL_SERVICES_STORAGE_KEY, JSON.stringify(cleaned));
+    window.dispatchEvent(new CustomEvent('sanad_professional_services_updated', { detail: cleaned }));
+  } catch (e) {
+    console.warn('Failed to save cached professional services:', e);
+  }
+}
+
+/**
+ * Fetch professional services list from API and Firestore
+ */
+export async function fetchProfessionalServices(): Promise<string[]> {
+  let services: string[] = getCachedProfessionalServices();
+
+  // 1. API fetch
+  try {
+    const res = await fetch(`/api/professionals/services?_t=${Date.now()}`, { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.services && Array.isArray(data.services) && data.services.length > 0) {
+        services = data.services;
+        saveCachedProfessionalServices(services);
+        return services;
+      }
+    }
+  } catch {}
+
+  // 2. Direct Firestore fetch
+  try {
+    const { directFetchProfessionalServicesFromFirestore } = await import('./clientFirestore');
+    const firestoreServices = await directFetchProfessionalServicesFromFirestore();
+    if (firestoreServices && Array.isArray(firestoreServices) && firestoreServices.length > 0) {
+      services = firestoreServices;
+      saveCachedProfessionalServices(services);
+      return services;
+    }
+  } catch {}
+
+  return services;
+}
+
+/**
+ * Save / Update professional services list to API and Firestore
+ */
+export async function saveProfessionalServicesList(services: string[]): Promise<boolean> {
+  const cleaned = services.map((s) => s.trim()).filter(Boolean);
+  saveCachedProfessionalServices(cleaned);
+
+  // Background API save
+  try {
+    fetch('/api/admin/professionals/services', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ services: cleaned }),
+    }).catch(() => {});
+  } catch {}
+
+  // Background Firestore save
+  try {
+    const { directSaveProfessionalServicesToFirestore } = await import('./clientFirestore');
+    await directSaveProfessionalServicesToFirestore(cleaned).catch(() => {});
   } catch {}
 
   return true;

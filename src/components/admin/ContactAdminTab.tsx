@@ -679,7 +679,7 @@ export const ContactAdminTab: React.FC<ContactAdminTabProps> = ({ onContactUpdat
       {/* Save Button Footer */}
       <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="text-xs text-slate-500">
-          {updatedAt ? `آخر تحديث مسجل: ${new Date(updatedAt).toLocaleString('ar-EG')}` : 'لم يتم تسجيل أي تعديل بعد'}
+          {updatedAt ? `آخر تحديث مسجل: ${new Date(updatedAt).toLocaleString('ar-EG-u-nu-latn')}` : 'لم يتم تسجيل أي تعديل بعد'}
         </div>
 
         <button
