@@ -353,6 +353,7 @@ export interface StoredSettings {
   authPortalFeature1?: string;
   authPortalFeature2?: string;
   authPortalFeature3?: string;
+  [key: string]: any;
 }
 
 export async function fetchSettingsFromFirestore(): Promise<StoredSettings | null> {

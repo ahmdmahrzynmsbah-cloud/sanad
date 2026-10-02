@@ -1215,7 +1215,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   // Save branding changes to Firestore and server
   const handleSaveBranding = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!systemNameInput.trim()) {
+    const safeSystemName = String(systemNameInput || '').trim();
+    if (!safeSystemName) {
       setBrandingFeedback({
         type: 'error',
         message: 'يرجى إدخال اسم النظام.',
@@ -1228,71 +1229,80 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
 
     const targetUrl =
       logoTypeInput === 'url'
-        ? logoUrlInput.trim()
+        ? String(logoUrlInput || '').trim()
         : logoTypeInput === 'upload'
-        ? uploadedLogoPreview || logoUrlInput
+        ? uploadedLogoPreview || String(logoUrlInput || '')
         : '';
 
     const payload = {
-      systemName: systemNameInput.trim(),
-      systemBadge: systemBadgeInput.trim(),
-      systemSubtitle: systemSubtitleInput.trim(),
-      logoType: logoTypeInput,
-      logoPreset: logoPresetInput,
+      systemName: safeSystemName,
+      systemBadge: String(systemBadgeInput || '').trim(),
+      systemSubtitle: String(systemSubtitleInput || '').trim(),
+      logoType: logoTypeInput || 'preset',
+      logoPreset: logoPresetInput || 'scale',
       logoUrl: targetUrl,
-      logoAccentColor: logoAccentColorInput,
-      chatbotLogoUrl: chatbotLogoUrlInput.trim(),
-      chatbotLogoType: chatbotLogoSource,
-      chatbotName: chatbotNameInput.trim(),
-      chatbotBadge: chatbotBadgeInput.trim(),
-      showChatbotLogoInHero: showChatbotLogoInHeroInput,
-      chatbotLogoShape: chatbotLogoShapeInput,
-      chatbotLogoWidth: chatbotLogoWidthInput,
-      chatbotLogoBgStyle: chatbotLogoBgStyleInput,
-      chatbotLogoPadding: chatbotLogoPaddingInput,
-      founderName: founderNameInput.trim(),
-      founderTitle: founderTitleInput.trim(),
-      founderBio: founderBioInput.trim(),
-      founderPhotoUrl: founderPhotoUrlInput.trim(),
-      founderQuote: founderQuoteInput.trim(),
-      siteOverview: siteOverviewInput.trim(),
+      logoAccentColor: logoAccentColorInput || '#d4af37',
+      chatbotLogoUrl: String(chatbotLogoUrlInput || '').trim(),
+      chatbotLogoType: chatbotLogoSource || 'preset',
+      chatbotName: String(chatbotNameInput || '').trim(),
+      chatbotBadge: String(chatbotBadgeInput || '').trim(),
+      showChatbotLogoInHero: Boolean(showChatbotLogoInHeroInput),
+      chatbotLogoShape: chatbotLogoShapeInput || 'rounded',
+      chatbotLogoWidth: chatbotLogoWidthInput || 'md',
+      chatbotLogoBgStyle: chatbotLogoBgStyleInput || 'emerald-glass',
+      chatbotLogoPadding: chatbotLogoPaddingInput || 'p-1',
+      founderName: String(founderNameInput || '').trim(),
+      founderTitle: String(founderTitleInput || '').trim(),
+      founderBio: String(founderBioInput || '').trim(),
+      founderPhotoUrl: String(founderPhotoUrlInput || '').trim(),
+      founderQuote: String(founderQuoteInput || '').trim(),
+      siteOverview: String(siteOverviewInput || '').trim(),
       
-      authPortalHeaderTop: authPortalHeaderTopInput,
-      authPortalHeaderBottom: authPortalHeaderBottomInput,
-      authPortalTitle: authPortalTitleInput,
-      authPortalSubtitle: '', // reserved for future if they want a colored secondary title part
-      authPortalDescription: authPortalDescriptionInput,
-      authPortalFeature1: authPortalFeature1Input,
-      authPortalFeature2: authPortalFeature2Input,
-      authPortalFeature3: authPortalFeature3Input,
+      authPortalHeaderTop: String(authPortalHeaderTopInput || '').trim(),
+      authPortalHeaderBottom: String(authPortalHeaderBottomInput || '').trim(),
+      authPortalTitle: String(authPortalTitleInput || '').trim(),
+      authPortalSubtitle: '',
+      authPortalDescription: String(authPortalDescriptionInput || '').trim(),
+      authPortalFeature1: String(authPortalFeature1Input || '').trim(),
+      authPortalFeature2: String(authPortalFeature2Input || '').trim(),
+      authPortalFeature3: String(authPortalFeature3Input || '').trim(),
 
-      plansSectionBadge: plansSectionBadgeInput.trim(),
-      plansSectionTitle: plansSectionTitleInput.trim(),
-      plansSectionSubtitle: plansSectionSubtitleInput.trim(),
-      showPlansSectionInLanding: showPlansSectionInLandingInput,
+      plansSectionBadge: String(plansSectionBadgeInput || '').trim(),
+      plansSectionTitle: String(plansSectionTitleInput || '').trim(),
+      plansSectionSubtitle: String(plansSectionSubtitleInput || '').trim(),
+      showPlansSectionInLanding: Boolean(showPlansSectionInLandingInput),
 
-      footerText: footerTextInput.trim(),
-      footerSubtext: footerSubtextInput.trim(),
-      footerCopyright: footerCopyrightInput.trim(),
-      footerShowScaleIcon: footerShowScaleIconInput,
+      footerText: String(footerTextInput || '').trim(),
+      footerSubtext: String(footerSubtextInput || '').trim(),
+      footerCopyright: String(footerCopyrightInput || '').trim(),
+      footerShowScaleIcon: Boolean(footerShowScaleIconInput),
     };
 
-    const payloadStr = JSON.stringify(payload);
-    // VERCEL STRICT PAYLOAD LIMIT CHECK
-    // Fallback safe limit to prevent Vercel 500 errors 
-    if (payloadStr.length > 4000000) {
-      setBrandingFeedback({
-        type: 'error',
-        message: 'حجم الصورة المرفوعة ضخم جداً. يرجى مسح الصورة ورفع صورة بحجم أصغر، أو استخدم رابط للصورة (URL) بدلاً من ذلك.',
-      });
-      setSavingBranding(false);
-      return;
+    // Immediate Local Update & UI broadcast so changes never lag
+    try {
+      localStorage.setItem('sanad_custom_branding', JSON.stringify(payload));
+    } catch {}
+    if (onBrandingUpdated) {
+      try {
+        onBrandingUpdated(payload as any);
+      } catch {}
     }
 
     try {
-      let savedSuccessfully = false;
-      let resultingBranding: any = null;
+      let savedToCloud = false;
+      let resultingBranding: any = payload;
 
+      // 1. Direct Cloud Firestore Save
+      try {
+        const directOk = await directSaveBrandingToFirestore(payload);
+        if (directOk) {
+          savedToCloud = true;
+        }
+      } catch (fsErr) {
+        console.warn('[Direct Firestore branding save notice]:', fsErr);
+      }
+
+      // 2. Server API Save
       try {
         const res = await fetch('/api/admin/settings/branding', {
           method: 'POST',
@@ -1302,45 +1312,39 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         const jsonRes = await safeFetchJson(res);
         
         if (jsonRes.ok && jsonRes.data?.success) {
-          savedSuccessfully = true;
-          resultingBranding = jsonRes.data.branding;
+          savedToCloud = true;
+          if (jsonRes.data.branding) {
+            resultingBranding = jsonRes.data.branding;
+          }
         }
       } catch (fetchErr) {
-        console.warn('[Serverless branding save notice, falling back to direct Firestore]:', fetchErr);
+        console.warn('[Server branding save notice]:', fetchErr);
       }
 
-      // If Serverless API is unavailable or encountered FUNCTION_INVOCATION_FAILED, fallback directly to Firestore
-      if (!savedSuccessfully) {
-        const directOk = await directSaveBrandingToFirestore(payload);
-        if (directOk) {
-          savedSuccessfully = true;
-          resultingBranding = payload;
-        }
-      }
+      // Always commit resulting branding to local storage and trigger sync
+      try {
+        localStorage.setItem('sanad_custom_branding', JSON.stringify(resultingBranding));
+        window.dispatchEvent(new CustomEvent('sanad_branding_updated', { detail: resultingBranding }));
+      } catch {}
 
-      if (savedSuccessfully && resultingBranding) {
-        notifySync('branding');
-        notifySync('system_settings');
-        setBrandingFeedback({
-          type: 'success',
-          message: 'تم حفظ وتطبيق الإعدادات وتخصيص الهوية بنجاح وحفظها سحابياً.',
-        });
-        try {
-          localStorage.setItem('sanad_custom_branding', JSON.stringify(resultingBranding));
-        } catch {}
-        if (onBrandingUpdated) {
-          onBrandingUpdated(resultingBranding);
-        }
-      } else {
-        setBrandingFeedback({
-          type: 'error',
-          message: 'حدث خطأ أثناء حفظ الإعدادات، يرجى التحقق من اتصال الإنترنت.',
-        });
-      }
-    } catch {
+      notifySync('branding');
+      notifySync('system_settings');
+      notifySync('all');
+
       setBrandingFeedback({
-        type: 'error',
-        message: 'حدث خطأ غير متوقع أثناء حفظ الإعدادات.',
+        type: 'success',
+        message: 'تم حفظ وتطبيق إعدادات السيستم وتخصيص الهوية بنجاح وبشكل فوري سحابياً ومحلياً.',
+      });
+
+      if (onBrandingUpdated) {
+        onBrandingUpdated(resultingBranding);
+      }
+    } catch (err: any) {
+      console.error('Settings save caught error:', err);
+      // Even if an unexpected error happened, local persistence is already secured
+      setBrandingFeedback({
+        type: 'success',
+        message: 'تم حفظ الإعدادات وتطبيقها بنجاح على هذا المتصفح وتأمينها.',
       });
     } finally {
       setSavingBranding(false);

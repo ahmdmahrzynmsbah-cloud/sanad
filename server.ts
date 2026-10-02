@@ -521,6 +521,10 @@ interface DBSettings {
   chatbotName?: string;
   chatbotBadge?: string;
   showChatbotLogoInHero?: boolean;
+  chatbotLogoShape?: string;
+  chatbotLogoWidth?: string;
+  chatbotLogoBgStyle?: string;
+  chatbotLogoPadding?: string;
 
   // Founder Info & Site Overview
   founderName?: string;
@@ -2401,6 +2405,10 @@ app.post('/api/admin/settings/branding', async (req, res, next) => {
     if (showChatbotLogoInHero !== undefined) {
       db.settings.showChatbotLogoInHero = Boolean(showChatbotLogoInHero);
     }
+    if (req.body.chatbotLogoShape) db.settings.chatbotLogoShape = req.body.chatbotLogoShape;
+    if (req.body.chatbotLogoWidth) db.settings.chatbotLogoWidth = req.body.chatbotLogoWidth;
+    if (req.body.chatbotLogoBgStyle) db.settings.chatbotLogoBgStyle = req.body.chatbotLogoBgStyle;
+    if (req.body.chatbotLogoPadding) db.settings.chatbotLogoPadding = req.body.chatbotLogoPadding;
 
     if (founderPhotoUrl !== undefined) {
       if (String(founderPhotoUrl).length > 5000000) {
@@ -2456,6 +2464,10 @@ app.post('/api/admin/settings/branding', async (req, res, next) => {
       chatbotName: db.settings.chatbotName,
       chatbotBadge: db.settings.chatbotBadge,
       showChatbotLogoInHero: db.settings.showChatbotLogoInHero !== false,
+      chatbotLogoShape: db.settings.chatbotLogoShape,
+      chatbotLogoWidth: db.settings.chatbotLogoWidth,
+      chatbotLogoBgStyle: db.settings.chatbotLogoBgStyle,
+      chatbotLogoPadding: db.settings.chatbotLogoPadding,
 
       founderName: db.settings.founderName,
       founderTitle: db.settings.founderTitle,
@@ -2494,41 +2506,56 @@ app.post('/api/admin/settings/branding', async (req, res, next) => {
       console.warn('Firestore settings cloud sync notice:', fsErr);
     }
 
+    const brandingResult = {
+      systemName: db.settings.systemName,
+      systemSubtitle: db.settings.systemSubtitle,
+      systemBadge: db.settings.systemBadge,
+      logoType: db.settings.logoType,
+      logoPreset: db.settings.logoPreset,
+      logoUrl: db.settings.logoUrl,
+      logoAccentColor: db.settings.logoAccentColor,
+
+      chatbotLogoUrl: db.settings.chatbotLogoUrl,
+      chatbotLogoType: db.settings.chatbotLogoType,
+      chatbotName: db.settings.chatbotName,
+      chatbotBadge: db.settings.chatbotBadge,
+      showChatbotLogoInHero: db.settings.showChatbotLogoInHero !== false,
+      chatbotLogoShape: db.settings.chatbotLogoShape,
+      chatbotLogoWidth: db.settings.chatbotLogoWidth,
+      chatbotLogoBgStyle: db.settings.chatbotLogoBgStyle,
+      chatbotLogoPadding: db.settings.chatbotLogoPadding,
+
+      founderName: db.settings.founderName,
+      founderTitle: db.settings.founderTitle,
+      founderBio: db.settings.founderBio,
+      founderPhotoUrl: db.settings.founderPhotoUrl,
+      founderQuote: db.settings.founderQuote,
+      siteOverview: db.settings.siteOverview,
+
+      authPortalHeaderTop: db.settings.authPortalHeaderTop,
+      authPortalHeaderBottom: db.settings.authPortalHeaderBottom,
+      authPortalTitle: db.settings.authPortalTitle,
+      authPortalSubtitle: db.settings.authPortalSubtitle,
+      authPortalDescription: db.settings.authPortalDescription,
+      authPortalFeature1: db.settings.authPortalFeature1,
+      authPortalFeature2: db.settings.authPortalFeature2,
+      authPortalFeature3: db.settings.authPortalFeature3,
+
+      plansSectionBadge: db.settings.plansSectionBadge,
+      plansSectionTitle: db.settings.plansSectionTitle,
+      plansSectionSubtitle: db.settings.plansSectionSubtitle,
+      showPlansSectionInLanding: db.settings.showPlansSectionInLanding !== false,
+
+      footerText: db.settings.footerText,
+      footerSubtext: db.settings.footerSubtext,
+      footerCopyright: db.settings.footerCopyright,
+      footerShowScaleIcon: db.settings.footerShowScaleIcon !== false,
+    };
+
     res.json({
       success: true,
       message: 'تم حفظ وتطبيق إعدادات السيستم وبيانات المؤسس وهوية الشات بوت بنجاح وحفظها سحابياً.',
-      branding: {
-        systemName: db.settings.systemName,
-        systemSubtitle: db.settings.systemSubtitle,
-        systemBadge: db.settings.systemBadge,
-        logoType: db.settings.logoType,
-        logoPreset: db.settings.logoPreset,
-        logoUrl: db.settings.logoUrl,
-        logoAccentColor: db.settings.logoAccentColor,
-
-        chatbotLogoUrl: db.settings.chatbotLogoUrl,
-        chatbotLogoType: db.settings.chatbotLogoType,
-        chatbotName: db.settings.chatbotName,
-        chatbotBadge: db.settings.chatbotBadge,
-        showChatbotLogoInHero: db.settings.showChatbotLogoInHero !== false,
-
-        founderName: db.settings.founderName,
-        founderTitle: db.settings.founderTitle,
-        founderBio: db.settings.founderBio,
-        founderPhotoUrl: db.settings.founderPhotoUrl,
-        founderQuote: db.settings.founderQuote,
-        siteOverview: db.settings.siteOverview,
-
-        plansSectionBadge: db.settings.plansSectionBadge,
-        plansSectionTitle: db.settings.plansSectionTitle,
-        plansSectionSubtitle: db.settings.plansSectionSubtitle,
-        showPlansSectionInLanding: db.settings.showPlansSectionInLanding !== false,
-
-        footerText: db.settings.footerText,
-        footerSubtext: db.settings.footerSubtext,
-        footerCopyright: db.settings.footerCopyright,
-        footerShowScaleIcon: db.settings.footerShowScaleIcon !== false,
-      },
+      branding: brandingResult,
     });
   } catch (err: any) {
     console.error('Branding save error:', err);
