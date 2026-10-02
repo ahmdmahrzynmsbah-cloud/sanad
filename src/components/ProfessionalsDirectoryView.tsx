@@ -53,6 +53,7 @@ interface ProfessionalsDirectoryViewProps {
   initialType?: ProfessionalType | 'all';
   onBackToHome: () => void;
   onOpenChatWithAdvisor?: (advisorName: string) => void;
+  isAdmin?: boolean;
 }
 
 // Fisher-Yates array randomizer for unbiased exposure
@@ -68,7 +69,30 @@ function shuffleArray<T>(array: T[]): T[] {
 export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProps> = ({
   initialType = 'all',
   onBackToHome,
+  isAdmin,
 }) => {
+  const [isUserAdmin, setIsUserAdmin] = useState<boolean>(() => {
+    if (isAdmin !== undefined) return isAdmin;
+    if (typeof window !== 'undefined') {
+      try {
+        const adminStored = localStorage.getItem('sanad_admin');
+        if (adminStored) return true;
+        const userStored = localStorage.getItem('sanad_user');
+        if (userStored) {
+          const parsed = JSON.parse(userStored);
+          return parsed.role === 'admin' || parsed.role === 'supervisor';
+        }
+      } catch {}
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    if (isAdmin !== undefined) {
+      setIsUserAdmin(isAdmin);
+    }
+  }, [isAdmin]);
+
   const [dynamicTypes, setDynamicTypes] = useState<ProfessionalTypeOption[]>(() => getCachedProfessionalTypes());
   const [activeTypeTab, setActiveTypeTab] = useState<ProfessionalType | 'all'>(initialType);
   const [selectedGovernorate, setSelectedGovernorate] = useState<string>('all');
@@ -523,23 +547,27 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 flex-wrap">
-          <button
-            type="button"
-            onClick={handleOpenTypeManager}
-            title="تعديل وتخصيص مسميات وتصنيفات الدليل"
-            className="px-3.5 py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
-          >
-            <Settings className="w-3.5 h-3.5 text-emerald-700" />
-            <span>تخصيص المسميات</span>
-          </button>
-          <button
-            onClick={handleShuffle}
-            title="إعادة الترتيب العشوائي للظهور العادل"
-            className="px-3.5 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
-          >
-            <Shuffle className="w-3.5 h-3.5 text-emerald-700" />
-            <span className="hidden sm:inline">ترتيب عادل</span>
-          </button>
+          {isUserAdmin && (
+            <>
+              <button
+                type="button"
+                onClick={handleOpenTypeManager}
+                title="تعديل وتخصيص مسميات وتصنيفات الدليل"
+                className="px-3.5 py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <Settings className="w-3.5 h-3.5 text-emerald-700" />
+                <span>تخصيص المسميات</span>
+              </button>
+              <button
+                onClick={handleShuffle}
+                title="إعادة الترتيب العشوائي للظهور العادل"
+                className="px-3.5 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <Shuffle className="w-3.5 h-3.5 text-emerald-700" />
+                <span className="hidden sm:inline">ترتيب عادل</span>
+              </button>
+            </>
+          )}
           <button
             onClick={() => {
               resetForm();
@@ -974,15 +1002,17 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
                       <label className="block text-xs font-bold text-slate-800">
                         نوع التسجيل في الدليل <span className="text-red-500">*</span>
                       </label>
-                      <button
-                        type="button"
-                        onClick={handleOpenTypeManager}
-                        className="text-[11px] font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
-                        title="تعديل وتخصيص المسميات والتصنيفات"
-                      >
-                        <Edit3 className="w-3 h-3 text-emerald-700" />
-                        <span>تخصيص وتعديل المسميات</span>
-                      </button>
+                      {isUserAdmin && (
+                        <button
+                          type="button"
+                          onClick={handleOpenTypeManager}
+                          className="text-[11px] font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+                          title="تعديل وتخصيص المسميات والتصنيفات"
+                        >
+                          <Edit3 className="w-3 h-3 text-emerald-700" />
+                          <span>تخصيص وتعديل المسميات</span>
+                        </button>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">

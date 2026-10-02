@@ -519,6 +519,7 @@ export default function App() {
           <div className="w-full">
             <ProfessionalsDirectoryView
               onBackToHome={() => setActiveView('home')}
+              isAdmin={Boolean(currentAdmin || currentUser?.role === 'admin' || currentUser?.role === 'supervisor')}
             />
           </div>
         )}
