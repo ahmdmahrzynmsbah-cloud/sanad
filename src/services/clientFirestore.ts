@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { initializeFirestore, getFirestore, collection, doc, setDoc, getDocs, deleteDoc, updateDoc, setLogLevel, query, where, onSnapshot, limit, startAfter, orderBy } from 'firebase/firestore';
+import { initializeFirestore, getFirestore, collection, doc, getDoc, setDoc, getDocs, deleteDoc, updateDoc, setLogLevel, query, where, onSnapshot, limit, startAfter, orderBy } from 'firebase/firestore';
 import type { Law, User, LawRequest, SubscriptionPlan, LegalCategory } from '../types';
 import { DEFAULT_LEGAL_CATEGORIES } from '../types';
 import { normalizeAuthIdentifier, isMatchingUser } from '../utils/authUtils';
@@ -2385,6 +2385,47 @@ export function subscribeToProfessionalsInFirestore(
     return unsub;
   } catch {
     return () => {};
+  }
+}
+
+/**
+ * Fetch dynamic professional categories / types from Firestore
+ */
+export async function directFetchProfessionalTypesFromFirestore(): Promise<any[] | null> {
+  const db = getClientDb();
+  if (!db) return null;
+  try {
+    const docRef = doc(db, 'system_settings', 'professional_types');
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      if (data && Array.isArray(data.types)) {
+        return data.types;
+      }
+    }
+    return null;
+  } catch (err) {
+    handleClientFirestoreError('directFetchProfessionalTypesFromFirestore', err);
+    return null;
+  }
+}
+
+/**
+ * Save dynamic professional categories / types to Firestore
+ */
+export async function directSaveProfessionalTypesToFirestore(types: any[]): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+  try {
+    const docRef = doc(db, 'system_settings', 'professional_types');
+    await setDoc(docRef, {
+      types,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+    return true;
+  } catch (err) {
+    handleClientFirestoreError('directSaveProfessionalTypesToFirestore', err);
+    return false;
   }
 }
 

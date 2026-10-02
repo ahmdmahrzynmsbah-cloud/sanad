@@ -731,6 +731,7 @@ interface DBData {
   contactInfo?: any;
   videos?: any[];
   professionals?: any[];
+  professionalTypes?: any[];
   relatedSiteCategories?: any[];
   conversations?: any[];
 }
@@ -2563,7 +2564,7 @@ app.get('/api/supervisors', async (req, res) => {
 });
 
 app.post('/api/admin/supervisors', async (req, res) => {
-  const { name, title, bio, photoUrl, phone, department, order } = req.body;
+  const { name, title, bio, photoUrl, email, phone, department, order } = req.body;
   if (!name || !String(name).trim() || !title || !String(title).trim()) {
     return res.status(400).json({ error: 'اسم المشرف وصفته الرسمية مطلوبان' });
   }
@@ -2576,9 +2577,9 @@ app.post('/api/admin/supervisors', async (req, res) => {
     db.users = [];
   }
 
-  // Auto generate system email containing "sanadtax" and a default password
+  // Auto generate system email or use provided email
   const uniqueSuffix = Math.random().toString(36).substr(2, 4);
-  const generatedEmail = `sup_${uniqueSuffix}@sanadtax.com`;
+  const generatedEmail = email && String(email).trim() ? String(email).trim() : `sup_${uniqueSuffix}@sanadtax.com`;
   const generatedPassword = 'sanadtax' + uniqueSuffix;
 
   const newSupervisor: StoredSupervisor = {
@@ -2587,7 +2588,7 @@ app.post('/api/admin/supervisors', async (req, res) => {
     title: String(title).trim(),
     bio: String(bio || '').trim(),
     photoUrl: String(photoUrl || '').trim(),
-    email: generatedEmail, // assigned automatically
+    email: generatedEmail,
     phone: String(phone || '').trim(),
     department: String(department || '').trim(),
     order: Number(order) || (db.supervisors.length + 1),
@@ -6825,6 +6826,87 @@ app.delete('/api/admin/videos/:id', async (req, res) => {
   } catch {}
   broadcastSync('videos');
   res.json({ message: 'Video deleted' });
+});
+
+// ==========================================
+// Dynamic Professional Types / Categories Endpoints
+// ==========================================
+const DEFAULT_PROFESSIONAL_TYPES = [
+  {
+    id: 'accountant',
+    label: 'محاسب قانوني / مالي',
+    description: 'محاسبون قانونيون ومستشارون ماليون وضريبيون',
+    icon: 'UserCheck',
+    order: 1,
+    isActive: true,
+  },
+  {
+    id: 'auditor',
+    label: 'مدقق حسابات قانوني',
+    description: 'مدققو ومراجعو حسابات قانونيون معتمدون',
+    icon: 'ShieldCheck',
+    order: 2,
+    isActive: true,
+  },
+  {
+    id: 'firm',
+    label: 'مكتب / شركة محاسبة وتدقيق',
+    description: 'مكاتب وشركات تدقيق واستشارات مالية وضريبية',
+    icon: 'Building2',
+    order: 3,
+    isActive: true,
+  },
+];
+
+app.get('/api/professionals/types', (req, res) => {
+  if (!db.professionalTypes || !Array.isArray(db.professionalTypes) || db.professionalTypes.length === 0) {
+    db.professionalTypes = [...DEFAULT_PROFESSIONAL_TYPES];
+  }
+  res.json({ types: db.professionalTypes.sort((a, b) => (a.order || 0) - (b.order || 0)) });
+});
+
+app.post('/api/admin/professionals/types', async (req, res) => {
+  try {
+    const { types, type } = req.body;
+    if (Array.isArray(types)) {
+      db.professionalTypes = types;
+      saveDB('settings');
+      broadcastSync('professionals_types');
+      return res.json({ success: true, types: db.professionalTypes });
+    }
+    if (type && type.label) {
+      if (!db.professionalTypes) db.professionalTypes = [...DEFAULT_PROFESSIONAL_TYPES];
+      const newType = {
+        id: type.id || ('type-' + Date.now()),
+        label: String(type.label).trim(),
+        description: (type.description || '').trim(),
+        icon: type.icon || 'UserCheck',
+        order: Number(type.order) || (db.professionalTypes.length + 1),
+        isActive: type.isActive ?? true,
+      };
+      const existingIdx = db.professionalTypes.findIndex((t: any) => t.id === newType.id);
+      if (existingIdx >= 0) {
+        db.professionalTypes[existingIdx] = newType;
+      } else {
+        db.professionalTypes.push(newType);
+      }
+      saveDB('settings');
+      broadcastSync('professionals_types');
+      return res.json({ success: true, type: newType, types: db.professionalTypes });
+    }
+    return res.status(400).json({ error: 'بيانات غير صالحة' });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'خطأ أثناء حفظ المسميات' });
+  }
+});
+
+app.delete('/api/admin/professionals/types/:id', (req, res) => {
+  const { id } = req.params;
+  if (!db.professionalTypes) db.professionalTypes = [...DEFAULT_PROFESSIONAL_TYPES];
+  db.professionalTypes = db.professionalTypes.filter((t: any) => t.id !== id);
+  saveDB('settings');
+  broadcastSync('professionals_types');
+  res.json({ success: true, message: 'تم حذف المسمى بنجاح', types: db.professionalTypes });
 });
 
 // ==========================================

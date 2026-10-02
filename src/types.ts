@@ -176,6 +176,7 @@ export interface Supervisor {
   department?: string;
   order?: number;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface RelatedSite {
@@ -310,11 +311,47 @@ export interface Video {
   createdAt: string;
 }
 
-export type ProfessionalType = 'accountant' | 'auditor' | 'firm';
+export type ProfessionalType = 'accountant' | 'auditor' | 'firm' | string;
+
+export interface ProfessionalTypeOption {
+  id: string; // e.g. 'accountant', 'auditor', 'firm', 'tax_consultant'
+  label: string; // e.g. 'محاسب قانوني / مالي'
+  description?: string;
+  icon?: string; // 'UserCheck' | 'ShieldCheck' | 'Building2' | 'Scale' | 'Briefcase' | 'Calculator' | 'FileText'
+  order?: number;
+  isActive?: boolean;
+}
+
+export const DEFAULT_PROFESSIONAL_TYPES: ProfessionalTypeOption[] = [
+  {
+    id: 'accountant',
+    label: 'محاسب قانوني / مالي',
+    description: 'محاسبون قانونيون ومستشارون ماليون وضريبيون',
+    icon: 'UserCheck',
+    order: 1,
+    isActive: true,
+  },
+  {
+    id: 'auditor',
+    label: 'مدقق حسابات قانوني',
+    description: 'مدققو ومراجعو حسابات قانونيون معتمدون',
+    icon: 'ShieldCheck',
+    order: 2,
+    isActive: true,
+  },
+  {
+    id: 'firm',
+    label: 'مكتب / شركة محاسبة وتدقيق',
+    description: 'مكاتب وشركات تدقيق واستشارات مالية وضريبية',
+    icon: 'Building2',
+    order: 3,
+    isActive: true,
+  },
+];
 
 export interface ProfessionalProfile {
   id: string;
-  type: ProfessionalType; // 'accountant' (محاسب) | 'auditor' (مدقق حسابات) | 'firm' (مكتب / شركة محاسبة وتدقيق)
+  type: ProfessionalType; // 'accountant' | 'auditor' | 'firm' | custom string
   name: string; // الاسم أو اسم المكتب / الشركة
   title: string; // المسمى المهني أو الصفة
   governorate: string; // المحافظة
