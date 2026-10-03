@@ -739,6 +739,8 @@ interface DBData {
   professionalServices?: string[];
   relatedSiteCategories?: any[];
   conversations?: any[];
+  referenceEvaluations?: any[];
+  referenceStats?: Record<string, any>;
 }
 
 const INITIAL_LAWS: StoredLaw[] = [
@@ -1221,6 +1223,8 @@ function initDB(): DBData {
     laws: INITIAL_LAWS,
     lawRequests: [...PERSISTENT_LAW_REQUESTS_SEED],
     professionals: [],
+    referenceEvaluations: [],
+    referenceStats: {},
   };
 
   try {
@@ -1232,6 +1236,40 @@ function initDB(): DBData {
 }
 
 let db = initDB();
+if (!db.referenceEvaluations) {
+  db.referenceEvaluations = [];
+}
+if (!db.referenceStats) {
+  db.referenceStats = {};
+}
+
+// Migration for legacy broad colliding key in server memory & DB
+const LEGACY_BROAD_KEY = '4_اإلدارة_العامة_للضرائب_غير_المباشرة_تعليمات_الفص__sec_التعليمات_و_النماذج_الخاصة_بالقرار_بقانو';
+const MIGRATED_KEY = '4_اإلدارة_العامة_للضرائب_غير_المباشرة_تعليمات__sec_التعليمات_و_النماذج_الخاصة_بالقرار_بقانون_بشأن_ضري_p53_hrhq9i9';
+
+if (db.referenceStats && (db.referenceStats[LEGACY_BROAD_KEY] || db.referenceStats['4_اإلدارة_العامة_للضرائب_غير_المباشرة_تعليمات__sec_التعليمات_و_النماذج_الخاصة_بالقرار_بقانون_بشأن_ضري_p53_hchh098'])) {
+  const oldStat = db.referenceStats[LEGACY_BROAD_KEY] || db.referenceStats['4_اإلدارة_العامة_للضرائب_غير_المباشرة_تعليمات__sec_التعليمات_و_النماذج_الخاصة_بالقرار_بقانون_بشأن_ضري_p53_hchh098'];
+  delete db.referenceStats[LEGACY_BROAD_KEY];
+  delete db.referenceStats['4_اإلدارة_العامة_للضرائب_غير_المباشرة_تعليمات__sec_التعليمات_و_النماذج_الخاصة_بالقرار_بقانون_بشأن_ضري_p53_hchh098'];
+  db.referenceStats[MIGRATED_KEY] = {
+    ...oldStat,
+    referenceKey: MIGRATED_KEY,
+  };
+  saveDB('reference_ratings');
+}
+
+if (Array.isArray(db.referenceEvaluations)) {
+  let evMigrated = false;
+  db.referenceEvaluations.forEach((ev: any) => {
+    if (ev.referenceKey === LEGACY_BROAD_KEY) {
+      ev.referenceKey = MIGRATED_KEY;
+      evMigrated = true;
+    }
+  });
+  if (evMigrated) {
+    saveDB('reference_ratings');
+  }
+}
 if (!db.deletedLawIds) {
   db.deletedLawIds = [];
 }
@@ -5578,18 +5616,27 @@ app.post('/api/chat', async (req, res) => {
   const effectiveIsLegal = isLegal || hasAttachedDoc || isSearchLegalMatch;
 
   const citations: any[] = (effectiveIsLegal && searchResult?.topChunks)
-    ? searchResult.topChunks.slice(0, 4).map((c, idx) => ({
-        id: `cit-${idx + 1}-${c.lawId}`,
-        lawId: c.lawId,
-        lawTitle: c.lawTitle,
-        articleNumber: c.articleNumber || extractRequestedArticleNumber(c.sectionHeader) || undefined,
-        sectionHeader: c.sectionHeader,
-        sourceFileName: c.sourceFileName,
-        category: c.category,
-        originalText: c.text,
-        snippet: c.text.length > 300 ? c.text.substring(0, 290).trim() + '...' : c.text,
-        matchScore: c.score,
-      }))
+    ? searchResult.topChunks.slice(0, 4).map((c, idx) => {
+        const refKey = c.referenceKey || computeServerReferenceKey(c.lawTitle, c.articleNumber, c.sectionHeader, c.lawId, c.text);
+        const stats = db.referenceStats?.[refKey];
+        return {
+          id: `cit-${idx + 1}-${c.lawId}`,
+          lawId: c.lawId,
+          lawTitle: c.lawTitle,
+          articleNumber: c.articleNumber || extractRequestedArticleNumber(c.sectionHeader) || undefined,
+          sectionHeader: c.sectionHeader,
+          sourceFileName: c.sourceFileName,
+          category: c.category,
+          originalText: c.text,
+          snippet: c.text.length > 300 ? c.text.substring(0, 290).trim() + '...' : c.text,
+          matchScore: c.score,
+          referenceKey: refKey,
+          averageRating: stats?.averageRating ?? c.learnedData?.averageRating,
+          totalRatings: stats?.totalRatings ?? c.learnedData?.totalRatings,
+          mostAccurateVotes: stats?.mostAccurateVotes ?? c.learnedData?.mostAccurateVotes,
+          isLearnedTopMatch: Boolean(c.learnedData?.isMostAccurate || (stats && stats.mostAccurateVotes > 0)),
+        };
+      })
     : [];
 
   if (hasAttachedDoc) {
@@ -5607,6 +5654,16 @@ app.post('/api/chat', async (req, res) => {
   }
 
   // 2. Select system instruction & prompt structure based on query classification
+  const learnedNotice = searchResult?.topLearnedReference
+    ? `\n<community_grounding_preference>
+🎯 [توجيه التعلم الذاتي وترجيح الدقة]:
+قام المستخدمون والخبراء القانونيون بتقييم واعتماد المرجع التالي كـ «الإجابة الأدق والمفضلة» لهذا الاستفسار (تقييم ${searchResult.topLearnedReference.learnedData?.averageRating || 5}/5 ونسبة ترجيح دقة عالية):
+- المرجع المعتمد: ${searchResult.topLearnedReference.lawTitle} (${searchResult.topLearnedReference.articleNumber ? 'المادة ' + searchResult.topLearnedReference.articleNumber : searchResult.topLearnedReference.sectionHeader})
+- نص المرجع المعتمد: "${searchResult.topLearnedReference.text.substring(0, 350)}"
+إلزام: اعتمد هذا المرجع كخيارك الأول المرجح في صياغة "الجواب المباشر" و"السند القانوني" لتقديم الإجابة الأكثر دقة استناداً إلى التعلم التراكمي.
+</community_grounding_preference>\n`
+    : '';
+
   const legalSystemInstruction = `<rag_system_constitution>
 أنت المستشار القانوني والتشريعي الفلسطيني الرسمي المعتمد «سَنَد».
 أنت تعمل حصراً ومباشرة بنظام التوليد المعزز بالاسترجاع الموثق (Strict Grounded RAG) مع تطبيق قاعدة «عدم الرفض قطعياً» (Zero-Refusal ForceStructure).
@@ -5627,7 +5684,7 @@ app.post('/api/chat', async (req, res) => {
    - استند دائماً إلى المواد والملفات المرفقة في <retrieved_knowledge_base> واذكر رقم المادة والتشريع صراحة.
 </mandatory_grounding_and_structure_rules>
 </rag_system_constitution>
-
+${learnedNotice}
 ${prioritizedContext ? `\n<retrieved_knowledge_base>\n${prioritizedContext}\n</retrieved_knowledge_base>\n` : ''}`;
 
   const generalSystemInstruction = `<role>
@@ -5758,6 +5815,11 @@ ${prioritizedContext ? `\n<retrieved_knowledge_base>\n${prioritizedContext}\n</r
         queryType: effectiveIsLegal ? 'legal' : 'general',
         suggestedDetails,
         citations: citations.length > 0 ? citations : undefined,
+        userQuery: trimmed,
+        learnedReferenceApplied: Boolean(searchResult?.topLearnedReference),
+        learnedReferenceNote: searchResult?.topLearnedReference
+          ? `تم ترجيح هذه الإجابة استناداً إلى تقييمات الدقة المعتمدة للمرجع (${searchResult.topLearnedReference.lawTitle} - مادة ${searchResult.topLearnedReference.articleNumber || searchResult.topLearnedReference.sectionHeader})`
+          : undefined,
       });
     }
 
@@ -5771,24 +5833,38 @@ ${prioritizedContext ? `\n<retrieved_knowledge_base>\n${prioritizedContext}\n</r
       queryType: effectiveIsLegal ? 'legal' : 'general',
       suggestedDetails,
       citations: citations.length > 0 ? citations : undefined,
+      userQuery: trimmed,
+      learnedReferenceApplied: Boolean(searchResult?.topLearnedReference),
+      learnedReferenceNote: searchResult?.topLearnedReference
+        ? `تم ترجيح هذه الإجابة استناداً إلى تقييمات الدقة المعتمدة للمرجع (${searchResult.topLearnedReference.lawTitle} - مادة ${searchResult.topLearnedReference.articleNumber || searchResult.topLearnedReference.sectionHeader})`
+        : undefined,
     });
   } catch (error: any) {
     console.error('Error in AI handler, using fallback:', error?.message || error);
     const fallbackAnswer = generateKnowledgeFallback(message, db.laws);
     const fallbackSearchResult = searchRelevantPalestinianLaws(message, db.laws || []);
     const fallbackCitations = (effectiveIsLegal && fallbackSearchResult?.topChunks)
-      ? fallbackSearchResult.topChunks.slice(0, 4).map((c, idx) => ({
-          id: `cit-fb-${idx + 1}`,
-          lawId: c.lawId,
-          lawTitle: c.lawTitle,
-          articleNumber: c.articleNumber || extractRequestedArticleNumber(c.sectionHeader) || undefined,
-          sectionHeader: c.sectionHeader,
-          sourceFileName: c.sourceFileName,
-          category: c.category,
-          originalText: c.text,
-          snippet: c.text.length > 300 ? c.text.substring(0, 290).trim() + '...' : c.text,
-          matchScore: c.score,
-        }))
+      ? fallbackSearchResult.topChunks.slice(0, 4).map((c, idx) => {
+          const refKey = c.referenceKey || computeServerReferenceKey(c.lawTitle, c.articleNumber, c.sectionHeader, c.lawId, c.text);
+          const stats = db.referenceStats?.[refKey];
+          return {
+            id: `cit-fb-${idx + 1}`,
+            lawId: c.lawId,
+            lawTitle: c.lawTitle,
+            articleNumber: c.articleNumber || extractRequestedArticleNumber(c.sectionHeader) || undefined,
+            sectionHeader: c.sectionHeader,
+            sourceFileName: c.sourceFileName,
+            category: c.category,
+            originalText: c.text,
+            snippet: c.text.length > 300 ? c.text.substring(0, 290).trim() + '...' : c.text,
+            matchScore: c.score,
+            referenceKey: refKey,
+            averageRating: stats?.averageRating ?? c.learnedData?.averageRating,
+            totalRatings: stats?.totalRatings ?? c.learnedData?.totalRatings,
+            mostAccurateVotes: stats?.mostAccurateVotes ?? c.learnedData?.mostAccurateVotes,
+            isLearnedTopMatch: Boolean(c.learnedData?.isMostAccurate || (stats && stats.mostAccurateVotes > 0)),
+          };
+        })
       : [];
 
     return res.json({
@@ -5798,6 +5874,11 @@ ${prioritizedContext ? `\n<retrieved_knowledge_base>\n${prioritizedContext}\n</r
       queryType: effectiveIsLegal ? 'legal' : 'general',
       suggestedDetails: undefined,
       citations: fallbackCitations.length > 0 ? fallbackCitations : undefined,
+      userQuery: trimmed,
+      learnedReferenceApplied: Boolean(fallbackSearchResult?.topLearnedReference),
+      learnedReferenceNote: fallbackSearchResult?.topLearnedReference
+        ? `تم ترجيح هذه الإجابة استناداً إلى تقييمات الدقة المعتمدة للمرجع (${fallbackSearchResult.topLearnedReference.lawTitle} - مادة ${fallbackSearchResult.topLearnedReference.articleNumber || fallbackSearchResult.topLearnedReference.sectionHeader})`
+        : undefined,
     });
   }
 });
@@ -6089,6 +6170,52 @@ function extractRequestedArticleNumber(query: string): string | null {
   return null;
 }
 
+function computeServerReferenceKey(
+  lawTitle: string,
+  articleNumber?: string,
+  sectionHeader?: string,
+  lawId?: string,
+  originalText?: string
+): string {
+  const cleanTitle = (lawTitle || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w\u0600-\u06FF]+/g, '_')
+    .slice(0, 45);
+
+  const cleanArticle = (articleNumber || '')
+    .trim()
+    .replace(/[^\w\d\u0600-\u06FF]+/g, '');
+
+  if (cleanArticle) {
+    return `${cleanTitle}__art_${cleanArticle}`;
+  }
+
+  // Extract part number or suffix from section header if present (e.g. جزء 53 or مادة 12)
+  const partMatch = (sectionHeader || '').match(/(?:جزء|قسم|فقرة|بند|صفحة|مادة)\s*(\d+|[٠-٩]+)/i);
+  const partSuffix = partMatch ? `_p${partMatch[1]}` : '';
+
+  // Distinct text fingerprint (hash of text snippet) to guarantee no collisions across chunks
+  let textFingerprint = '';
+  if (originalText && originalText.trim().length > 0) {
+    let hash = 0;
+    const sample = originalText.trim().slice(0, 300);
+    for (let i = 0; i < sample.length; i++) {
+      const char = sample.charCodeAt(i);
+      hash = (hash << 5) - hash + char;
+      hash |= 0;
+    }
+    textFingerprint = `_h${Math.abs(hash).toString(36)}`;
+  }
+
+  const cleanHeader = (sectionHeader || '')
+    .trim()
+    .replace(/[^\w\u0600-\u06FF]+/g, '_')
+    .slice(0, 50);
+
+  return `${cleanTitle}__sec_${cleanHeader}${partSuffix}${textFingerprint}`;
+}
+
 // Helper to chunk legal texts into articles, clauses, and sections
 interface LegalChunk {
   lawId?: string;
@@ -6099,6 +6226,14 @@ interface LegalChunk {
   sourceFileName?: string;
   articleNumber?: string;
   score?: number;
+  referenceKey?: string;
+  learnedData?: {
+    isMostAccurate?: boolean;
+    averageRating?: number;
+    totalRatings?: number;
+    mostAccurateVotes?: number;
+    reason?: string;
+  };
 }
 
 let cachedIndexedChunks: { lawsCount: number; chunks: LegalChunk[] } | null = null;
@@ -6146,14 +6281,17 @@ function chunkLawContent(law: StoredLaw): LegalChunk[] {
       for (const p of paragraphs) {
         if ((currentSub + '\n\n' + p).length > 2500) {
           if (currentSub.trim()) {
+            const chunkHeader = `${header} (جزء ${partIdx})`;
+            const chunkText = currentSub.trim();
             chunks.push({
               lawId: law.id,
               lawTitle: law.title,
               category: law.category,
-              sectionHeader: `${header} (جزء ${partIdx})`,
-              text: currentSub.trim(),
+              sectionHeader: chunkHeader,
+              text: chunkText,
               sourceFileName: law.sourceFileName,
               articleNumber: extractedNum || undefined,
+              referenceKey: computeServerReferenceKey(law.title, extractedNum || undefined, chunkHeader, law.id, chunkText),
             });
             partIdx++;
           }
@@ -6163,14 +6301,17 @@ function chunkLawContent(law: StoredLaw): LegalChunk[] {
         }
       }
       if (currentSub.trim()) {
+        const chunkHeader = `${header} (جزء ${partIdx})`;
+        const chunkText = currentSub.trim();
         chunks.push({
           lawId: law.id,
           lawTitle: law.title,
           category: law.category,
-          sectionHeader: `${header} (جزء ${partIdx})`,
-          text: currentSub.trim(),
+          sectionHeader: chunkHeader,
+          text: chunkText,
           sourceFileName: law.sourceFileName,
           articleNumber: extractedNum || undefined,
+          referenceKey: computeServerReferenceKey(law.title, extractedNum || undefined, chunkHeader, law.id, chunkText),
         });
       }
     } else {
@@ -6182,19 +6323,23 @@ function chunkLawContent(law: StoredLaw): LegalChunk[] {
         text: fullText,
         sourceFileName: law.sourceFileName,
         articleNumber: extractedNum || undefined,
+        referenceKey: computeServerReferenceKey(law.title, extractedNum || undefined, header, law.id, fullText),
       });
     }
   }
 
   // Fallback if no sections were delimited
   if (chunks.length === 0 && normalizedText.trim()) {
+    const fallbackText = normalizedText.trim();
+    const fallbackHeader = law.title || 'كامل النص للتشريع';
     chunks.push({
       lawId: law.id,
       lawTitle: law.title,
       category: law.category,
-      sectionHeader: law.title || 'كامل النص للتشريع',
-      text: normalizedText.trim(),
+      sectionHeader: fallbackHeader,
+      text: fallbackText,
       sourceFileName: law.sourceFileName,
+      referenceKey: computeServerReferenceKey(law.title, undefined, fallbackHeader, law.id, fallbackText),
     });
   }
 
@@ -6333,6 +6478,7 @@ function searchRelevantPalestinianLaws(
   topChunks: LegalChunk[];
   fullCatalog: string;
   exactArticleChunk?: LegalChunk;
+  topLearnedReference?: LegalChunk;
 } {
   if (!laws || laws.length === 0) {
     return {
@@ -6478,6 +6624,43 @@ function searchRelevantPalestinianLaws(
       score += 15;
     }
 
+    // 6. Community Evaluations & Self-Learning Weighting (ترجيح الدقة والتعلم الذاتي للشات بوت)
+    const refKey = computeServerReferenceKey(chunk.lawTitle, chunk.articleNumber, chunk.sectionHeader, chunk.lawId, chunk.text);
+    chunk.referenceKey = refKey;
+    const stats = (db.referenceStats && db.referenceStats[refKey]) ? db.referenceStats[refKey] : null;
+
+    if (stats) {
+      const associated = stats.associatedQueries || [];
+      const queryMatches = associated.some((q: string) => {
+        const normQ = normalizeArabic(q);
+        return substantiveWords.some((w) => normQ.includes(w)) || normQ.includes(normQuery) || normQuery.includes(normQ);
+      });
+
+      let learningBonus = 0;
+      if (stats.mostAccurateVotes > 0) {
+        // High bonus if evaluated as the most accurate reference
+        learningBonus += 120 + (stats.mostAccurateVotes * 40) + ((stats.averageRating || 5) * 10);
+        if (queryMatches) {
+          learningBonus += 80; // Extra direct boost if question matches what was rated!
+        }
+      } else if (stats.averageRating >= 4 && stats.totalRatings > 0) {
+        learningBonus += (stats.averageRating * 5) + (stats.totalRatings * 4);
+      }
+
+      if (learningBonus > 0) {
+        score += learningBonus;
+        chunk.learnedData = {
+          isMostAccurate: stats.mostAccurateVotes > 0,
+          averageRating: stats.averageRating,
+          totalRatings: stats.totalRatings,
+          mostAccurateVotes: stats.mostAccurateVotes,
+          reason: stats.mostAccurateVotes > 0
+            ? `مرجع معتمد كالأدق بنتيجة (${stats.mostAccurateVotes} ترجيح)`
+            : `تقييم جودة مرتفع (${stats.averageRating}/5 نجوم)`
+        };
+      }
+    }
+
     // Include chunks with positive relevance score
     if (score >= 12) {
       scoredChunks.push({ ...chunk, score });
@@ -6486,9 +6669,17 @@ function searchRelevantPalestinianLaws(
 
   scoredChunks.sort((a, b) => (b.score || 0) - (a.score || 0));
   
-  // Combine exact article matches first, then top scored chunks
+  // Combine exact article matches and top scored chunks, prioritizing any community-rated accurate reference to position 0
   const combinedSet = new Set<string>();
   const topChunks: LegalChunk[] = [];
+
+  // Check if there is an explicitly voted "most accurate" chunk
+  const topAccurateChunk = scoredChunks.find((sc) => sc.learnedData?.isMostAccurate);
+  if (topAccurateChunk) {
+    const key = `${topAccurateChunk.lawTitle}_${topAccurateChunk.sectionHeader}_${topAccurateChunk.text.substring(0, 40)}`;
+    combinedSet.add(key);
+    topChunks.push(topAccurateChunk);
+  }
 
   for (const m of exactArticleMatches) {
     const key = `${m.lawTitle}_${m.sectionHeader}_${m.text.substring(0, 40)}`;
@@ -6526,7 +6717,8 @@ function searchRelevantPalestinianLaws(
         .map((c, idx) => {
           const timing = extractLawTiming(c.lawTitle, c.text);
           const sourceInfo = c.sourceFileName ? ` [الملف المصدر: ${c.sourceFileName}]` : '';
-          return `--- المرجع التشريعي (${idx + 1}) ---\nالتشريع / الملف: ${c.lawTitle}${sourceInfo} [التصنيف: ${c.category}] (${timing})\nالموضع / المادة: ${c.sectionHeader}\nالنص الكامل المعتمد:\n${c.text}`;
+          const learnedTag = c.learnedData?.isMostAccurate ? ' ⭐ [المرجع المعتمد كالأدق من قبل المستخدمين]' : '';
+          return `--- المرجع التشريعي (${idx + 1})${learnedTag} ---\nالتشريع / الملف: ${c.lawTitle}${sourceInfo} [التصنيف: ${c.category}] (${timing})\nالموضع / المادة: ${c.sectionHeader}\nالنص الكامل المعتمد:\n${c.text}`;
         })
         .join('\n\n');
   }
@@ -6538,12 +6730,17 @@ function searchRelevantPalestinianLaws(
       .map((l, index) => `${index + 1}. ${l.title} (${l.category})${l.sourceFileName ? ` [ملف: ${l.sourceFileName}]` : ''}`)
       .join('\n');
 
+  const topLearnedReference = topChunks.find(
+    (c) => c.learnedData?.isMostAccurate || (c.learnedData?.averageRating && c.learnedData.averageRating >= 4.5)
+  );
+
   return {
     hasMatches: topChunks.length > 0,
     prioritizedContext,
     topChunks,
     fullCatalog,
     exactArticleChunk: exactArticleMatches[0] || topChunks[0],
+    topLearnedReference,
   };
 }
 
@@ -7171,6 +7368,163 @@ app.delete('/api/admin/professionals/:id', async (req, res) => {
   } catch (err: any) {
     console.error('Admin delete professional error:', err);
     res.status(500).json({ error: 'تعذر الحذف: ' + (err?.message || '') });
+  }
+});
+
+// ==========================================
+// Reference Ratings & Bot Self-Learning Endpoints (تقييمات المراجع والتعلم الذاتي للشات بوت)
+// ==========================================
+app.get('/api/references/ratings', (req, res) => {
+  if (!db.referenceEvaluations) db.referenceEvaluations = [];
+  if (!db.referenceStats) db.referenceStats = {};
+  res.json({
+    evaluations: db.referenceEvaluations,
+    stats: db.referenceStats,
+  });
+});
+
+app.post('/api/references/rate', (req, res) => {
+  try {
+    const {
+      referenceKey,
+      referenceId,
+      lawId,
+      lawTitle,
+      articleNumber,
+      sectionHeader,
+      sourceFileName,
+      originalText,
+      query,
+      rating,
+      isMostAccurate,
+      feedbackTag,
+      notes,
+      userId,
+      username,
+    } = req.body;
+
+    if (!lawTitle) {
+      return res.status(400).json({ error: 'اسم التشريع أو القانون مطلوب' });
+    }
+
+    if (!db.referenceEvaluations) db.referenceEvaluations = [];
+    if (!db.referenceStats) db.referenceStats = {};
+
+    const refKey = (referenceKey && typeof referenceKey === 'string' && referenceKey.length > 5)
+      ? referenceKey
+      : computeServerReferenceKey(lawTitle, articleNumber, sectionHeader, lawId, originalText);
+    const numRating = typeof rating === 'number' ? Math.min(5, Math.max(1, rating)) : 5;
+    const isAccurate = Boolean(isMostAccurate);
+
+    const evaluation = {
+      id: `eval-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      referenceKey: refKey,
+      query: (query || '').trim(),
+      normalizedQuery: (query || '').trim().toLowerCase(),
+      lawId,
+      lawTitle,
+      articleNumber,
+      sectionHeader,
+      sourceFileName,
+      originalText,
+      rating: numRating,
+      isMostAccurate: isAccurate,
+      feedbackTag: feedbackTag || (isAccurate ? 'الأدق نصاً' : undefined),
+      notes: notes || '',
+      userId: userId || 'anonymous',
+      username: username || 'مستخدم المنظومة',
+      timestamp: new Date().toISOString(),
+    };
+
+    // Filter out previous evaluation from same user on this refKey and query
+    db.referenceEvaluations = [
+      evaluation,
+      ...db.referenceEvaluations.filter(
+        (e: any) => !(e.referenceKey === refKey && e.query === query && e.userId === userId)
+      ),
+    ];
+
+    // Recompute stats for this refKey
+    const allEvalsForRef = db.referenceEvaluations.filter((e: any) => e.referenceKey === refKey);
+    const totalRatings = allEvalsForRef.length;
+    const ratingsSum = allEvalsForRef.reduce((sum: number, e: any) => sum + (e.rating || 5), 0);
+    const averageRating = totalRatings > 0 ? Number((ratingsSum / totalRatings).toFixed(1)) : 5;
+    const mostAccurateVotes = allEvalsForRef.filter((e: any) => Boolean(e.isMostAccurate)).length;
+    const associatedQueries = Array.from(
+      new Set(allEvalsForRef.map((e: any) => e.query).filter(Boolean))
+    );
+
+    const updatedStats = {
+      referenceKey: refKey,
+      lawTitle,
+      articleNumber,
+      sectionHeader,
+      totalRatings,
+      averageRating,
+      ratingsSum,
+      mostAccurateVotes,
+      associatedQueries,
+      lastRatedAt: new Date().toISOString(),
+    };
+
+    db.referenceStats[refKey] = updatedStats;
+
+    saveDB('reference_ratings');
+    broadcastSync('reference_ratings');
+
+    return res.json({
+      success: true,
+      stats: updatedStats,
+      evaluation,
+      message: 'تم حفظ التقييم بنجاح وتعلّم المساعد الذكي هذا المرجع.',
+    });
+  } catch (err: any) {
+    console.error('Error saving reference rating:', err);
+    res.status(500).json({ error: err?.message || 'خطأ أثناء تسجيل تقييم المرجع' });
+  }
+});
+
+app.delete('/api/references/rate/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!db.referenceEvaluations) db.referenceEvaluations = [];
+    const target = db.referenceEvaluations.find((e: any) => e.id === id);
+    if (!target) {
+      return res.status(404).json({ error: 'التقييم غير موجود' });
+    }
+
+    const refKey = target.referenceKey;
+    db.referenceEvaluations = db.referenceEvaluations.filter((e: any) => e.id !== id);
+
+    // Recompute stats
+    const allEvalsForRef = db.referenceEvaluations.filter((e: any) => e.referenceKey === refKey);
+    if (allEvalsForRef.length === 0) {
+      delete db.referenceStats[refKey];
+    } else {
+      const totalRatings = allEvalsForRef.length;
+      const ratingsSum = allEvalsForRef.reduce((sum: number, e: any) => sum + (e.rating || 5), 0);
+      const averageRating = totalRatings > 0 ? Number((ratingsSum / totalRatings).toFixed(1)) : 5;
+      const mostAccurateVotes = allEvalsForRef.filter((e: any) => Boolean(e.isMostAccurate)).length;
+      const associatedQueries = Array.from(
+        new Set(allEvalsForRef.map((e: any) => e.query).filter(Boolean))
+      );
+
+      db.referenceStats[refKey] = {
+        ...db.referenceStats[refKey],
+        totalRatings,
+        averageRating,
+        ratingsSum,
+        mostAccurateVotes,
+        associatedQueries,
+        lastRatedAt: new Date().toISOString(),
+      };
+    }
+
+    saveDB('reference_ratings');
+    broadcastSync('reference_ratings');
+    return res.json({ success: true, message: 'تم حذف التقييم وتحديث التعلم' });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'خطأ أثناء حذف التقييم' });
   }
 });
 

@@ -121,6 +121,47 @@ export interface CitationSource {
   originalText: string;
   snippet?: string;
   matchScore?: number;
+  referenceKey?: string;
+  averageRating?: number;
+  totalRatings?: number;
+  mostAccurateVotes?: number;
+  isLearnedTopMatch?: boolean;
+  userVotedMostAccurate?: boolean;
+  userRating?: number;
+}
+
+export interface ReferenceEvaluation {
+  id: string;
+  referenceKey: string;
+  query: string;
+  normalizedQuery: string;
+  lawId?: string;
+  lawTitle: string;
+  articleNumber?: string;
+  sectionHeader?: string;
+  sourceFileName?: string;
+  originalText?: string;
+  rating: number; // 1 to 5
+  isMostAccurate: boolean;
+  feedbackTag?: string;
+  notes?: string;
+  userId?: string;
+  username?: string;
+  timestamp: string;
+}
+
+export interface ReferenceStats {
+  referenceKey: string;
+  lawTitle: string;
+  articleNumber?: string;
+  sectionHeader?: string;
+  totalRatings: number;
+  averageRating: number;
+  ratingsSum: number;
+  mostAccurateVotes: number;
+  ratingBreakdown?: Record<number, number>;
+  associatedQueries: string[];
+  lastRatedAt: string;
 }
 
 export interface AttachedDocumentInfo {
@@ -145,6 +186,9 @@ export interface ChatMessage {
   queryType?: 'legal' | 'general';
   suggestedDetails?: string[];
   attachedDoc?: AttachedDocumentInfo;
+  userQuery?: string;
+  learnedReferenceApplied?: boolean;
+  learnedReferenceNote?: string;
 }
 
 export interface Conversation {

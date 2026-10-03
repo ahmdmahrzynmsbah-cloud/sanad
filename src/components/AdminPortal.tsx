@@ -53,6 +53,7 @@ import {
   CreditCard,
   User as UserIcon,
   Bot,
+  Award,
 } from 'lucide-react';
 import { User, Law, LawCategory, LegalCategory, DEFAULT_LEGAL_CATEGORIES, SystemBranding, PlatformAboutData, ContactInfo, Video, RelatedSite, Partner, SubscriptionPlan, Supervisor, ProfessionalProfile } from '../types';
 import { formatBytes, sanitizeLawTitle, PDFProgress } from '../utils/pdfParser';
@@ -69,6 +70,7 @@ import { VideosAdminTab } from './admin/VideosAdminTab';
 import { ContactAdminTab } from './admin/ContactAdminTab';
 import { LawRequestsAdminTab } from './admin/LawRequestsAdminTab';
 import { ProfessionalsAdminTab } from './admin/ProfessionalsAdminTab';
+import { ReferenceLearningAdminTab } from './admin/ReferenceLearningAdminTab';
 import { UserDetailsModal } from './admin/UserDetailsModal';
 import { useSync, notifySync } from '../utils/sync';
 import { safeFetchJson } from '../utils/safeApi';
@@ -143,7 +145,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     }
     return [];
   });
-  const [activeTab, setActiveTab] = useState<'requests' | 'laws' | 'law-requests' | 'professionals' | 'supervisors' | 'related-sites' | 'partners' | 'plans' | 'about' | 'contact' | 'settings' | 'videos'>(() => isSupervisor ? 'laws' : 'requests');
+  const [activeTab, setActiveTab] = useState<'requests' | 'laws' | 'law-requests' | 'learning' | 'professionals' | 'supervisors' | 'related-sites' | 'partners' | 'plans' | 'about' | 'contact' | 'settings' | 'videos'>(() => isSupervisor ? 'laws' : 'requests');
 
   // Admin Daily Upload Limit & Quota (40 files max, 40MB per file, 800MB total quota per day)
   const ADMIN_DAILY_LIMIT = 40;
@@ -3026,6 +3028,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
           )}
         </button>
 
+        <button
+          id="admin-tab-learning"
+          onClick={() => setActiveTab('learning')}
+          className={`pb-3 px-3.5 sm:px-5 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 transition-all shrink-0 cursor-pointer ${
+            activeTab === 'learning'
+              ? 'border-emerald-700 text-emerald-800'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
+          }`}
+        >
+          <Award className="w-4 h-4 text-amber-600" />
+          <span>تقييمات المراجع والتعلم الذاتي</span>
+        </button>
+
         {!isSupervisor && (
         <button
           id="admin-tab-professionals"
@@ -4884,6 +4899,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
             fetchPendingLawRequestsCount();
           }}
         />
+      )}
+
+      {/* ======================================================== */}
+      {/* TAB: REFERENCE EVALUATIONS & CHATBOT SELF LEARNING */}
+      {/* ======================================================== */}
+      {activeTab === 'learning' && (
+        <ReferenceLearningAdminTab />
       )}
 
       {/* ======================================================== */}

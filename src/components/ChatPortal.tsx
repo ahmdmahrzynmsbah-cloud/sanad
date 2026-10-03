@@ -573,12 +573,16 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
       let resQueryType: 'legal' | 'general' = isQueryLegal ? 'legal' : 'general';
       let resSuggestedDetails: string[] | undefined = undefined;
       let botCitations: CitationSource[] | undefined = undefined;
+      let learnedApplied = false;
+      let learnedNote: string | undefined = undefined;
 
       if (res.ok) {
         const data = await res.json();
         botResponseText = data.reply || 'عذراً، لم أتمكن من استرجاع إجابة مطابقة في الوقت الحالي.';
         if (typeof data.isLegal === 'boolean') isQueryLegal = data.isLegal;
         if (data.queryType) resQueryType = data.queryType;
+        learnedApplied = Boolean(data.learnedReferenceApplied);
+        learnedNote = data.learnedReferenceNote;
         if (Array.isArray(data.suggestedDetails) && isQueryLegal && resQueryType === 'legal') {
           resSuggestedDetails = data.suggestedDetails;
         } else {
@@ -649,6 +653,9 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
         queryType: resQueryType,
         suggestedDetails: resSuggestedDetails,
         citations: botCitations,
+        userQuery: query,
+        learnedReferenceApplied: learnedApplied,
+        learnedReferenceNote: learnedNote,
       };
 
       const finalMessages = [...updatedMessagesWithUser, botMessage];
@@ -1015,7 +1022,15 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
                       {msg.text}
                     </Markdown>
 
-                    {/* Source Citation Box: رقم المادة والقانون في صندوق صغير بجانب الإجابة يوضح النص الأصلي المقتبس منه لتعزيز الثقة والموثوقية */}
+                    {/* Learned Grounded Preference Notice Banner */}
+                    {msg.sender === 'bot' && msg.learnedReferenceApplied && (
+                      <div className="mb-2.5 inline-flex items-center gap-1.5 bg-gradient-to-r from-amber-100 to-amber-50 border border-amber-300 text-amber-950 px-2.5 py-1 rounded-xl text-[10.5px] font-bold shadow-2xs">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-600 animate-spin-slow" />
+                        <span>إجابة مرجحة بالتعلم الذاتي (مستندة إلى المرجع الأعلى تقييماً من المستخدمين والخبراء)</span>
+                      </div>
+                    )}
+
+                    {/* Source Citation Box: رقم المادة والقانون في صندوق صغير بجانب الإجابة يوضح النص الأصلي المقتبس منه لتعزيز الثقة والموثوقية وتقييم الأدق */}
                     {msg.sender === 'bot' && (() => {
                       const effectiveCitations = (msg.citations && msg.citations.length > 0)
                         ? msg.citations
@@ -1026,7 +1041,16 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
                           : undefined;
 
                       if (effectiveCitations && effectiveCitations.length > 0) {
-                        return <SourceCitationBox citations={effectiveCitations} isLegal={msg.isLegal} />;
+                        const priorUserMsg = messages.slice(0, messageIndex).reverse().find((m) => m.sender === 'user');
+                        const userQuestion = msg.userQuery || priorUserMsg?.text || '';
+                        return (
+                          <SourceCitationBox
+                            citations={effectiveCitations}
+                            isLegal={msg.isLegal}
+                            query={userQuestion}
+                            currentUser={currentUser}
+                          />
+                        );
                       }
                       return null;
                     })()}

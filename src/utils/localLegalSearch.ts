@@ -1,5 +1,6 @@
 import type { Law, CitationSource } from '../types';
 import { BUNDLED_PALESTINE_LAWS } from '../data/bundledLaws';
+import { computeReferenceKey, getCachedReferenceStats } from '../services/referenceRatingService';
 
 export interface LegalChunk {
   lawId: string;
@@ -10,6 +11,7 @@ export interface LegalChunk {
   sourceFileName?: string;
   articleNumber?: string;
   score?: number;
+  referenceKey?: string;
 }
 
 /**
@@ -474,6 +476,18 @@ export function findCitationsForQuery(query: string, laws: Law[]): CitationSourc
         if (normText.includes(word)) score += 4;
       }
 
+      // Community rating learning boost
+      const refKey = chunk.referenceKey || computeReferenceKey(chunk.lawTitle, chunk.articleNumber, chunk.sectionHeader, chunk.lawId, chunk.text);
+      chunk.referenceKey = refKey;
+      const stats = getCachedReferenceStats(refKey);
+      if (stats) {
+        if (stats.mostAccurateVotes > 0) {
+          score += (stats.mostAccurateVotes * 35) + ((stats.averageRating || 5) * 8);
+        } else if (stats.averageRating >= 4) {
+          score += stats.averageRating * 5;
+        }
+      }
+
       chunk.score = score;
       if (score >= 8) allChunks.push(chunk);
     }
@@ -484,7 +498,7 @@ export function findCitationsForQuery(query: string, laws: Law[]): CitationSourc
   const seenKeys = new Set<string>();
 
   for (const m of exactArticleMatches) {
-    const k = `${m.lawTitle}_${m.sectionHeader}`;
+    const k = `${m.lawTitle}_${m.sectionHeader}_${(m.text || '').substring(0, 30)}`;
     if (!seenKeys.has(k)) {
       seenKeys.add(k);
       combined.push(m);
@@ -492,7 +506,7 @@ export function findCitationsForQuery(query: string, laws: Law[]): CitationSourc
   }
 
   for (const sc of sorted) {
-    const k = `${sc.lawTitle}_${sc.sectionHeader}`;
+    const k = `${sc.lawTitle}_${sc.sectionHeader}_${(sc.text || '').substring(0, 30)}`;
     if (!seenKeys.has(k)) {
       seenKeys.add(k);
       combined.push(sc);
@@ -500,18 +514,27 @@ export function findCitationsForQuery(query: string, laws: Law[]): CitationSourc
     if (combined.length >= 4) break;
   }
 
-  return combined.map((c, idx) => ({
-    id: `cit-${idx + 1}-${c.lawId}`,
-    lawId: c.lawId,
-    lawTitle: c.lawTitle,
-    articleNumber: c.articleNumber || extractRequestedArticleNumber(c.sectionHeader) || undefined,
-    sectionHeader: c.sectionHeader,
-    sourceFileName: c.sourceFileName,
-    category: c.category,
-    originalText: c.text,
-    snippet: c.text.length > 300 ? c.text.substring(0, 290).trim() + '...' : c.text,
-    matchScore: c.score,
-  }));
+  return combined.map((c, idx) => {
+    const refKey = c.referenceKey || computeReferenceKey(c.lawTitle, c.articleNumber, c.sectionHeader, c.lawId, c.text);
+    const stats = getCachedReferenceStats(refKey);
+    return {
+      id: `cit-${idx + 1}-${c.lawId}`,
+      lawId: c.lawId,
+      lawTitle: c.lawTitle,
+      articleNumber: c.articleNumber || extractRequestedArticleNumber(c.sectionHeader) || undefined,
+      sectionHeader: c.sectionHeader,
+      sourceFileName: c.sourceFileName,
+      category: c.category,
+      originalText: c.text,
+      snippet: c.text.length > 300 ? c.text.substring(0, 290).trim() + '...' : c.text,
+      matchScore: c.score,
+      referenceKey: refKey,
+      averageRating: stats?.averageRating,
+      totalRatings: stats?.totalRatings,
+      mostAccurateVotes: stats?.mostAccurateVotes,
+      isLearnedTopMatch: Boolean(stats && stats.mostAccurateVotes > 0),
+    };
+  });
 }
 
 /**
