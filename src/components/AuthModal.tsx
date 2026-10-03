@@ -230,15 +230,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     e.preventDefault();
     resetStates();
 
-    const cleanPrefix = regPrefix
+    let rawEmail = regPrefix
       .trim()
       .toLowerCase()
-      .replace(/[\u200B-\u200D\uFEFF\u200E\u200F\u202A-\u202E\u00A0]/g, '')
-      .replace(/^@+/, '')
-      .replace(/@.*$/, '')
-      .replace(/[^\w\.\-\_]/g, '');
+      .replace(/[\u200B-\u200D\uFEFF\u200E\u200F\u202A-\u202E\u00A0]/g, '');
 
-    const targetUsername = cleanPrefix ? `${cleanPrefix}@sanadtax.com` : '';
+    // If typed without '@', automatically append '@gmail.com' for Google account registration
+    let targetUsername = rawEmail;
+    if (targetUsername && !targetUsername.includes('@')) {
+      targetUsername = `${targetUsername}@gmail.com`;
+    }
+
     const cleanPhone = phone.replace(/[\u200B-\u200D\uFEFF\u200E\u200F\u202A-\u202E\u00A0]/g, '').trim();
     const cleanFullName = fullName.replace(/[\u200B-\u200D\uFEFF\u200E\u200F\u202A-\u202E\u00A0]/g, '').trim();
     const cleanRecovery = recoveryCode.trim();
@@ -253,13 +255,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    if (!cleanPrefix) {
-      setCleanError('يرجى تحديد الجزء الأول من اسم المستخدم قبل نطاق @sanadtax.com (مثال: ahmad).');
-      return;
-    }
-
-    if (cleanPrefix.length < 2) {
-      setCleanError('يجب أن يتكون اسم المستخدم من حرفين أو رقمين على الأقل قبل @sanadtax.com.');
+    if (!targetUsername || targetUsername.length < 5 || !targetUsername.includes('@')) {
+      setCleanError('يرجى إدخال بريد إلكتروني صحيح لحساب Google الخاص بك (مثال: user@gmail.com).');
       return;
     }
 
@@ -862,35 +859,44 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      اسم المستخدم (البريد الإلكتروني المعتمد) <span className="text-red-500">*</span>
+                      حساب Google / البريد الإلكتروني <span className="text-red-500">*</span>
                     </label>
                     <div className="relative flex items-center bg-slate-50/70 hover:bg-slate-50 border border-slate-200 rounded-xl focus-within:bg-white focus-within:ring-2 focus-within:ring-[#0f2a24]/20 focus-within:border-[#0f2a24] transition-all overflow-hidden" dir="ltr">
-                      <div className="pl-3 pr-1 text-slate-400 pointer-events-none shrink-0">
-                        <UserCheck className="w-4 h-4" />
+                      <div className="pl-3 pr-1 text-slate-400 shrink-0 flex items-center">
+                        <svg className="w-4 h-4" viewBox="0 0 24 24">
+                          <path
+                            fill="#EA4335"
+                            d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.1 9 5 12 5z"
+                          />
+                          <path
+                            fill="#4285F4"
+                            d="M23.5 12.3c0-.8-.1-1.7-.2-2.3H12v4.6h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.9z"
+                          />
+                          <path
+                            fill="#FBBC05"
+                            d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.3s.2-1.6.4-2.3L1.9 7.3C.7 9.7 0 10.8 0 12s.7 2.3 1.9 4.7l3.7-2.9z"
+                          />
+                          <path
+                            fill="#34A853"
+                            d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.1-6.4-5.2L1.9 16C3.7 19.7 7.5 23 12 23z"
+                          />
+                        </svg>
                       </div>
                       <input
                         id="register-username-input"
-                        type="text"
+                        type="email"
                         dir="ltr"
                         value={regPrefix}
                         onChange={(e) => {
-                          let val = e.target.value.trim().toLowerCase();
-                          if (val.includes('@')) {
-                            val = val.split('@')[0];
-                          }
-                          val = val.replace(/[^\w\.\-\_]/g, '');
-                          setRegPrefix(val);
+                          setRegPrefix(e.target.value);
                         }}
-                        placeholder="ahmad_khalil"
-                        className="flex-1 min-w-0 py-2.5 pl-1 pr-2 bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none text-left font-mono"
+                        placeholder="your_email@gmail.com"
+                        className="flex-1 min-w-0 py-2.5 px-2 bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none text-left font-mono"
                         required
                       />
-                      <span className="bg-[#0f2a24]/10 text-[#0f2a24] font-bold text-xs px-2.5 py-2.5 border-l border-slate-200 shrink-0 select-none flex items-center font-mono">
-                        @sanadtax.com
-                      </span>
                     </div>
                     <p className="text-[10.5px] text-slate-500 mt-1 font-medium text-right">
-                      اسم المستخدم النهائي: <strong className="text-[#0f2a24] font-mono" dir="ltr">{(regPrefix.trim() || 'اسم_المستخدم') + '@sanadtax.com'}</strong>
+                      ادخل حساب جوجل الخاص بك (مثال: <strong className="text-[#0f2a24] font-mono" dir="ltr">{regPrefix.trim() ? (regPrefix.includes('@') ? regPrefix.trim() : regPrefix.trim() + '@gmail.com') : 'user@gmail.com'}</strong>)
                     </p>
                   </div>
 

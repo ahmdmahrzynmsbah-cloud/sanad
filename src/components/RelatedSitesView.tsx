@@ -309,49 +309,7 @@ export const RelatedSitesView: React.FC<RelatedSitesViewProps> = ({
         )}
       </div>
 
-      {/* Prominent Professional Directory Callout Banner */}
-      <div className="bg-gradient-to-l from-[#193225] via-[#12281e] to-[#0c1c14] text-white rounded-2xl p-5 sm:p-6 shadow-md border border-emerald-800/60 relative overflow-hidden">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-5 relative z-10">
-          <div className="flex items-start gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-700 flex items-center justify-center text-white shrink-0 shadow-md border border-emerald-400/30">
-              <Briefcase className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
-                  خدمة سحابية جديدة
-                </span>
-                <span className="text-xs text-emerald-200 font-semibold">تخدم كافة المحافظات الفلسطينية</span>
-              </div>
-              <h2 className="text-base sm:text-lg font-black text-white mt-1">
-                الدليل المهني: المحاسبين والمدققين ومكاتب المحاسبة والتدقيق
-              </h2>
-              <p className="text-xs sm:text-sm text-emerald-200/90 mt-1 max-w-2xl leading-relaxed">
-                هل أنت محاسب قانوني، مدقق حسابات مرخص، أو تملك مكتب/شركة محاسبة وتدقيق؟ يمكنك تسجيل بياناتك وشعارك ورابط التواصل ورقم الهاتف والمحافظة مجاناً، وسيتم اعتمادها فوراً للظهور.
-              </p>
-            </div>
-          </div>
 
-          <div className="flex items-center gap-2.5 w-full md:w-auto flex-wrap sm:flex-nowrap">
-            {onGoToProfessionalsDirectory && (
-              <button
-                onClick={onGoToProfessionalsDirectory}
-                className="flex-1 sm:flex-none px-4 py-2.5 bg-white/10 hover:bg-white/15 text-emerald-100 hover:text-white border border-emerald-400/20 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <Users className="w-4 h-4 text-emerald-400" />
-                <span>تصفح الدليل المهني الكامل</span>
-              </button>
-            )}
-            <button
-              onClick={() => setIsRegisterModalOpen(true)}
-              className="flex-1 sm:flex-none px-5 py-2.5 bg-gradient-to-l from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs sm:text-sm rounded-xl shadow-lg border border-emerald-400/30 transition-all flex items-center justify-center gap-2 cursor-pointer transform active:scale-95"
-            >
-              <Plus className="w-4 h-4 text-[#f5d77f]" />
-              <span>أضف مكتبك / سجّل بياناتك للظهور</span>
-            </button>
-          </div>
-        </div>
-      </div>
 
       {/* Search & Category Filter Bar */}
       <div className="bg-white rounded-2xl p-3.5 sm:p-4 border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-3 sm:gap-4">
