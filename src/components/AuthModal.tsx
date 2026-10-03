@@ -58,7 +58,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   // Common fields
   const [username, setUsername] = useState('');
-  const [requestedRole, setRequestedRole] = useState<'user' | 'supervisor'>('user');
+  const [requestedRole, setRequestedRole] = useState<'beneficiary' | 'user' | 'supervisor'>('beneficiary');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
@@ -787,31 +787,76 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <form onSubmit={handleRegister} className="space-y-3.5">
                 {/* Account Type (Role) */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-2">نوع الحساب <span className="text-red-500">*</span></label>
-                  <div className="flex gap-4 p-2 bg-slate-50/70 rounded-xl border border-slate-200">
-                    <label className="flex items-center gap-2 cursor-pointer flex-1">
+                  <label className="block text-xs font-bold text-slate-700 mb-2">
+                    نوع الحساب <span className="text-red-500">*</span>
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-2 bg-slate-50/80 rounded-xl border border-slate-200">
+                    {/* 1. مستفيد (باحث / مخلص) */}
+                    <label
+                      id="account-type-beneficiary"
+                      className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                        requestedRole === 'beneficiary'
+                          ? 'bg-emerald-50 border-emerald-500 text-emerald-950 font-bold shadow-2xs'
+                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100/70'
+                      }`}
+                    >
                       <input 
                         type="radio" 
-                        className="text-emerald-600 focus:ring-emerald-500"
+                        name="accountTypeRadio"
+                        className="text-emerald-600 focus:ring-emerald-500 shrink-0"
+                        checked={requestedRole === 'beneficiary'} 
+                        onChange={() => {
+                          setRequestedRole('beneficiary');
+                          setUsername('');
+                        }} 
+                      />
+                      <span className="text-xs font-semibold leading-tight">مستفيد (باحث / مخلص)</span>
+                    </label>
+
+                    {/* 2. مستخدم (محاسب او مدقق او صاحب عمل) */}
+                    <label
+                      id="account-type-user"
+                      className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                        requestedRole === 'user'
+                          ? 'bg-emerald-50 border-emerald-500 text-emerald-950 font-bold shadow-2xs'
+                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100/70'
+                      }`}
+                    >
+                      <input 
+                        type="radio" 
+                        name="accountTypeRadio"
+                        className="text-emerald-600 focus:ring-emerald-500 shrink-0"
                         checked={requestedRole === 'user'} 
                         onChange={() => {
                           setRequestedRole('user');
                           setUsername('');
                         }} 
                       />
-                      <span className="text-sm font-medium text-slate-700">مستفيد (باحث / مخلص)</span>
+                      <span className="text-xs font-semibold leading-tight">مستخدم (محاسب أو مدقق أو صاحب عمل)</span>
                     </label>
-                    <label className="flex items-center gap-2 cursor-pointer flex-1">
+
+                    {/* 3. مشرف */}
+                    <label
+                      id="account-type-supervisor"
+                      className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                        requestedRole === 'supervisor'
+                          ? 'bg-emerald-50 border-emerald-500 text-emerald-950 font-bold shadow-2xs'
+                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100/70'
+                      }`}
+                    >
                       <input 
                         type="radio" 
-                        className="text-emerald-600 focus:ring-emerald-500"
+                        name="accountTypeRadio"
+                        className="text-emerald-600 focus:ring-emerald-500 shrink-0"
                         checked={requestedRole === 'supervisor'} 
                         onChange={() => {
                           setRequestedRole('supervisor');
-                          setUsername(`sup_${Math.random().toString(36).substr(2, 4)}@sanadtax.com`);
+                          if (!regPrefix || regPrefix.includes('@')) {
+                            setRegPrefix(`sup_${Math.random().toString(36).substr(2, 4)}@sanadtax.com`);
+                          }
                         }} 
                       />
-                      <span className="text-sm font-medium text-slate-700">مشرف نظام</span>
+                      <span className="text-xs font-semibold leading-tight">مشرف</span>
                     </label>
                   </div>
                 </div>

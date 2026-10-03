@@ -3539,11 +3539,21 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                                 {(user.fullName || user.username).slice(0, 2)}
                               </div>
                               <div>
-                                <div className="text-gray-900 font-bold flex items-center gap-2">
+                                <div className="text-gray-900 font-bold flex items-center gap-1.5 flex-wrap">
                                   {user.fullName || user.username}
                                   {user.role === 'supervisor' && (
                                     <span className="bg-purple-100 text-purple-800 text-[10px] px-1.5 py-0.5 rounded font-bold">
                                       مشرف
+                                    </span>
+                                  )}
+                                  {user.role === 'beneficiary' && (
+                                    <span className="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.5 rounded font-bold">
+                                      مستفيد (باحث / مخلص)
+                                    </span>
+                                  )}
+                                  {(user.role === 'user' || (!user.role && user.role !== 'supervisor' && user.role !== 'beneficiary')) && (
+                                    <span className="bg-blue-100 text-blue-800 text-[10px] px-1.5 py-0.5 rounded font-bold">
+                                      مستخدم (محاسب / مدقق / صاحب عمل)
                                     </span>
                                   )}
                                 </div>

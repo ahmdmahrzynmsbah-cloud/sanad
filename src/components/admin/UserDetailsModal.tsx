@@ -165,8 +165,12 @@ export const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
                   <p className="text-xs text-emerald-300 font-mono mt-0.5 flex items-center gap-1.5">
                     <span>@{user.username}</span>
                     <span className="text-white/40">•</span>
-                    <span className="text-white/70 font-sans text-[11px]">
-                      {user.role === 'admin' ? 'مشرف إدارة مركزية' : 'مكلف / مراجع جمركي'}
+                    <span className="text-white/80 font-sans text-[11px] font-semibold">
+                      {user.role === 'supervisor' || user.role === 'admin'
+                        ? 'مشرف'
+                        : user.role === 'beneficiary'
+                        ? 'مستفيد (باحث / مخلص)'
+                        : 'مستخدم (محاسب / مدقق / صاحب عمل)'}
                     </span>
                   </p>
                 </div>

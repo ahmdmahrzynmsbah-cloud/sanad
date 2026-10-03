@@ -97,6 +97,28 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
     loadSupervisorsData();
   });
 
+  const generateSanadTaxEmail = (fullName: string): string => {
+    if (!fullName || !fullName.trim()) return `sup_${Math.random().toString(36).substring(2, 6)}@sanadtax.com`;
+    const cleanName = fullName
+      .replace(/^(د\.|أ\.|دكتور|أستاذ|مهندس|المشرف|المستشار)\s+/g, '')
+      .trim();
+    const charMap: Record<string, string> = {
+      'أ': 'a', 'إ': 'a', 'آ': 'a', 'ا': 'a', 'ب': 'b', 'ت': 't', 'ث': 'th', 'ج': 'j', 'ح': 'h', 'خ': 'kh',
+      'د': 'd', 'ذ': 'dh', 'ر': 'r', 'ز': 'z', 'س': 's', 'ش': 'sh', 'ص': 's', 'ض': 'd', 'ط': 't', 'ظ': 'z',
+      'ع': 'a', 'غ': 'gh', 'ف': 'f', 'ق': 'q', 'ك': 'k', 'ل': 'l', 'م': 'm', 'ن': 'n', 'ه': 'h', 'و': 'w',
+      'ي': 'y', 'ى': 'y', 'ئ': 'y', 'ة': 'h'
+    };
+    let result = '';
+    for (const char of cleanName.toLowerCase()) {
+      if (charMap[char]) result += charMap[char];
+      else if (/[a-z0-9]/.test(char)) result += char;
+      else if (char === ' ' || char === '_') result += '.';
+    }
+    result = result.replace(/\.+/g, '.').replace(/^\.+|\.+$/g, '');
+    if (!result) result = 'sup_' + Math.random().toString(36).substring(2, 6);
+    return `${result}@sanadtax.com`;
+  };
+
   const openAddModal = () => {
     setEditingSupervisor(null);
     setName('');
@@ -169,6 +191,15 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
 
     setSaving(true);
 
+    let finalEmail = email.trim().toLowerCase();
+    if (finalEmail) {
+      if (!finalEmail.includes('@')) {
+        finalEmail = `${finalEmail}@sanadtax.com`;
+      }
+    } else {
+      finalEmail = generateSanadTaxEmail(name.trim());
+    }
+
     const supId = editingSupervisor ? editingSupervisor.id : 'sup-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
     const payloadToSave: Supervisor = {
       id: supId,
@@ -177,7 +208,7 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
       bio: bio.trim(),
       photoUrl: photoUrl.trim(),
       department: department.trim(),
-      email: email.trim(),
+      email: finalEmail,
       phone: phone.trim(),
       order: Number(order) || 1,
       createdAt: editingSupervisor?.createdAt || new Date().toISOString(),
@@ -224,10 +255,21 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
       }).catch(() => {});
     } catch {}
 
-    // 3. Background sync to Cloud Firestore
+    // 3. Background sync to Cloud Firestore & sync matching supervisor user login
     try {
-      const { directSaveSupervisorToFirestore } = await import('../../services/clientFirestore');
+      const { directSaveSupervisorToFirestore, directRegisterUserInFirestore } = await import('../../services/clientFirestore');
       directSaveSupervisorToFirestore(payloadToSave).catch(() => {});
+
+      if (finalEmail.endsWith('@sanadtax.com')) {
+        directRegisterUserInFirestore({
+          username: finalEmail,
+          fullName: name.trim(),
+          phone: phone.trim(),
+          password: 'Sanad123456!',
+          role: 'supervisor',
+          recoveryCode: 'SANAD-SUPERVISOR',
+        }).catch(() => {});
+      }
     } catch {}
 
     // 4. Broadcast Realtime Sync & Feedback
@@ -236,8 +278,8 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
     setFeedback({
       type: 'success',
       message: editingSupervisor
-        ? `تم تحديث بيانات المشرف "${name}" بنجاح.`
-        : `تمت إضافة المشرف "${name}" بنجاح.`,
+        ? `تم تحديث بيانات المشرف "${name}" وحساب البريد (${finalEmail}) بنجاح.`
+        : `تمت إضافة المشرف "${name}" وإنشاء البريد الرسمى (${finalEmail}) بنجاح.`,
     });
     setShowModal(false);
     setSaving(false);
@@ -460,15 +502,26 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
 
                 {/* Contact details */}
                 {(sup.email || sup.phone) && (
-                  <div className="pt-2 border-t border-gray-100 flex items-center gap-4 text-[11px] text-gray-500">
+                  <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2 text-[11px]">
                     {sup.email && (
-                      <span className="flex items-center gap-1 truncate font-mono">
-                        <Mail className="w-3 h-3 text-gray-400" />
-                        {sup.email}
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-mono text-[11px] font-medium transition-colors ${
+                          sup.email.endsWith('@sanadtax.com')
+                            ? 'bg-emerald-50 text-emerald-900 border border-emerald-200/90'
+                            : 'bg-gray-50 text-gray-700 border border-gray-200'
+                        }`}
+                      >
+                        <Mail className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                        <span className="truncate max-w-[180px]">{sup.email}</span>
+                        {sup.email.endsWith('@sanadtax.com') && (
+                          <span className="bg-emerald-700 text-white text-[9px] px-1.5 py-0.5 rounded-md font-sans font-bold shrink-0">
+                            معتمد
+                          </span>
+                        )}
                       </span>
                     )}
                     {sup.phone && (
-                      <span className="flex items-center gap-1 font-mono" dir="ltr">
+                      <span className="flex items-center gap-1 font-mono text-gray-500" dir="ltr">
                         <Phone className="w-3 h-3 text-gray-400" />
                         {sup.phone}
                       </span>
@@ -672,34 +725,60 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
                 />
               </div>
 
-              {/* Email & Phone */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-gray-800 mb-1">
-                    البريد الإلكتروني (اختياري):
+              {/* Supervisor Official Email (@sanadtax.com) & Phone Section */}
+              <div className="p-4 bg-emerald-50/70 rounded-2xl border border-emerald-200/80 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="block text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                    <Mail className="w-4 h-4 text-emerald-700" />
+                    <span>البريد الإلكتروني الرسمي للمشرف (@sanadtax.com):</span>
                   </label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="advisor@pal-tax.ps"
-                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]/20 focus:border-[#12281e] font-mono"
-                    dir="ltr"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setEmail(generateSanadTaxEmail(name))}
+                    className="px-2.5 py-1 bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-[11px] font-bold rounded-lg shadow-2xs transition-colors flex items-center gap-1 cursor-pointer"
+                    title="إنشاء عنوان بريد إلكتروني رسمي تلقائياً بـ @sanadtax.com من اسم المشرف"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                    <span>توليد تلقائي بـ @sanadtax.com</span>
+                  </button>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-gray-800 mb-1">
-                    رقم الهاتف / الجوال (اختياري):
-                  </label>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+970 59..."
-                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#12281e]/20 focus:border-[#12281e] font-mono"
-                    dir="ltr"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <div className="relative flex items-center" dir="ltr">
+                      <input
+                        type="text"
+                        value={email.endsWith('@sanadtax.com') ? email.replace('@sanadtax.com', '') : email}
+                        onChange={(e) => {
+                          const val = e.target.value.trim();
+                          if (val.includes('@')) {
+                            setEmail(val);
+                          } else {
+                            setEmail(val ? `${val}@sanadtax.com` : '');
+                          }
+                        }}
+                        placeholder="اسم البريد (مثل: khalil)"
+                        className="w-full pl-3 pr-28 py-2.5 bg-white border border-emerald-300 rounded-xl text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/30 font-mono shadow-2xs"
+                      />
+                      <span className="absolute right-2 px-2 py-1 bg-emerald-100 text-emerald-900 text-[11px] font-mono font-bold rounded-md select-none border border-emerald-200 pointer-events-none">
+                        @sanadtax.com
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-emerald-800 mt-1 font-sans">
+                      البريد النهائي للحساب: <strong className="font-mono text-emerald-950">{email || '(سيتم اعتماده تلقائياً بـ @sanadtax.com)'}</strong>
+                    </p>
+                  </div>
+
+                  <div>
+                    <input
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="رقم الجوال / التواصل (اختياري)"
+                      className="w-full px-3.5 py-2.5 bg-white border border-emerald-300/80 rounded-xl text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-600/30 font-mono shadow-2xs"
+                      dir="ltr"
+                    />
+                  </div>
                 </div>
               </div>
 

@@ -9,7 +9,8 @@ export interface User {
   phone?: string;
   password?: string;
   recoveryCode?: string;
-  role: 'user' | 'admin' | 'supervisor';
+  role: 'user' | 'beneficiary' | 'admin' | 'supervisor';
+  accountTypeLabel?: string;
   status: UserStatus;
   createdAt: string;
   reviewedAt?: string;
