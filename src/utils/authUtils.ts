@@ -50,10 +50,16 @@ export function isMatchingUser(
     .trim();
   const uCleanUsername = uRawUsername.replace(/^@+/, '').trim().toLowerCase();
 
+  const uPrefix = uCleanUsername.split('@')[0];
+  const inputPrefix = cleanUsername.split('@')[0];
+
   // 1. Direct or sanitized username match
   if (
     cleanUsername &&
     (uCleanUsername === cleanUsername ||
+      uCleanUsername === cleanUsername + '@sanadtax.com' ||
+      (cleanUsername.includes('@sanadtax.com') && uCleanUsername === inputPrefix) ||
+      (uCleanUsername.endsWith('@sanadtax.com') && uPrefix === inputPrefix) ||
       uRawUsername.toLowerCase() === raw.toLowerCase() ||
       uCleanUsername === raw.toLowerCase() ||
       uRawUsername.toLowerCase() === cleanUsername)

@@ -65,6 +65,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   // Register specific fields
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
+  const [regPrefix, setRegPrefix] = useState('');
   const [recoveryCode, setRecoveryCode] = useState('');
 
   // Forgot password specific fields
@@ -229,8 +230,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     e.preventDefault();
     resetStates();
 
-    const { cleanUsername, raw: rawUser } = normalizeAuthIdentifier(username);
-    const targetUsername = cleanUsername || rawUser;
+    const cleanPrefix = regPrefix
+      .trim()
+      .toLowerCase()
+      .replace(/[\u200B-\u200D\uFEFF\u200E\u200F\u202A-\u202E\u00A0]/g, '')
+      .replace(/^@+/, '')
+      .replace(/@.*$/, '')
+      .replace(/[^\w\.\-\_]/g, '');
+
+    const targetUsername = cleanPrefix ? `${cleanPrefix}@sanadtax.com` : '';
     const cleanPhone = phone.replace(/[\u200B-\u200D\uFEFF\u200E\u200F\u202A-\u202E\u00A0]/g, '').trim();
     const cleanFullName = fullName.replace(/[\u200B-\u200D\uFEFF\u200E\u200F\u202A-\u202E\u00A0]/g, '').trim();
     const cleanRecovery = recoveryCode.trim();
@@ -245,13 +253,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    if (!targetUsername) {
-      setCleanError('يرجى تحديد اسم مستخدم لتسجيل الدخول.');
+    if (!cleanPrefix) {
+      setCleanError('يرجى تحديد الجزء الأول من اسم المستخدم قبل نطاق @sanadtax.com (مثال: ahmad).');
       return;
     }
 
-    if (targetUsername.length < 3) {
-      setCleanError('يجب أن يتكون اسم المستخدم من 3 أحرف على الأقل.');
+    if (cleanPrefix.length < 2) {
+      setCleanError('يجب أن يتكون اسم المستخدم من حرفين أو رقمين على الأقل قبل @sanadtax.com.');
       return;
     }
 
@@ -854,20 +862,36 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      اسم المستخدم <span className="text-red-500">*</span>
+                      اسم المستخدم (البريد الإلكتروني المعتمد) <span className="text-red-500">*</span>
                     </label>
-                    <div className="relative">
+                    <div className="relative flex items-center bg-slate-50/70 hover:bg-slate-50 border border-slate-200 rounded-xl focus-within:bg-white focus-within:ring-2 focus-within:ring-[#0f2a24]/20 focus-within:border-[#0f2a24] transition-all overflow-hidden" dir="ltr">
+                      <div className="pl-3 pr-1 text-slate-400 pointer-events-none shrink-0">
+                        <UserCheck className="w-4 h-4" />
+                      </div>
                       <input
                         id="register-username-input"
                         type="text"
-                        value={username}
-                        onChange={(e) => setUsername(e.target.value)}
+                        dir="ltr"
+                        value={regPrefix}
+                        onChange={(e) => {
+                          let val = e.target.value.trim().toLowerCase();
+                          if (val.includes('@')) {
+                            val = val.split('@')[0];
+                          }
+                          val = val.replace(/[^\w\.\-\_]/g, '');
+                          setRegPrefix(val);
+                        }}
                         placeholder="ahmad_khalil"
-                        className="w-full pl-3 pr-9 py-2.5 bg-slate-50/70 hover:bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0f2a24]/20 focus:border-[#0f2a24] transition-all"
+                        className="flex-1 min-w-0 py-2.5 pl-1 pr-2 bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none text-left font-mono"
                         required
                       />
-                      <UserCheck className="w-4 h-4 text-slate-400 absolute right-3 top-3 pointer-events-none" />
+                      <span className="bg-[#0f2a24]/10 text-[#0f2a24] font-bold text-xs px-2.5 py-2.5 border-l border-slate-200 shrink-0 select-none flex items-center font-mono">
+                        @sanadtax.com
+                      </span>
                     </div>
+                    <p className="text-[10.5px] text-slate-500 mt-1 font-medium text-right">
+                      اسم المستخدم النهائي: <strong className="text-[#0f2a24] font-mono" dir="ltr">{(regPrefix.trim() || 'اسم_المستخدم') + '@sanadtax.com'}</strong>
+                    </p>
                   </div>
 
                   <div>

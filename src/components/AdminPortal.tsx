@@ -44,6 +44,8 @@ import {
   EyeOff,
   ChevronDown,
   ChevronUp,
+  Award,
+  ArrowRight,
   Globe,
   Shield,
   Target,
@@ -53,7 +55,6 @@ import {
   CreditCard,
   User as UserIcon,
   Bot,
-  Award,
 } from 'lucide-react';
 import { User, Law, LawCategory, LegalCategory, DEFAULT_LEGAL_CATEGORIES, SystemBranding, PlatformAboutData, ContactInfo, Video, RelatedSite, Partner, SubscriptionPlan, Supervisor, ProfessionalProfile } from '../types';
 import { formatBytes, sanitizeLawTitle, PDFProgress } from '../utils/pdfParser';
@@ -3470,6 +3471,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                       <th className="py-3 px-4">تاريخ التسجيل</th>
                       <th className="py-3 px-4">حالة الحساب</th>
                       <th className="py-3 px-4">حالة الاشتراك والتجربة</th>
+                      <th className="py-3 px-4">تاريخ انتهاء التجربة</th>
                       <th className="py-3 px-4 text-center">إدارة الاشتراك والإجراءات</th>
                     </tr>
                   </thead>
@@ -3521,6 +3523,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                       <th className="py-3 px-4">تاريخ التسجيل</th>
                       <th className="py-3 px-4">حالة الحساب</th>
                       <th className="py-3 px-4">حالة الاشتراك والتجربة</th>
+                      <th className="py-3 px-4">تاريخ انتهاء التجربة</th>
                       <th className="py-3 px-4 text-center">إدارة الاشتراك والإجراءات</th>
                     </tr>
                   </thead>
@@ -3560,11 +3563,24 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                               <span className="text-gray-400 text-[11px]">غير محدد</span>
                             )}
                           </td>
-                          <td className="py-3.5 px-4 text-gray-500 font-mono">
-                            {new Date(user.createdAt).toLocaleString('ar-EG-u-nu-latn', {
-                              dateStyle: 'medium',
-                              timeStyle: 'short',
-                            })}
+                          <td className="py-3 px-4 text-slate-700 font-mono text-[11px] whitespace-nowrap">
+                            {(() => {
+                              const d = new Date(user.createdAt);
+                              if (isNaN(d.getTime())) return '-';
+                              const yr = d.getFullYear();
+                              const mo = String(d.getMonth() + 1).padStart(2, '0');
+                              const dy = String(d.getDate()).padStart(2, '0');
+                              const hrs = d.getHours();
+                              const mins = String(d.getMinutes()).padStart(2, '0');
+                              const ampm = hrs >= 12 ? 'م' : 'ص';
+                              const formatted12 = String(hrs % 12 || 12).padStart(2, '0');
+                              return (
+                                <div className="flex flex-col gap-0.5">
+                                  <span dir="ltr" className="font-bold text-slate-800">{yr}/{mo}/{dy}</span>
+                                  <span dir="ltr" className="text-[10px] text-gray-400 font-sans">{formatted12}:{mins} {ampm}</span>
+                                </div>
+                              );
+                            })()}
                           </td>
                           <td className="py-3.5 px-4">
                             {user.status === 'pending' && (
@@ -3627,6 +3643,52 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                                   </div>
                                 )}
                               </div>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 font-mono text-[11px] whitespace-nowrap">
+                            {user.isSubscribed ? (
+                              <span className="text-gray-400 text-[11px] font-sans">
+                                غير انطباقي (مشترك)
+                              </span>
+                            ) : (
+                              (() => {
+                                const trialEndDate = user.trialEndsAt
+                                  ? new Date(user.trialEndsAt)
+                                  : user.createdAt
+                                  ? new Date(new Date(user.createdAt).getTime() + (user.trialDays || defaultTrialDays || 30) * 86400000)
+                                  : null;
+
+                                if (!trialEndDate || isNaN(trialEndDate.getTime())) {
+                                  return <span className="text-gray-400 text-[11px] font-sans">غير محدد</span>;
+                                }
+
+                                const isExpired = trialEndDate.getTime() < Date.now();
+                                const yr = trialEndDate.getFullYear();
+                                const mo = String(trialEndDate.getMonth() + 1).padStart(2, '0');
+                                const dy = String(trialEndDate.getDate()).padStart(2, '0');
+                                const hrs = trialEndDate.getHours();
+                                const mins = String(trialEndDate.getMinutes()).padStart(2, '0');
+                                const ampm = hrs >= 12 ? 'م' : 'ص';
+                                const formatted12 = String(hrs % 12 || 12).padStart(2, '0');
+
+                                return (
+                                  <div className="flex flex-col gap-0.5">
+                                    <div className="flex items-center gap-1.5 font-bold">
+                                      <span className={isExpired ? 'text-red-600 font-extrabold' : 'text-slate-800'} dir="ltr">
+                                        {yr}/{mo}/{dy}
+                                      </span>
+                                      {isExpired && (
+                                        <span className="bg-red-100 text-red-800 text-[10px] px-1.5 py-0.2 rounded font-sans font-extrabold">
+                                          انتهت
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="text-[10px] text-gray-400 font-sans" dir="ltr">
+                                      {formatted12}:{mins} {ampm}
+                                    </div>
+                                  </div>
+                                );
+                              })()
                             )}
                           </td>
                           <td className="py-2.5 px-3">

@@ -152,6 +152,9 @@ export const SkeletonUserRow: React.FC = () => {
         <Skeleton className="h-5 w-24 rounded-full" />
       </td>
       <td className="p-4">
+        <Skeleton className="h-5 w-28 rounded-md" />
+      </td>
+      <td className="p-4">
         <div className="flex items-center justify-end gap-2">
           <Skeleton className="h-8 w-16 rounded-xl" />
           <Skeleton className="h-8 w-16 rounded-xl" />

@@ -434,7 +434,19 @@ export async function directRegisterUser(payload: {
   recoveryCode: string;
   role?: string;
 }): Promise<DirectAuthResult> {
-  const trimmedUsername = payload.username.trim();
+  let cleanPrefix = String(payload.username || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\u200B-\u200D\uFEFF\u200E\u200F\u202A-\u202E\u00A0]/g, '')
+    .replace(/^@+/, '')
+    .replace(/@.*$/, '')
+    .replace(/[^\w\.\-\_]/g, '');
+
+  if (!cleanPrefix) {
+    cleanPrefix = 'user_' + Math.random().toString(36).substring(2, 6);
+  }
+
+  const trimmedUsername = `${cleanPrefix}@sanadtax.com`;
   const trimmedPhone = payload.phone.trim();
   const trimmedFullName = payload.fullName.trim();
   const trimmedRecoveryCode = payload.recoveryCode.trim();

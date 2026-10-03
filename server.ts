@@ -1787,7 +1787,19 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ error: 'اسم المستخدم وكلمة المرور مطلوبان' });
     }
 
-    const trimmedUsername = String(username).trim();
+    const rawUser = String(username || '').trim();
+    let cleanPrefix = rawUser
+      .toLowerCase()
+      .replace(/[\u200B-\u200D\uFEFF\u200E\u200F\u202A-\u202E\u00A0]/g, '')
+      .replace(/^@+/, '')
+      .replace(/@.*$/, '')
+      .replace(/[^\w\.\-\_]/g, '');
+
+    if (!cleanPrefix || cleanPrefix.length < 2) {
+      return res.status(400).json({ error: 'يرجى إدخال اسم المستخدم قبل نطاق @sanadtax.com بشكل صحيح (مثال: ahmad)' });
+    }
+
+    const trimmedUsername = `${cleanPrefix}@sanadtax.com`;
     const trimmedFullName = fullName ? String(fullName).trim() : '';
     const trimmedPhone = phone ? String(phone).trim() : '';
     const trimmedRecoveryCode = recoveryCode ? String(recoveryCode).trim() : '';
@@ -6264,6 +6276,7 @@ interface LegalChunk {
     averageRating?: number;
     totalRatings?: number;
     mostAccurateVotes?: number;
+    associatedQuery?: string;
     reason?: string;
   };
 }
