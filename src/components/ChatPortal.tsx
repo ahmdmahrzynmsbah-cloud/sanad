@@ -777,6 +777,7 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
         onClearAllConversations={handleClearAllConversations}
         onLogout={onLogout}
         branding={branding}
+        onOpenSubmitLaw={onOpenSubmitLaw}
       />
 
       {/* 2. Main Chat View Container (Center) */}

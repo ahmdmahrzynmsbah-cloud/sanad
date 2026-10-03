@@ -21,6 +21,7 @@ import {
   Landmark,
   BookOpen,
   AlertTriangle,
+  UploadCloud,
 } from 'lucide-react';
 import { User, Conversation, SystemBranding } from '../types';
 
@@ -39,6 +40,7 @@ interface ChatSidebarProps {
   onClearAllConversations?: () => void;
   onLogout?: () => void;
   branding?: SystemBranding;
+  onOpenSubmitLaw?: () => void;
 }
 
 export const ChatSidebar: React.FC<ChatSidebarProps> = ({
@@ -56,6 +58,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   onClearAllConversations,
   onLogout,
   branding,
+  onOpenSubmitLaw,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -475,6 +478,50 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             })
           )}
         </div>
+
+        {/* ========================================================================= */}
+        {/* 4.5 PROPOSE / UPLOAD LAW FOR KNOWLEDGE BASE                              */}
+        {/* ========================================================================= */}
+        {onOpenSubmitLaw && (
+          <div className={`border-t border-[#183a2f]/80 bg-[#081812] shrink-0 ${isCollapsed ? 'p-2 flex justify-center' : 'p-2.5'}`}>
+            {isCollapsed ? (
+              <button
+                id="sidebar-propose-law-collapsed-btn"
+                onClick={onOpenSubmitLaw}
+                className="w-9 h-9 rounded-xl bg-emerald-900/80 hover:bg-emerald-800 text-emerald-300 border border-emerald-500/40 flex items-center justify-center cursor-pointer transition-all shadow-xs"
+                title="رفع/اقتراح قانون جديد لقاعدة المعرفة"
+              >
+                <UploadCloud className="w-4 h-4 text-emerald-300" />
+              </button>
+            ) : (
+              <button
+                id="sidebar-propose-law-btn"
+                onClick={() => {
+                  onOpenSubmitLaw();
+                  if (window.innerWidth < 1024) onCloseMobile();
+                }}
+                className="w-full group flex items-center justify-between p-2.5 rounded-xl bg-gradient-to-r from-emerald-950 via-[#102c21] to-[#153b2d] hover:from-emerald-900 hover:to-[#1b4b39] text-white border border-emerald-600/40 hover:border-emerald-400 shadow-md transition-all cursor-pointer text-right"
+                title="رفع واقتراح قانون جديد لإرساله للمشرفين والمسؤولين لإضافته في قاعدة المعرفة"
+              >
+                <div className="flex items-center gap-2.5 overflow-hidden">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-300 group-hover:scale-105 transition-transform shrink-0">
+                    <UploadCloud className="w-4 h-4 text-emerald-300" />
+                  </div>
+                  <div className="truncate text-right">
+                    <div className="text-xs font-bold text-white group-hover:text-emerald-200 transition-colors flex items-center gap-1">
+                      <span>رفع قانون لقاعدة المعرفة</span>
+                      <Sparkles className="w-3 h-3 text-amber-400 animate-pulse" />
+                    </div>
+                    <p className="text-[10px] text-emerald-300/80 truncate">
+                      اقتراح تشريع للمراجعة والاعتماد
+                    </p>
+                  </div>
+                </div>
+                <Plus className="w-4 h-4 text-emerald-400 group-hover:rotate-90 transition-transform shrink-0" />
+              </button>
+            )}
+          </div>
+        )}
 
         {/* ========================================================================= */}
         {/* 5. CLEAR ALL (Only when expanded)                                        */}
