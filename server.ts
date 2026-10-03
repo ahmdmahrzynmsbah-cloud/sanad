@@ -106,7 +106,7 @@ import type {
   StoredLawRequest,
 } from './server/firestore.ts';
 import { normalizeAuthIdentifier, isMatchingUser } from './src/utils/authUtils.ts';
-import { normalizeAndFixArabicText } from './src/utils/arabicText.ts';
+import { normalizeAndFixArabicText, isMojibakeText } from './src/utils/arabicText.ts';
 
 dotenv.config();
 
@@ -4236,16 +4236,17 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
       }
     }
 
-    const normalizedLocalText = normalizeAndFixArabicText(localPdfText);
-    const hasSufficientDirectText = normalizedLocalText.length >= 100 && (normalizedLocalText.match(/[\u0600-\u06FF]+/g) || []).length >= 15;
+    const isLocalTextMojibake = isMojibakeText(localPdfText);
+    const normalizedLocalText = isLocalTextMojibake ? '' : normalizeAndFixArabicText(localPdfText);
+    const hasSufficientDirectText = !isLocalTextMojibake && normalizedLocalText.length >= 100 && (normalizedLocalText.match(/[\u0600-\u06FF]+/g) || []).length >= 15;
 
     // 2. High-precision AI Legal extraction using Gemini 2.5 Flash
     const prompt = `أنت مستشار وخبير قانوني وتشريعي فلسطيني رفيع المستوى في القوانين الجمركية والضريبية.
 مهمتك استخراج نصوص كافة المواد والفقرات والبنود والقرارات من هذا المستند بالكامل بنسبة 100% حرفياً كلمة بكلمة ومادة بمادة وبنداً ببند دون أي حذف أو اختصار أو تلخيص على الإطلاق.
 
 تعليمات صارمة لا تقبل الاستثناء:
-1. استخرج النص الكامل لكافة المواد القانونية حرفياً كلمة بكلمة مادة بمادة (المادة (1): ... \\nالمادة (2): ... \\nالمادة (3): ... وهكذا حتى نهاية المستند).
-2. ممنوع منعاً باتاً تلخيص أو اختصار أو إغفال أي مادة أو بند أو جدول أو ديباجة.
+1. إذا كانت الصفحات تحتوي على شعارات (Logos) أو علامات مائية (Watermarks) أو ترويسات أو صور إعلانية أو رسوم، قم بتجاهلها تماماً وتخطاها، وركز فقط على النص التشريعي والقانوني الأصلي المكتوب.
+2. استخرج النص الكامل لكافة المواد القانونية حرفياً كلمة بكلمة مادة بمادة (المادة (1): ... \nالمادة (2): ... \nالمادة (3): ... وهكذا حتى نهاية المستند).
 3. إذا كانت النصوص تحتوي على كلمات أو حروف معكوسة أو مفككة أو مشوهة بسبب تصدير الـ PDF أو المسح الضوئي، قم بتصحيحها فوراً وإعادتها إلى الكتابة العربية الصحيحة المتصلة والسليمة مئة بالمئة.
 4. استخرج العنوان الرسمي الدقيق للقانون أو القرار أو المرسوم.
 5. حدد التصنيف التشريعي الأنسب ("جمارك"، "ضريبة دخل"، "ضريبة القيمة المضافة"، "رسوم ومكوس").
@@ -4303,7 +4304,7 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
         ];
       }
 
-      console.log(`[AI-PDF] Extracting legal document via Gemini 2.5 Flash (hasDirectText: ${hasSufficientDirectText}, mime: ${effectiveMimeType}, size: ${Math.round(buffer.length / 1024)}KB)`);
+      console.log(`[AI-PDF] Extracting legal document via Gemini 2.5 Flash (hasDirectText: ${hasSufficientDirectText}, isMojibake: ${isLocalTextMojibake}, mime: ${effectiveMimeType}, size: ${Math.round(buffer.length / 1024)}KB)`);
 
       const legalSafetySettings = [
         { category: 'HARM_CATEGORY_HARASSMENT' as any, threshold: 'BLOCK_NONE' as any },
@@ -4322,7 +4323,7 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
             contents: contentsPayload,
             config: {
               systemInstruction:
-                'أنت مستشار قانوني ومالي رفيع المستوى، متخصص في استخراج وتوثيق نصوص القوانين والمراسيم والقرارات والفواتير والبيانات الجمركية والضريبية بدقة متناهية وبنسبة 100% حرفياً دون أي حذف أو اختصار.',
+                'أنت مستشار قانوني ومالي رفيع المستوى، متخصص في استخراج وتوثيق نصوص القوانين والمراسيم والقرارات والفواتير والبيانات الجمركية والضريبية بدقة متناهية وبنسبة 100% حرفياً دون أي حذف أو اختصار مع تجاهل كافة الشعار والعلامات المائية.',
               maxOutputTokens: 32768,
               temperature: 0.05,
               safetySettings: legalSafetySettings,
@@ -4332,7 +4333,7 @@ app.post('/api/admin/parse-pdf', async (req, res) => {
           if (response?.text) {
             const parsed = extractLegalDocumentFromModelOutput(response.text, cleanTitle, 'جمارك');
             if (parsed && parsed.content && parsed.content.length > 20) {
-              const finalDocContent = hasSufficientDirectText && normalizedLocalText.length >= parsed.content.length
+              const finalDocContent = hasSufficientDirectText && !isLocalTextMojibake && normalizedLocalText.length >= parsed.content.length
                 ? normalizedLocalText
                 : normalizeAndFixArabicText(parsed.content).trim();
 

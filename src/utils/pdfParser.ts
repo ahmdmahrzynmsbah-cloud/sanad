@@ -6,7 +6,7 @@
 
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import { normalizeAndFixArabicText, cleanGazetteNoise } from './arabicText';
+import { normalizeAndFixArabicText, cleanGazetteNoise, isMojibakeText } from './arabicText';
 import { findKnownPalestinianDecree } from './palestinianDecrees';
 
 // Configure PDF.js worker safely for Vite / Browser
@@ -335,12 +335,14 @@ export async function extractTextFromPDF(
   // Step 1: Direct Browser PDF.js Extraction (Takes < 1s for any size)
   const clientResult = await extractTextWithPDFJS(file, safeProgress);
 
-  const arabicCharsCount = clientResult?.text
+  const isClientMojibake = clientResult?.text ? isMojibakeText(clientResult.text) : false;
+
+  const arabicCharsCount = (clientResult?.text && !isClientMojibake)
     ? (clientResult.text.match(/[\u0600-\u06FF]/g) || []).length
     : 0;
 
-  // If digital text was found and contains readable content
-  if (clientResult && clientResult.text && clientResult.text.trim().length >= 25 && arabicCharsCount >= 6) {
+  // If digital text was found and contains readable content (and is NOT mojibake)
+  if (clientResult && clientResult.text && !isClientMojibake && clientResult.text.trim().length >= 25 && arabicCharsCount >= 6) {
     const fullVerbatimText = clientResult.text;
     const localMeta = detectLawMetadataLocally(fullVerbatimText, file.name);
 

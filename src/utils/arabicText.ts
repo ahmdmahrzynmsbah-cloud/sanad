@@ -215,6 +215,77 @@ export function cleanGazetteNoise(text: string): string {
 }
 
 /**
+ * Detects whether extracted text is garbled/mojibake (e.g. Win1256/custom font encoding artifact)
+ * e.g. "hō°ûE hcG ájOôa á«µ [] e hcG ácGô°T..."
+ */
+export function isMojibakeText(text: string): boolean {
+  if (!text || typeof text !== 'string') return false;
+
+  const sample = text.slice(0, 5000);
+  if (sample.length < 15) return false;
+
+  // 1. Extended Latin accented / CP1256 glyph matches
+  const mojibakeCharsMatch = sample.match(/[áâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ°µ§©«»±²³´¶·¸¹º¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞß]/g);
+  const mojibakeCount = mojibakeCharsMatch ? mojibakeCharsMatch.length : 0;
+
+  // 2. Specific Mojibake token signatures common in PDF exports
+  const signatureMatches = sample.match(/(?:hcG|ág|°û|¿É|âE|á«|ác|ôa|aà|ºû|øj|ÉA|ªG|âS|âC)/g);
+  const signatureCount = signatureMatches ? signatureMatches.length : 0;
+
+  // 3. Ratio of actual Arabic Unicode characters (0x0600-0x06FF) vs total non-space length
+  const nonSpaceLength = sample.replace(/\s+/g, '').length;
+  const arabicMatch = sample.match(/[\u0600-\u06FF]/g);
+  const arabicCount = arabicMatch ? arabicMatch.length : 0;
+  const arabicRatio = nonSpaceLength > 0 ? arabicCount / nonSpaceLength : 0;
+
+  if (mojibakeCount >= 5 || signatureCount >= 3) {
+    return true;
+  }
+
+  if (arabicRatio < 0.25 && (mojibakeCount >= 2 || signatureCount >= 1)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Converts Windows-1256 / CP1256 Mojibake text into standard Arabic characters
+ */
+export function repairMojibakeArabic(text: string): string {
+  if (!text) return '';
+
+  const cp1256Map: Record<string, string> = {
+    'Á': 'ء', 'Â': 'آ', 'Ã': 'أ', 'Ä': 'ؤ', 'Å': 'إ', 'Æ': 'ئ', 'Ç': 'ا', 'È': 'ب',
+    'É': 'ة', 'Ê': 'ت', 'Ë': 'ث', 'Ì': 'ج', 'Í': 'ح', 'Î': 'خ', 'Ï': 'د', 'Ð': 'ذ',
+    'Ñ': 'ر', 'Ò': 'ز', 'Ó': 'س', 'Ô': 'ش', 'Õ': 'ص', 'Ö': 'ض', '×': 'ط', 'Ø': 'ظ',
+    'Ù': 'ع', 'Ú': 'غ', 'à': 'ـ', 'á': 'ف', 'â': 'ق', 'ã': 'ك', 'ä': 'ل', 'å': 'م',
+    'æ': 'ن', 'ç': 'ه', 'è': 'و', 'é': 'ى', 'ê': 'ي', 'ë': 'ً', 'ì': 'ٌ', 'í': 'ٍ',
+    'î': 'َ', 'ï': 'ُ', 'ð': 'ِ', 'ñ': 'ّ', 'ò': 'ْ',
+    '°': 'ذ', 'µ': 'ص', '«': 'ث', '»': 'ف', '¿': 'م', '§': 'ا', '©': 'ة', '¨': 'ب',
+    'hcG': 'ال', 'ácô°T': 'شركة', 'ácGô°T': 'شركات', 'ájOôa': 'فردية', '¿ÉaàFG': 'ائتمان'
+  };
+
+  let repaired = text;
+  for (const [key, val] of Object.entries(cp1256Map)) {
+    if (key.length > 1) {
+      repaired = repaired.replaceAll(key, val);
+    }
+  }
+
+  let out = '';
+  for (const char of repaired) {
+    if (cp1256Map[char]) {
+      out += cp1256Map[char];
+    } else {
+      out += char;
+    }
+  }
+
+  return out;
+}
+
+/**
  * Universal Arabic text normalizer and repair pipeline:
  * 1. Normalize Unicode NFKC (Presentation Forms-A & B to base Arabic).
  * 2. Remove zero-width spaces, directional marks, and control glyphs.
@@ -225,8 +296,15 @@ export function cleanGazetteNoise(text: string): string {
 export function normalizeAndFixArabicText(rawText: string): string {
   if (!rawText || typeof rawText !== 'string') return '';
 
+  let text = rawText;
+
+  // Check if text is Mojibake and repair it
+  if (isMojibakeText(text)) {
+    text = repairMojibakeArabic(text);
+  }
+
   // 1. Unicode Normalization NFKC (maps ﹱ ﹲ ﺀ ﺁ ﺎ ﺏ ﺐ ﺕ ﺖ into standard Arabic letters)
-  let text = rawText.normalize('NFKC');
+  text = text.normalize('NFKC');
 
   // 2. Strip non-printable and invisible control marks (except newlines, tabs, and spaces)
   text = text.replace(/[\u200B-\u200F\u202A-\u202E\uFEFF\u00A0]/g, ' ');
