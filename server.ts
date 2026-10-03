@@ -85,6 +85,11 @@ import {
   fetchProfessionalsFromFirestore,
   saveProfessionalToFirestore,
   deleteProfessionalFromFirestore,
+  saveReferenceEvaluationToFirestore,
+  saveReferenceStatsToFirestore,
+  fetchReferenceEvaluationsFromFirestore,
+  fetchReferenceStatsFromFirestore,
+  deleteReferenceEvaluationFromFirestore,
   onDatabaseChange,
   isQuotaExceeded,
 } from './server/firestore.ts';
@@ -5619,6 +5624,7 @@ app.post('/api/chat', async (req, res) => {
     ? searchResult.topChunks.slice(0, 4).map((c, idx) => {
         const refKey = c.referenceKey || computeServerReferenceKey(c.lawTitle, c.articleNumber, c.sectionHeader, c.lawId, c.text);
         const stats = db.referenceStats?.[refKey];
+        const associatedQ = stats?.associatedQueries?.[0] || c.learnedData?.associatedQuery;
         return {
           id: `cit-${idx + 1}-${c.lawId}`,
           lawId: c.lawId,
@@ -5635,6 +5641,8 @@ app.post('/api/chat', async (req, res) => {
           totalRatings: stats?.totalRatings ?? c.learnedData?.totalRatings,
           mostAccurateVotes: stats?.mostAccurateVotes ?? c.learnedData?.mostAccurateVotes,
           isLearnedTopMatch: Boolean(c.learnedData?.isMostAccurate || (stats && stats.mostAccurateVotes > 0)),
+          topVotedQuery: associatedQ,
+          associatedQueries: stats?.associatedQueries || (associatedQ ? [associatedQ] : undefined),
         };
       })
     : [];
@@ -5808,6 +5816,9 @@ ${prioritizedContext ? `\n<retrieved_knowledge_base>\n${prioritizedContext}\n</r
     // No irrelevant static chips to avoid UI clutter
     const suggestedDetails = undefined;
 
+    const topRef = searchResult?.topLearnedReference;
+    const learnedApplied = Boolean(topRef && (topRef.learnedData?.isMostAccurate || (topRef.learnedData?.mostAccurateVotes || 0) > 0));
+
     if (response?.text) {
       return res.json({
         reply: response.text,
@@ -5816,10 +5827,15 @@ ${prioritizedContext ? `\n<retrieved_knowledge_base>\n${prioritizedContext}\n</r
         suggestedDetails,
         citations: citations.length > 0 ? citations : undefined,
         userQuery: trimmed,
-        learnedReferenceApplied: Boolean(searchResult?.topLearnedReference),
-        learnedReferenceNote: searchResult?.topLearnedReference
-          ? `تم ترجيح هذه الإجابة استناداً إلى تقييمات الدقة المعتمدة للمرجع (${searchResult.topLearnedReference.lawTitle} - مادة ${searchResult.topLearnedReference.articleNumber || searchResult.topLearnedReference.sectionHeader})`
+        learnedReferenceApplied: learnedApplied,
+        learnedReferenceNote: learnedApplied
+          ? `تم ترجيح هذه الإجابة استناداً إلى تقييمات الدقة المعتمدة للمرجع (${topRef?.lawTitle} - ${topRef?.articleNumber ? 'المادة ' + topRef.articleNumber : topRef?.sectionHeader})`
           : undefined,
+        learnedReferenceLawTitle: topRef?.lawTitle,
+        learnedReferenceHeader: topRef?.sectionHeader,
+        learnedReferenceArticle: topRef?.articleNumber,
+        learnedReferenceQuery: topRef?.learnedData?.associatedQuery || (db.referenceStats?.[topRef?.referenceKey || '']?.associatedQueries?.[0]) || trimmed,
+        learnedReferenceVotes: topRef?.learnedData?.mostAccurateVotes,
       });
     }
 
@@ -5834,19 +5850,28 @@ ${prioritizedContext ? `\n<retrieved_knowledge_base>\n${prioritizedContext}\n</r
       suggestedDetails,
       citations: citations.length > 0 ? citations : undefined,
       userQuery: trimmed,
-      learnedReferenceApplied: Boolean(searchResult?.topLearnedReference),
-      learnedReferenceNote: searchResult?.topLearnedReference
-        ? `تم ترجيح هذه الإجابة استناداً إلى تقييمات الدقة المعتمدة للمرجع (${searchResult.topLearnedReference.lawTitle} - مادة ${searchResult.topLearnedReference.articleNumber || searchResult.topLearnedReference.sectionHeader})`
+      learnedReferenceApplied: learnedApplied,
+      learnedReferenceNote: learnedApplied
+        ? `تم ترجيح هذه الإجابة استناداً إلى تقييمات الدقة المعتمدة للمرجع (${topRef?.lawTitle} - ${topRef?.articleNumber ? 'المادة ' + topRef.articleNumber : topRef?.sectionHeader})`
         : undefined,
+      learnedReferenceLawTitle: topRef?.lawTitle,
+      learnedReferenceHeader: topRef?.sectionHeader,
+      learnedReferenceArticle: topRef?.articleNumber,
+      learnedReferenceQuery: topRef?.learnedData?.associatedQuery || (db.referenceStats?.[topRef?.referenceKey || '']?.associatedQueries?.[0]) || trimmed,
+      learnedReferenceVotes: topRef?.learnedData?.mostAccurateVotes,
     });
   } catch (error: any) {
     console.error('Error in AI handler, using fallback:', error?.message || error);
     const fallbackAnswer = generateKnowledgeFallback(message, db.laws);
     const fallbackSearchResult = searchRelevantPalestinianLaws(message, db.laws || []);
+    const fbTopRef = fallbackSearchResult?.topLearnedReference;
+    const fbLearnedApplied = Boolean(fbTopRef && (fbTopRef.learnedData?.isMostAccurate || (fbTopRef.learnedData?.mostAccurateVotes || 0) > 0));
+
     const fallbackCitations = (effectiveIsLegal && fallbackSearchResult?.topChunks)
       ? fallbackSearchResult.topChunks.slice(0, 4).map((c, idx) => {
           const refKey = c.referenceKey || computeServerReferenceKey(c.lawTitle, c.articleNumber, c.sectionHeader, c.lawId, c.text);
           const stats = db.referenceStats?.[refKey];
+          const associatedQ = stats?.associatedQueries?.[0] || c.learnedData?.associatedQuery;
           return {
             id: `cit-fb-${idx + 1}`,
             lawId: c.lawId,
@@ -5863,6 +5888,8 @@ ${prioritizedContext ? `\n<retrieved_knowledge_base>\n${prioritizedContext}\n</r
             totalRatings: stats?.totalRatings ?? c.learnedData?.totalRatings,
             mostAccurateVotes: stats?.mostAccurateVotes ?? c.learnedData?.mostAccurateVotes,
             isLearnedTopMatch: Boolean(c.learnedData?.isMostAccurate || (stats && stats.mostAccurateVotes > 0)),
+            topVotedQuery: associatedQ,
+            associatedQueries: stats?.associatedQueries || (associatedQ ? [associatedQ] : undefined),
           };
         })
       : [];
@@ -5875,10 +5902,15 @@ ${prioritizedContext ? `\n<retrieved_knowledge_base>\n${prioritizedContext}\n</r
       suggestedDetails: undefined,
       citations: fallbackCitations.length > 0 ? fallbackCitations : undefined,
       userQuery: trimmed,
-      learnedReferenceApplied: Boolean(fallbackSearchResult?.topLearnedReference),
-      learnedReferenceNote: fallbackSearchResult?.topLearnedReference
-        ? `تم ترجيح هذه الإجابة استناداً إلى تقييمات الدقة المعتمدة للمرجع (${fallbackSearchResult.topLearnedReference.lawTitle} - مادة ${fallbackSearchResult.topLearnedReference.articleNumber || fallbackSearchResult.topLearnedReference.sectionHeader})`
+      learnedReferenceApplied: fbLearnedApplied,
+      learnedReferenceNote: fbLearnedApplied
+        ? `تم ترجيح هذه الإجابة استناداً إلى تقييمات الدقة المعتمدة للمرجع (${fbTopRef?.lawTitle} - ${fbTopRef?.articleNumber ? 'المادة ' + fbTopRef.articleNumber : fbTopRef?.sectionHeader})`
         : undefined,
+      learnedReferenceLawTitle: fbTopRef?.lawTitle,
+      learnedReferenceHeader: fbTopRef?.sectionHeader,
+      learnedReferenceArticle: fbTopRef?.articleNumber,
+      learnedReferenceQuery: fbTopRef?.learnedData?.associatedQuery || (db.referenceStats?.[fbTopRef?.referenceKey || '']?.associatedQueries?.[0]) || trimmed,
+      learnedReferenceVotes: fbTopRef?.learnedData?.mostAccurateVotes,
     });
   }
 });
@@ -6654,6 +6686,7 @@ function searchRelevantPalestinianLaws(
           averageRating: stats.averageRating,
           totalRatings: stats.totalRatings,
           mostAccurateVotes: stats.mostAccurateVotes,
+          associatedQuery: stats.associatedQueries?.[0] || undefined,
           reason: stats.mostAccurateVotes > 0
             ? `مرجع معتمد كالأدق بنتيجة (${stats.mostAccurateVotes} ترجيح)`
             : `تقييم جودة مرتفع (${stats.averageRating}/5 نجوم)`
@@ -7374,9 +7407,25 @@ app.delete('/api/admin/professionals/:id', async (req, res) => {
 // ==========================================
 // Reference Ratings & Bot Self-Learning Endpoints (تقييمات المراجع والتعلم الذاتي للشات بوت)
 // ==========================================
-app.get('/api/references/ratings', (req, res) => {
+app.get('/api/references/ratings', async (req, res) => {
   if (!db.referenceEvaluations) db.referenceEvaluations = [];
   if (!db.referenceStats) db.referenceStats = {};
+
+  if (db.referenceEvaluations.length === 0 && !isQuotaExceeded()) {
+    try {
+      const [cloudEvals, cloudStats] = await Promise.all([
+        fetchReferenceEvaluationsFromFirestore().catch(() => null),
+        fetchReferenceStatsFromFirestore().catch(() => null),
+      ]);
+      if (cloudEvals && Array.isArray(cloudEvals) && cloudEvals.length > 0) {
+        db.referenceEvaluations = cloudEvals;
+      }
+      if (cloudStats && Object.keys(cloudStats).length > 0) {
+        db.referenceStats = { ...db.referenceStats, ...cloudStats };
+      }
+    } catch {}
+  }
+
   res.json({
     evaluations: db.referenceEvaluations,
     stats: db.referenceStats,
@@ -7472,6 +7521,10 @@ app.post('/api/references/rate', (req, res) => {
     saveDB('reference_ratings');
     broadcastSync('reference_ratings');
 
+    // Dual-write to Cloud Firestore
+    saveReferenceEvaluationToFirestore(evaluation).catch(() => {});
+    saveReferenceStatsToFirestore(refKey, updatedStats).catch(() => {});
+
     return res.json({
       success: true,
       stats: updatedStats,
@@ -7490,11 +7543,14 @@ app.delete('/api/references/rate/:id', (req, res) => {
     if (!db.referenceEvaluations) db.referenceEvaluations = [];
     const target = db.referenceEvaluations.find((e: any) => e.id === id);
     if (!target) {
+      deleteReferenceEvaluationFromFirestore(id).catch(() => {});
       return res.status(404).json({ error: 'التقييم غير موجود' });
     }
 
     const refKey = target.referenceKey;
     db.referenceEvaluations = db.referenceEvaluations.filter((e: any) => e.id !== id);
+
+    deleteReferenceEvaluationFromFirestore(id).catch(() => {});
 
     // Recompute stats
     const allEvalsForRef = db.referenceEvaluations.filter((e: any) => e.referenceKey === refKey);

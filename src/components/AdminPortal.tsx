@@ -72,6 +72,9 @@ import { LawRequestsAdminTab } from './admin/LawRequestsAdminTab';
 import { ProfessionalsAdminTab } from './admin/ProfessionalsAdminTab';
 import { ReferenceLearningAdminTab } from './admin/ReferenceLearningAdminTab';
 import { UserDetailsModal } from './admin/UserDetailsModal';
+import { fetchReferenceRatings } from '../services/referenceRatingService';
+import { ReferenceEvaluation, ReferenceStats } from '../types';
+import { normalizeArabic } from '../utils/localLegalSearch';
 import { useSync, notifySync } from '../utils/sync';
 import { safeFetchJson } from '../utils/safeApi';
 import { SEED_USERS } from '../data/seedData';
@@ -340,6 +343,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   const [lawSearch, setLawSearch] = useState('');
   const [lawCategoryFilter, setLawCategoryFilter] = useState<string>('الكل');
   const [expandedLawIds, setExpandedLawIds] = useState<Record<string, boolean>>({});
+  const [expandedLawEvalIds, setExpandedLawEvalIds] = useState<Record<string, boolean>>({});
+  const [referenceEvaluations, setReferenceEvaluations] = useState<ReferenceEvaluation[]>([]);
+  const [referenceStatsMap, setReferenceStatsMap] = useState<Record<string, ReferenceStats>>({});
   const [viewingLawModal, setViewingLawModal] = useState<Law | null>(null);
   const [copiedLawId, setCopiedLawId] = useState<string | null>(null);
 
@@ -349,6 +355,29 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       [lawId]: !prev[lawId],
     }));
   };
+
+  const toggleLawEvals = (lawId: string) => {
+    setExpandedLawEvalIds((prev) => ({
+      ...prev,
+      [lawId]: !prev[lawId],
+    }));
+  };
+
+  const loadReferenceRatings = async () => {
+    try {
+      const data = await fetchReferenceRatings();
+      setReferenceEvaluations(data.evaluations || []);
+      setReferenceStatsMap(data.stats || {});
+    } catch {}
+  };
+
+  useEffect(() => {
+    loadReferenceRatings();
+  }, []);
+
+  useSync('reference_ratings', () => {
+    loadReferenceRatings();
+  });
 
   // Dynamic Legal Categories state with resilient local caching
   const [categories, setCategories] = useState<LegalCategory[]>(() => {
@@ -3039,6 +3068,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         >
           <Award className="w-4 h-4 text-amber-600" />
           <span>تقييمات المراجع والتعلم الذاتي</span>
+          <span className="bg-amber-100 text-amber-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-amber-300">
+            {referenceEvaluations.length > 0 ? `${referenceEvaluations.length} ترجيح` : 'تدريب ذكي'}
+          </span>
         </button>
 
         {!isSupervisor && (
@@ -4506,6 +4538,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                 <div className="space-y-3">
                   {paginatedLaws.map((law) => {
                   const isExpanded = !!expandedLawIds[law.id];
+                  const isEvalExpanded = !!expandedLawEvalIds[law.id];
+                  const lawEvals = referenceEvaluations.filter((ev) => {
+                    if (ev.lawId && ev.lawId === law.id) return true;
+                    const normTitle = normalizeArabic(law.title);
+                    const normEvTitle = normalizeArabic(ev.lawTitle);
+                    return normTitle.includes(normEvTitle) || normEvTitle.includes(normTitle);
+                  });
+
                   return (
                     <div
                       key={law.id}
@@ -4528,6 +4568,23 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                               <span>{law.sourceFileName}</span>
                               {law.pageCount ? <span>({law.pageCount} ص)</span> : null}
                             </span>
+                          )}
+
+                          {lawEvals.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => toggleLawEvals(law.id)}
+                              className="inline-flex items-center gap-1 text-[10.5px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300 transition-colors cursor-pointer shadow-2xs"
+                              title="انقر لعرض الأسئلة التي رُجّح هذا القانون كإجابة دقيقة لها لتعلم الشات بوت"
+                            >
+                              <Award className="w-3 h-3 text-amber-700" />
+                              <span>رُجّح كـ «الأدق» ({lawEvals.length} سؤال) 🏆</span>
+                              {isEvalExpanded ? (
+                                <ChevronUp className="w-3 h-3 text-amber-800" />
+                              ) : (
+                                <ChevronDown className="w-3 h-3 text-amber-800" />
+                              )}
+                            </button>
                           )}
                         </div>
 
@@ -4578,6 +4635,69 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                           </button>
                         </div>
                       </div>
+
+                      {/* الأسئلة المرجحة لهذا القانون للتعلم الذاتي */}
+                      {isEvalExpanded && lawEvals.length > 0 && (
+                        <div className="mt-3 p-3.5 bg-gradient-to-r from-amber-50/90 via-amber-100/30 to-amber-50/80 border border-amber-300 rounded-xl space-y-2.5 animate-in fade-in duration-200">
+                          <div className="flex items-center justify-between gap-2 pb-2 border-b border-amber-200 flex-wrap">
+                            <div className="flex items-center gap-1.5 text-amber-950 font-bold text-xs">
+                              <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+                              <span>الأسئلة التي رُجّح هذا القانون كـ «الإجابة الأدق» لها لتدريب الشات بوت:</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setActiveTab('learning')}
+                              className="text-[11px] text-amber-900 hover:text-amber-950 hover:underline font-bold flex items-center gap-1 cursor-pointer"
+                            >
+                              <span>سجل التقييمات الكامل ({referenceEvaluations.length})</span>
+                              <ArrowRight className="w-3.5 h-3.5 rotate-180" />
+                            </button>
+                          </div>
+
+                          <div className="space-y-2">
+                            {lawEvals.map((ev, i) => (
+                              <div
+                                key={ev.id || i}
+                                className="bg-white border border-amber-200/90 rounded-xl p-2.5 sm:p-3 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs"
+                              >
+                                <div className="space-y-1 flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-[10px] bg-amber-100 text-amber-950 font-bold px-2 py-0.5 rounded-md border border-amber-200">
+                                      السؤال {i + 1}:
+                                    </span>
+                                    <strong className="text-slate-900 font-bold text-xs sm:text-sm">
+                                      «{ev.query || 'استفسار عام'}»
+                                    </strong>
+                                  </div>
+                                  {ev.sectionHeader && (
+                                    <div className="text-[11px] text-slate-600">
+                                      الموضع المرجح: <strong className="text-slate-800">{ev.sectionHeader}</strong> {ev.articleNumber ? `(المادة ${ev.articleNumber})` : ''}
+                                    </div>
+                                  )}
+                                  {ev.originalText && (
+                                    <p className="text-[10.5px] text-slate-500 line-clamp-1 italic">
+                                      "{ev.originalText.slice(0, 140)}..."
+                                    </p>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2.5 text-[10px] text-slate-500 shrink-0 self-end sm:self-center border-t sm:border-t-0 pt-1 sm:pt-0">
+                                  <span className="text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200 font-bold">
+                                    ★ {ev.rating || 5} / 5
+                                  </span>
+                                  <span>بواسطة: <strong className="text-slate-700">{ev.username || 'مستخدم'}</strong></span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="flex items-center gap-1.5 text-[11px] text-amber-950/90 bg-white/70 p-2 rounded-lg border border-amber-200/60 font-medium">
+                            <Award className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                            <span>
+                              <strong>كيف يتعلم الشات بوت؟</strong> حفظ النظام هذا القانون استناداً لترجيح المستخدمين، وسيقدمه تلقائياً في صدارة الإجابة كخيار أول عند طرح هذه الأسئلة مجدداً.
+                            </span>
+                          </div>
+                        </div>
+                      )}
 
                       {/* المحتوى يظهر فقط عند الضغط على "عرض المحتوى" */}
                       {isExpanded && (

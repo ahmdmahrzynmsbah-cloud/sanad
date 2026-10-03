@@ -20,6 +20,7 @@ import {
   CheckCircle2,
   TrendingUp,
   Info,
+  MessageSquare,
 } from 'lucide-react';
 import type { CitationSource, User } from '../types';
 import {
@@ -164,10 +165,10 @@ export const SourceCitationBox: React.FC<SourceCitationBoxProps> = ({
       if (res.success) {
         setSuccessToast(
           markAccurate
-            ? '🏆 رائع! تم ترجيح هذا المرجع كـ «الإجابة الأدق». سيتعلم الشات بوت الآن تقديمه كخيار أول لأي مستخدم يسأل عن هذا الموضوع.'
-            : `⭐ شكراً لتقييمك (${star} نجوم)! تم حفظ التقييم وتحديث خوارزمية التعلم الذاتي للشات بوت.`
+            ? `🏆 رائع! تم ترجيح قانون: «${currentCitation.lawTitle}» كـ «الإجابة الأدق» للسؤال: «${query || currentCitation.lawTitle}». سيتعلم الشات بوت الآن تقديمه كخيار أول في صدارة الإجابات.`
+            : `⭐ شكراً لتقييمك (${star} نجوم)! تم حفظ تقييم «${currentCitation.lawTitle}» وتحديث خوارزمية التعلم الذاتي للشات بوت.`
         );
-        setTimeout(() => setSuccessToast(null), 5000);
+        setTimeout(() => setSuccessToast(null), 6000);
       }
     } catch (err) {
       console.error('Error submitting reference evaluation:', err);
@@ -301,6 +302,34 @@ export const SourceCitationBox: React.FC<SourceCitationBoxProps> = ({
                 </button>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Endorsed Law / Question Learning Callout */}
+      {(currentCitation.isLearnedTopMatch || stats.mostAccurateVotes > 0 || currentCitation.topVotedQuery) && (
+        <div className="bg-gradient-to-r from-amber-50 via-emerald-50/50 to-amber-50/90 border border-amber-300 rounded-xl p-2.5 mb-2.5 space-y-1.5 shadow-2xs">
+          <div className="flex items-center justify-between gap-1 flex-wrap">
+            <span className="font-bold flex items-center gap-1.5 text-[11px] text-amber-950">
+              <Award className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+              <span>هذا القانون رُجّح كـ «الإجابة الأدق» لهذا الاستفسار 🏆</span>
+            </span>
+            <span className="bg-amber-200/90 text-amber-950 text-[10px] font-black px-2 py-0.5 rounded-full border border-amber-300">
+              {stats.mostAccurateVotes || currentCitation.mostAccurateVotes || 1} ترجيح مؤكد
+            </span>
+          </div>
+
+          <div className="bg-white/95 border border-amber-200/80 rounded-lg p-2 text-xs space-y-1">
+            <div className="text-[10.5px] text-amber-900 font-bold flex items-center gap-1 flex-wrap">
+              <MessageSquare className="w-3 h-3 text-amber-600 shrink-0" />
+              <span>السؤال المقترن:</span>
+              <strong className="text-slate-900 font-bold">
+                «{currentCitation.topVotedQuery || stats.associatedQueries?.[0] || query || 'استفسار مرتبط'}»
+              </strong>
+            </div>
+            <div className="text-[10px] text-emerald-900 leading-snug">
+              💡 <strong>التعلم الذاتي:</strong> اعتمد الشات بوت هذا القانون تلقائياً كخيار أول في صدارة الإجابة بناءً على ترجيح المستخدمين.
+            </div>
           </div>
         </div>
       )}

@@ -1862,3 +1862,98 @@ export async function deleteProfessionalFromFirestore(id: string): Promise<boole
   }
 }
 
+// ==========================================
+// Reference Ratings & Bot Self-Learning Firestore
+// ==========================================
+
+export async function saveReferenceEvaluationToFirestore(evaluation: any): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
+  const db = initFirestore();
+  if (!db) return false;
+  try {
+    const docRef = doc(db, 'reference_evaluations', evaluation.id);
+    await setDoc(docRef, cleanUndefined(evaluation), { merge: true });
+    notifyChange('reference_ratings');
+    return true;
+  } catch (err) {
+    handleFirestoreError('saveReferenceEvaluationToFirestore', err);
+    return false;
+  }
+}
+
+export async function saveReferenceStatsToFirestore(refKey: string, stats: any): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
+  const db = initFirestore();
+  if (!db) return false;
+  try {
+    const safeDocId = (refKey || 'default_ref').replace(/\//g, '_').slice(0, 150);
+    const docRef = doc(db, 'reference_stats', safeDocId);
+    await setDoc(docRef, cleanUndefined({ ...stats, referenceKey: refKey }), { merge: true });
+    notifyChange('reference_ratings');
+    return true;
+  } catch (err) {
+    handleFirestoreError('saveReferenceStatsToFirestore', err);
+    return false;
+  }
+}
+
+export async function fetchReferenceEvaluationsFromFirestore(): Promise<any[] | null> {
+  if (isQuotaExceeded()) return null;
+  const db = initFirestore();
+  if (!db) return null;
+  try {
+    const colRef = collection(db, 'reference_evaluations');
+    const snap = await getDocs(colRef);
+    if (snap.empty) return [];
+    const evals: any[] = [];
+    snap.forEach((d) => {
+      const data = d.data();
+      if (data && data.lawTitle) {
+        evals.push({ id: d.id, ...data });
+      }
+    });
+    return evals;
+  } catch (err) {
+    handleFirestoreError('fetchReferenceEvaluationsFromFirestore', err);
+    return null;
+  }
+}
+
+export async function fetchReferenceStatsFromFirestore(): Promise<Record<string, any> | null> {
+  if (isQuotaExceeded()) return null;
+  const db = initFirestore();
+  if (!db) return null;
+  try {
+    const colRef = collection(db, 'reference_stats');
+    const snap = await getDocs(colRef);
+    if (snap.empty) return {};
+    const stats: Record<string, any> = {};
+    snap.forEach((d) => {
+      const data = d.data();
+      if (data && data.referenceKey) {
+        stats[data.referenceKey] = data;
+      }
+    });
+    return stats;
+  } catch (err) {
+    handleFirestoreError('fetchReferenceStatsFromFirestore', err);
+    return null;
+  }
+}
+
+export async function deleteReferenceEvaluationFromFirestore(evalId: string): Promise<boolean> {
+  if (isQuotaExceeded()) return false;
+  const db = initFirestore();
+  if (!db) return false;
+  try {
+    const docRef = doc(db, 'reference_evaluations', evalId);
+    await firebaseDeleteDoc(docRef);
+    notifyChange('reference_ratings');
+    return true;
+  } catch (err) {
+    handleFirestoreError('deleteReferenceEvaluationFromFirestore', err);
+    return false;
+  }
+}
+
+

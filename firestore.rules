@@ -64,6 +64,14 @@ service cloud.firestore {
       allow read, write: if true;
     }
     
+    // Reference evaluations and chatbot self-learning
+    match /reference_evaluations/{evalId} {
+      allow read, write: if true;
+    }
+    match /reference_stats/{statId} {
+      allow read, write: if true;
+    }
+    
     // Default fallback rule
     match /{document=**} {
       allow read, write: if true;

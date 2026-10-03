@@ -4,18 +4,64 @@ import { notifySync } from '../utils/sync';
 const LOCAL_STORAGE_STATS_KEY = 'sanad_reference_stats_cache';
 const LOCAL_STORAGE_EVALS_KEY = 'sanad_user_reference_evaluations';
 
-let inMemoryStats: Record<string, ReferenceStats> = {};
-let inMemoryEvaluations: ReferenceEvaluation[] = [];
+export const PERSISTENT_REFERENCE_EVALUATIONS_SEED: ReferenceEvaluation[] = [
+  {
+    id: "eval-1790985489476-jn7fk",
+    referenceKey: "4_اإلدارة_العامة_للضرائب_غير_المباشرة_تعليمات__sec_التعليمات_و_النماذج_الخاصة_بالقرار_بقانون_بشأن_ضري_p53_hrhq9i9",
+    query: "تعليمات فتح ملف جديد في ضريبة القيمة المضافة",
+    normalizedQuery: "تعليمات فتح ملف جديد في ضريبة القيمة المضافة",
+    lawId: "law-1789470159645-t8z0",
+    lawTitle: "4 اإلدارة العامة للضرائب غير المباشرة تعليمات الفصل الخامس وزارة المالية قطاع االيرادات اإلدارة العامة للضرائب غير المباشرة",
+    sectionHeader: "التعليمات و النماذج الخاصة بالقرار بقانون بشأن ضريبة القيمة المضافة   2024   لسنة   26   ر... (جزء 53)",
+    sourceFileName: "23072025.pdf",
+    originalText: "(إن وجد) - نموذج التصريح عن فروع (ان وجدت) -   كتاب صادر عن المؤسسة او الهيئة التي يتبع لها طالب التسجيل - كتاب التفويض للممثل القانوني مرفقات أخـــــرى تحددها الدائرة دولة فلسطين وزارة المالية قطاع االيرادات اإلدارة العامة للضرائب غير المباشرة :   معلومات المؤسسة أو الهيئة :   المفوض/ين بالتوقيع : عنوان المؤسسة او الهيئة /   لدى دائرة الضرائب غير المباشرة مكتب :   اسم المؤسسة او الهيئة : الجهة التي تتبع لها State of Palestine Ministry of Finance Revenue Sector General Directorate of Indirect Tax أقر وأنا بكامل اإلرادة المعتبرة قانونا واتعهد بإبالغ الدائرة   أن جميع التفاصيل الواردة أعاله صحيحة و مطابقة للبيانات المرفقة وأتحمل كامل المسؤولية القانونية عنها يوم من تاريخ التغيير   30   الضريبية عن اي تغيرات تتم على البيانات المصرح عنها أعاله خالل تسجيل األنشطة الخاضعة للضريبة التابعة لي كمشتغل مرخص وفقا ً ألحكام القانون   - 2 - 1 : . . اسم مقدم الطلب اسم مستلم الطلب توقيع مقدم الطلب توقيع مستلم الطلب تاريخ استالم الطلب تاريخ تقديم الطلب   صفته .   يوم من تاريخ استالمه   15   يتم النظر بهذا الطلب خالل :   المرفقات المطلوبة :   االسم :   االسم :   االسم :   رقم الهاتف :   رقم الهاتف :   رقم الهاتف :   البريد االلكتروني :   البريد االلكتروني :   البريد االلكتروني :   نوع النشاط الرئيسي :   رقم الهاتف :   المحافظة :   طبيعة العقار (ملك / ايجار) :   تاريخ بداية االيجار :   بالقرب من :   البطاقة الشخصية للمؤجر :   اسم المؤجر :  ً   قيمة االيجار سنويا :   البريد اإللكتروني :   تاريخ بدء النشاط :   الشارع :   البناية   :   البلد :   الحي :   محددات االلتزام الضريبي :   إسم النشاط   :   إسم النشاط :   إسم النشاط   :   إسم النشاط :   هل تمارس نشاط خاضع لضريبة القيمة المضافة نعم ال :   وجود نشاط خاضع لضريبة الدخل :   نظام المحاسبة المستخدم   يوجد يدوي   ال يوجد محوسب :   إسم النظام طلب تسجيل ملف ضريبي معفي ( المؤسسات الحكومية والهيئات المحلية والهيئات الدينية)",
+    rating: 5,
+    isMostAccurate: true,
+    feedbackTag: "الأدق نصاً",
+    notes: "",
+    userId: "user-1790985304082",
+    username: "احمد هانيا",
+    timestamp: "2026-10-02T23:58:09.476Z",
+  },
+];
+
+export const PERSISTENT_REFERENCE_STATS_SEED: Record<string, ReferenceStats> = {
+  "4_اإلدارة_العامة_للضرائب_غير_المباشرة_تعليمات__sec_التعليمات_و_النماذج_الخاصة_بالقرار_بقانون_بشأن_ضري_p53_hrhq9i9": {
+    referenceKey: "4_اإلدارة_العامة_للضرائب_غير_المباشرة_تعليمات__sec_التعليمات_و_النماذج_الخاصة_بالقرار_بقانون_بشأن_ضري_p53_hrhq9i9",
+    lawTitle: "4 اإلدارة العامة للضرائب غير المباشرة تعليمات الفصل الخامس وزارة المالية قطاع االيرادات اإلدارة العامة للضرائب غير المباشرة",
+    sectionHeader: "التعليمات و النماذج الخاصة بالقرار بقانون بشأن ضريبة القيمة المضافة   2024   لسنة   26   ر... (جزء 53)",
+    totalRatings: 1,
+    averageRating: 5,
+    ratingsSum: 5,
+    mostAccurateVotes: 1,
+    associatedQueries: [
+      "تعليمات فتح ملف جديد في ضريبة القيمة المضافة",
+    ],
+    lastRatedAt: "2026-10-02T23:58:09.476Z",
+  },
+};
+
+let inMemoryStats: Record<string, ReferenceStats> = { ...PERSISTENT_REFERENCE_STATS_SEED };
+let inMemoryEvaluations: ReferenceEvaluation[] = [...PERSISTENT_REFERENCE_EVALUATIONS_SEED];
 
 // Initialize from localStorage and migrate legacy colliding keys
 try {
   const cachedStats = localStorage.getItem(LOCAL_STORAGE_STATS_KEY);
   if (cachedStats) {
-    inMemoryStats = JSON.parse(cachedStats);
+    const parsed = JSON.parse(cachedStats);
+    if (parsed && typeof parsed === 'object') {
+      inMemoryStats = { ...inMemoryStats, ...parsed };
+    }
   }
   const cachedEvals = localStorage.getItem(LOCAL_STORAGE_EVALS_KEY);
   if (cachedEvals) {
-    inMemoryEvaluations = JSON.parse(cachedEvals);
+    const parsed = JSON.parse(cachedEvals);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      const map = new Map<string, ReferenceEvaluation>();
+      inMemoryEvaluations.forEach((e) => map.set(e.id, e));
+      parsed.forEach((e: ReferenceEvaluation) => map.set(e.id, e));
+      inMemoryEvaluations = Array.from(map.values());
+    }
   }
 
   const LEGACY_BROAD_KEY = '4_اإلدارة_العامة_للضرائب_غير_المباشرة_تعليمات_الفص__sec_التعليمات_و_النماذج_الخاصة_بالقرار_بقانو';
@@ -104,33 +150,52 @@ export function computeReferenceKey(
 }
 
 /**
- * Fetch all reference stats and evaluations from server
+ * Fetch all reference stats and evaluations from server & Cloud Firestore
  */
 export async function fetchReferenceRatings(): Promise<{
   evaluations: ReferenceEvaluation[];
   stats: Record<string, ReferenceStats>;
 }> {
+  // 1. Try server endpoint
   try {
     const res = await fetch('/api/references/ratings');
     if (res.ok) {
       const data = await res.json();
-      if (data.stats) {
+      if (data.stats && Object.keys(data.stats).length > 0) {
         inMemoryStats = { ...inMemoryStats, ...data.stats };
-        try {
-          localStorage.setItem(LOCAL_STORAGE_STATS_KEY, JSON.stringify(inMemoryStats));
-        } catch {}
       }
-      if (Array.isArray(data.evaluations)) {
-        inMemoryEvaluations = data.evaluations;
-        try {
-          localStorage.setItem(LOCAL_STORAGE_EVALS_KEY, JSON.stringify(inMemoryEvaluations));
-        } catch {}
+      if (Array.isArray(data.evaluations) && data.evaluations.length > 0) {
+        const map = new Map<string, ReferenceEvaluation>();
+        inMemoryEvaluations.forEach((e) => map.set(e.id, e));
+        data.evaluations.forEach((e: ReferenceEvaluation) => map.set(e.id, e));
+        inMemoryEvaluations = Array.from(map.values());
       }
-      return data;
     }
   } catch (err) {
-    console.warn('[ReferenceRating] Network error fetching ratings, using local cache:', err);
+    console.warn('[ReferenceRating] Network error fetching ratings from server:', err);
   }
+
+  // 2. Direct Cloud Firestore sync (crucial for production sanadtax.com cross-device sync)
+  try {
+    const { directFetchReferenceRatingsFromFirestore } = await import('./clientFirestore');
+    const cloudData = await directFetchReferenceRatingsFromFirestore();
+    if (cloudData) {
+      if (cloudData.stats && Object.keys(cloudData.stats).length > 0) {
+        inMemoryStats = { ...inMemoryStats, ...cloudData.stats };
+      }
+      if (Array.isArray(cloudData.evaluations) && cloudData.evaluations.length > 0) {
+        const map = new Map<string, ReferenceEvaluation>();
+        inMemoryEvaluations.forEach((e) => map.set(e.id, e));
+        cloudData.evaluations.forEach((e) => map.set(e.id, e));
+        inMemoryEvaluations = Array.from(map.values());
+      }
+    }
+  } catch {}
+
+  try {
+    localStorage.setItem(LOCAL_STORAGE_STATS_KEY, JSON.stringify(inMemoryStats));
+    localStorage.setItem(LOCAL_STORAGE_EVALS_KEY, JSON.stringify(inMemoryEvaluations));
+  } catch {}
 
   return {
     evaluations: inMemoryEvaluations,
@@ -224,6 +289,13 @@ export async function submitReferenceEvaluation(params: {
   } catch {}
 
   notifySync('reference_ratings');
+
+  // Direct Cloud Firestore backup (dual-write so sanadtax.com sees it permanently)
+  try {
+    const { directSaveReferenceEvaluationToFirestore, directSaveReferenceStatsToFirestore } = await import('./clientFirestore');
+    directSaveReferenceEvaluationToFirestore(newEval).catch(() => {});
+    directSaveReferenceStatsToFirestore(refKey, updatedStats).catch(() => {});
+  } catch {}
 
   // Send to backend for server persistence and RAG learning
   try {

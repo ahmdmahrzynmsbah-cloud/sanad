@@ -128,6 +128,9 @@ export interface CitationSource {
   isLearnedTopMatch?: boolean;
   userVotedMostAccurate?: boolean;
   userRating?: number;
+  topVotedQuery?: string;
+  associatedQueries?: string[];
+  learnedReason?: string;
 }
 
 export interface ReferenceEvaluation {
@@ -189,6 +192,11 @@ export interface ChatMessage {
   userQuery?: string;
   learnedReferenceApplied?: boolean;
   learnedReferenceNote?: string;
+  learnedReferenceLawTitle?: string;
+  learnedReferenceHeader?: string;
+  learnedReferenceArticle?: string;
+  learnedReferenceQuery?: string;
+  learnedReferenceVotes?: number;
 }
 
 export interface Conversation {

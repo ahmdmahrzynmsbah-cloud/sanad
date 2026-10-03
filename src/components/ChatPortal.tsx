@@ -30,6 +30,7 @@ import {
   CheckCircle2,
   AlertCircle,
   FileSearch,
+  Award,
 } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { User, ChatMessage, Conversation, SystemBranding, Law, CitationSource, AttachedDocumentInfo } from '../types';
@@ -575,6 +576,11 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
       let botCitations: CitationSource[] | undefined = undefined;
       let learnedApplied = false;
       let learnedNote: string | undefined = undefined;
+      let learnedLawTitle: string | undefined = undefined;
+      let learnedHeader: string | undefined = undefined;
+      let learnedArticle: string | undefined = undefined;
+      let learnedQuery: string | undefined = undefined;
+      let learnedVotes: number | undefined = undefined;
 
       if (res.ok) {
         const data = await res.json();
@@ -583,6 +589,11 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
         if (data.queryType) resQueryType = data.queryType;
         learnedApplied = Boolean(data.learnedReferenceApplied);
         learnedNote = data.learnedReferenceNote;
+        learnedLawTitle = data.learnedReferenceLawTitle;
+        learnedHeader = data.learnedReferenceHeader;
+        learnedArticle = data.learnedReferenceArticle;
+        learnedQuery = data.learnedReferenceQuery;
+        learnedVotes = data.learnedReferenceVotes;
         if (Array.isArray(data.suggestedDetails) && isQueryLegal && resQueryType === 'legal') {
           resSuggestedDetails = data.suggestedDetails;
         } else {
@@ -644,6 +655,19 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
         } catch {}
       }
 
+      // Auto-detect if top citation has been trained / endorsed by community
+      if (botCitations && botCitations.length > 0) {
+        const topAccurate = botCitations.find((c) => c.isLearnedTopMatch || (c.mostAccurateVotes && c.mostAccurateVotes > 0));
+        if (topAccurate) {
+          learnedApplied = true;
+          if (!learnedLawTitle) learnedLawTitle = topAccurate.lawTitle;
+          if (!learnedHeader) learnedHeader = topAccurate.sectionHeader;
+          if (!learnedArticle) learnedArticle = topAccurate.articleNumber;
+          if (!learnedQuery) learnedQuery = topAccurate.topVotedQuery || query;
+          if (!learnedVotes) learnedVotes = topAccurate.mostAccurateVotes || 1;
+        }
+      }
+
       const botMessage: ChatMessage = {
         id: 'bot-' + Date.now(),
         sender: 'bot',
@@ -656,6 +680,11 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
         userQuery: query,
         learnedReferenceApplied: learnedApplied,
         learnedReferenceNote: learnedNote,
+        learnedReferenceLawTitle: learnedLawTitle,
+        learnedReferenceHeader: learnedHeader,
+        learnedReferenceArticle: learnedArticle,
+        learnedReferenceQuery: learnedQuery,
+        learnedReferenceVotes: learnedVotes,
       };
 
       const finalMessages = [...updatedMessagesWithUser, botMessage];
@@ -1022,11 +1051,49 @@ export const ChatPortal: React.FC<ChatPortalProps> = ({
                       {msg.text}
                     </Markdown>
 
-                    {/* Learned Grounded Preference Notice Banner */}
-                    {msg.sender === 'bot' && msg.learnedReferenceApplied && (
-                      <div className="mb-2.5 inline-flex items-center gap-1.5 bg-gradient-to-r from-amber-100 to-amber-50 border border-amber-300 text-amber-950 px-2.5 py-1 rounded-xl text-[10.5px] font-bold shadow-2xs">
-                        <Sparkles className="w-3.5 h-3.5 text-amber-600 animate-spin-slow" />
-                        <span>إجابة مرجحة بالتعلم الذاتي (مستندة إلى المرجع الأعلى تقييماً من المستخدمين والخبراء)</span>
+                    {/* Learned Grounded Preference Notice Banner - توضيح السؤال والقانون المرجح ليتعلم الشات بوت */}
+                    {msg.sender === 'bot' && (msg.learnedReferenceApplied || (msg.citations && msg.citations.some((c) => c.isLearnedTopMatch))) && (
+                      <div className="my-3 p-3 sm:p-3.5 bg-gradient-to-r from-amber-50 via-emerald-50/40 to-amber-50/80 border border-amber-300 rounded-2xl shadow-xs space-y-2 text-right">
+                        <div className="flex items-center justify-between gap-2 flex-wrap pb-1.5 border-b border-amber-200/80">
+                          <div className="flex items-center gap-1.5 text-amber-950 font-bold text-xs">
+                            <Sparkles className="w-4 h-4 text-amber-600 animate-spin-slow shrink-0" />
+                            <span>إجابة مرجحة بالتعلم الذاتي للشات بوت 🏆</span>
+                          </div>
+                          <span className="bg-emerald-100 text-emerald-900 border border-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-700" />
+                            مرجح كـ «الإجابة الأدق»
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-0.5">
+                          <div className="bg-white/95 border border-amber-200 rounded-xl p-2.5 space-y-1">
+                            <span className="text-[10px] text-amber-800 font-bold flex items-center gap-1">
+                              <MessageSquare className="w-3 h-3 text-amber-600 shrink-0" />
+                              السؤال المقترن:
+                            </span>
+                            <p className="font-bold text-slate-900 text-xs sm:text-[13px] leading-snug line-clamp-2">
+                              «{msg.learnedReferenceQuery || msg.userQuery || (messages.slice(0, messageIndex).reverse().find((m) => m.sender === 'user')?.text) || 'هذا الاستفسار'}»
+                            </p>
+                          </div>
+
+                          <div className="bg-white/95 border border-emerald-200 rounded-xl p-2.5 space-y-1">
+                            <span className="text-[10px] text-emerald-800 font-bold flex items-center gap-1">
+                              <Scale className="w-3 h-3 text-emerald-600 shrink-0" />
+                              القانون والتشريع المرجح:
+                            </span>
+                            <p className="font-bold text-emerald-950 text-xs sm:text-[13px] leading-snug line-clamp-2">
+                              {msg.learnedReferenceLawTitle || msg.citations?.find((c) => c.isLearnedTopMatch)?.lawTitle || msg.citations?.[0]?.lawTitle || 'التشريع المعتمد'}
+                              {msg.learnedReferenceArticle ? ` (مادة ${msg.learnedReferenceArticle})` : ''}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 text-[10.5px] text-amber-950/90 bg-amber-100/60 px-2.5 py-1.5 rounded-xl border border-amber-200 font-medium">
+                          <Award className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                          <span>
+                            <strong>كيف يتعلم الشات بوت؟</strong> حفظ النظام هذا القانون استناداً لترجيح المستخدمين والخبراء، ويقدمه تلقائياً في صدارة الإجابة كخيار أول موثق لهذا السؤال.
+                          </span>
+                        </div>
                       </div>
                     )}
 

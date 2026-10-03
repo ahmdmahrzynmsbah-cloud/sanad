@@ -533,6 +533,8 @@ export function findCitationsForQuery(query: string, laws: Law[]): CitationSourc
       totalRatings: stats?.totalRatings,
       mostAccurateVotes: stats?.mostAccurateVotes,
       isLearnedTopMatch: Boolean(stats && stats.mostAccurateVotes > 0),
+      topVotedQuery: stats?.associatedQueries?.[0] || undefined,
+      associatedQueries: stats?.associatedQueries,
     };
   });
 }

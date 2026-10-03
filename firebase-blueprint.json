@@ -142,6 +142,37 @@
         "updatedAt": { "type": "string", "description": "ISO modification timestamp" }
       },
       "required": ["id", "name", "price", "billingPeriod", "description", "features", "createdAt"]
+    },
+    "reference_evaluations": {
+      "description": "User ratings and accuracy evaluations linking questions to endorsed laws for bot learning",
+      "fields": {
+        "id": { "type": "string", "description": "Unique evaluation identifier" },
+        "referenceKey": { "type": "string", "description": "Deterministic reference key" },
+        "query": { "type": "string", "description": "User asked query" },
+        "lawId": { "type": "string", "description": "Law document ID" },
+        "lawTitle": { "type": "string", "description": "Law title" },
+        "articleNumber": { "type": "string", "description": "Article number if present" },
+        "sectionHeader": { "type": "string", "description": "Section header" },
+        "originalText": { "type": "string", "description": "Quoted statutory text" },
+        "rating": { "type": "number", "description": "1 to 5 star rating" },
+        "isMostAccurate": { "type": "boolean", "description": "Whether marked as most accurate answer" },
+        "username": { "type": "string", "description": "Evaluating user full name or username" },
+        "timestamp": { "type": "string", "description": "ISO evaluation timestamp" }
+      },
+      "required": ["id", "referenceKey", "query", "lawTitle", "isMostAccurate", "timestamp"]
+    },
+    "reference_stats": {
+      "description": "Aggregated accuracy scores, vote counts, and associated queries per reference",
+      "fields": {
+        "referenceKey": { "type": "string", "description": "Deterministic reference key" },
+        "lawTitle": { "type": "string", "description": "Law title" },
+        "totalRatings": { "type": "number", "description": "Total rating count" },
+        "averageRating": { "type": "number", "description": "Average star rating" },
+        "mostAccurateVotes": { "type": "number", "description": "Count of times endorsed as most accurate" },
+        "associatedQueries": { "type": "array", "description": "List of user questions associated with this reference" },
+        "lastRatedAt": { "type": "string", "description": "ISO timestamp of latest rating" }
+      },
+      "required": ["referenceKey", "lawTitle", "totalRatings", "averageRating", "mostAccurateVotes"]
     }
   }
 }

@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { initializeFirestore, getFirestore, collection, doc, getDoc, setDoc, getDocs, deleteDoc, updateDoc, setLogLevel, query, where, onSnapshot, limit, startAfter, orderBy } from 'firebase/firestore';
-import type { Law, User, LawRequest, SubscriptionPlan, LegalCategory } from '../types';
+import type { Law, User, LawRequest, SubscriptionPlan, LegalCategory, ReferenceEvaluation, ReferenceStats } from '../types';
 import { DEFAULT_LEGAL_CATEGORIES } from '../types';
 import { normalizeAuthIdentifier, isMatchingUser } from '../utils/authUtils';
 
@@ -2469,5 +2469,103 @@ export async function directSaveProfessionalServicesToFirestore(services: string
     return false;
   }
 }
+
+/**
+ * Save reference evaluation directly to Firestore cloud
+ */
+export async function directSaveReferenceEvaluationToFirestore(evaluation: ReferenceEvaluation): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+  try {
+    const docRef = doc(db, 'reference_evaluations', evaluation.id);
+    await setDoc(docRef, cleanDataForFirestore(evaluation), { merge: true });
+    return true;
+  } catch (err) {
+    handleClientFirestoreError('directSaveReferenceEvaluationToFirestore', err);
+    return false;
+  }
+}
+
+/**
+ * Save reference stats directly to Firestore cloud
+ */
+export async function directSaveReferenceStatsToFirestore(refKey: string, stats: ReferenceStats): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+  try {
+    const safeDocId = (refKey || 'default_ref').replace(/\//g, '_').slice(0, 150);
+    const docRef = doc(db, 'reference_stats', safeDocId);
+    await setDoc(docRef, cleanDataForFirestore({ ...stats, referenceKey: refKey }), { merge: true });
+    return true;
+  } catch (err) {
+    handleClientFirestoreError('directSaveReferenceStatsToFirestore', err);
+    return false;
+  }
+}
+
+/**
+ * Fetch reference evaluations and stats directly from Firestore cloud
+ */
+export async function directFetchReferenceRatingsFromFirestore(): Promise<{
+  evaluations: ReferenceEvaluation[];
+  stats: Record<string, ReferenceStats>;
+} | null> {
+  const db = getClientDb();
+  if (!db) return null;
+  try {
+    const evalsCol = collection(db, 'reference_evaluations');
+    const statsCol = collection(db, 'reference_stats');
+
+    const [evalsSnap, statsSnap] = await Promise.all([
+      getDocs(evalsCol).catch(() => null),
+      getDocs(statsCol).catch(() => null),
+    ]);
+
+    const evaluations: ReferenceEvaluation[] = [];
+    if (evalsSnap && !evalsSnap.empty) {
+      evalsSnap.forEach((d) => {
+        const data = d.data() as ReferenceEvaluation;
+        if (data && data.lawTitle) {
+          evaluations.push({
+            id: d.id,
+            ...data,
+          });
+        }
+      });
+    }
+
+    const stats: Record<string, ReferenceStats> = {};
+    if (statsSnap && !statsSnap.empty) {
+      statsSnap.forEach((d) => {
+        const data = d.data() as ReferenceStats;
+        if (data && data.referenceKey) {
+          stats[data.referenceKey] = data;
+        }
+      });
+    }
+
+    return { evaluations, stats };
+  } catch (err) {
+    handleClientFirestoreError('directFetchReferenceRatingsFromFirestore', err);
+    return null;
+  }
+}
+
+/**
+ * Delete reference evaluation directly from Firestore cloud
+ */
+export async function directDeleteReferenceEvaluationFromFirestore(evalId: string): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+  try {
+    const docRef = doc(db, 'reference_evaluations', evalId);
+    await deleteDoc(docRef);
+    return true;
+  } catch (err) {
+    handleClientFirestoreError('directDeleteReferenceEvaluationFromFirestore', err);
+    return false;
+  }
+}
+
 
 
