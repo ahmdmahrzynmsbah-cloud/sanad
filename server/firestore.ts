@@ -1324,6 +1324,9 @@ export interface StoredAboutCard {
 }
 
 export interface StoredPlatformAbout {
+  pageHeaderTitle?: string;
+  pageHeaderBadge?: string;
+  pageHeaderSubtitle?: string;
   overviewTitle?: string;
   overviewContent: string;
   visionTitle?: string;
@@ -1335,6 +1338,9 @@ export interface StoredPlatformAbout {
 }
 
 export const DEFAULT_PLATFORM_ABOUT: StoredPlatformAbout = {
+  pageHeaderTitle: 'عن منصة «سَنَد» الذكية',
+  pageHeaderBadge: 'PS المنظومة الوطنية الأولى',
+  pageHeaderSubtitle: 'تشريعات، ضرائب، وتدقيق مالي ذكي',
   overviewTitle: 'عن منصة «سَنَد»',
   overviewContent:
     '«سَنَد» هي منصتك القانونية والمالية الذكية الأولى في فلسطين، صُممت لتكون مرجعك الموثوق في الضرائب والقوانين والتشريعات والتحليل المالي والمساعدة في التدقيق. نحن نقدم أدوات ذكية وأنظمة متطورة لدعم المدققين والمحاسبين، وشركات التدقيق ومكاتب التدقيق والمحاسبة، والمدراء الماليين والمهتمين من القطاع الخاص، مع تحديثات مستمرة لتسهيل أعمالكم وتعزيز كفاءتكم التشغيلية.',
@@ -1376,6 +1382,9 @@ export async function savePlatformAboutToFirestore(data: StoredPlatformAbout): P
   try {
     const docRef = doc(db, 'system_settings', 'platform_about');
     await setDoc(docRef, {
+      pageHeaderTitle: data.pageHeaderTitle || DEFAULT_PLATFORM_ABOUT.pageHeaderTitle,
+      pageHeaderBadge: data.pageHeaderBadge || DEFAULT_PLATFORM_ABOUT.pageHeaderBadge,
+      pageHeaderSubtitle: data.pageHeaderSubtitle || DEFAULT_PLATFORM_ABOUT.pageHeaderSubtitle,
       overviewTitle: data.overviewTitle || DEFAULT_PLATFORM_ABOUT.overviewTitle,
       overviewContent: data.overviewContent || DEFAULT_PLATFORM_ABOUT.overviewContent,
       visionTitle: data.visionTitle || DEFAULT_PLATFORM_ABOUT.visionTitle,

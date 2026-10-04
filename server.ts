@@ -558,6 +558,21 @@ interface DBSettings {
   // Footer Customization (تخصيص الفوتر أسفل المنصة)
   footerText?: string;
   footerSubtext?: string;
+
+  // Supervisors Header Customization (تخصيص هيئة المشرفين)
+  supervisorsHeaderTitle?: string;
+  supervisorsHeaderSubtitle?: string;
+  supervisorsHeaderBadge?: string;
+
+  // Professionals Header Customization (تخصيص الدليل المهني)
+  professionalsHeaderTitle?: string;
+  professionalsHeaderSubtitle?: string;
+  professionalsHeaderBadge?: string;
+
+  // Related Sites Header Customization (تخصيص دليل المواقع ذات الصلة)
+  relatedSitesHeaderTitle?: string;
+  relatedSitesHeaderSubtitle?: string;
+  relatedSitesHeaderBadge?: string;
   footerCopyright?: string;
   footerShowScaleIcon?: boolean;
 }
@@ -2184,13 +2199,64 @@ app.get('/api/system/branding', (req, res) => {
 
 // Public Platform About & Vision/Mission Endpoint
 app.get('/api/system/about', (req, res) => {
-  const about = db.platformAbout || DEFAULT_PLATFORM_ABOUT;
+  const about = {
+    ...DEFAULT_PLATFORM_ABOUT,
+    ...(db.platformAbout || {}),
+  };
   if (about && about.customSections) {
     about.customSections = about.customSections.filter(
       (sec) => sec.id !== 'sec-goals' && sec.id !== 'sec-values'
     );
   }
   res.json(about);
+});
+
+// Update Platform About (allows editing header, overview, vision, mission)
+app.post('/api/system/about', async (req, res) => {
+  try {
+    let body = req.body;
+    if (typeof body === 'string' && body.trim()) {
+      try {
+        body = JSON.parse(body);
+      } catch {}
+    }
+    const current = db.platformAbout || DEFAULT_PLATFORM_ABOUT;
+    const updatedAbout: StoredPlatformAbout = {
+      ...current,
+      pageHeaderTitle: (body.pageHeaderTitle !== undefined ? String(body.pageHeaderTitle).trim() : current.pageHeaderTitle) || DEFAULT_PLATFORM_ABOUT.pageHeaderTitle,
+      pageHeaderBadge: (body.pageHeaderBadge !== undefined ? String(body.pageHeaderBadge).trim() : current.pageHeaderBadge) || DEFAULT_PLATFORM_ABOUT.pageHeaderBadge,
+      pageHeaderSubtitle: (body.pageHeaderSubtitle !== undefined ? String(body.pageHeaderSubtitle).trim() : current.pageHeaderSubtitle) || DEFAULT_PLATFORM_ABOUT.pageHeaderSubtitle,
+      overviewTitle: (body.overviewTitle !== undefined ? String(body.overviewTitle).trim() : current.overviewTitle) || DEFAULT_PLATFORM_ABOUT.overviewTitle,
+      overviewContent: (body.overviewContent !== undefined && String(body.overviewContent).trim()) ? String(body.overviewContent).trim() : current.overviewContent,
+      visionTitle: (body.visionTitle !== undefined ? String(body.visionTitle).trim() : current.visionTitle) || DEFAULT_PLATFORM_ABOUT.visionTitle,
+      visionContent: (body.visionContent !== undefined && String(body.visionContent).trim()) ? String(body.visionContent).trim() : current.visionContent,
+      missionTitle: (body.missionTitle !== undefined ? String(body.missionTitle).trim() : current.missionTitle) || DEFAULT_PLATFORM_ABOUT.missionTitle,
+      missionContent: (body.missionContent !== undefined && String(body.missionContent).trim()) ? String(body.missionContent).trim() : current.missionContent,
+      customSections: Array.isArray(body.customSections) ? body.customSections : (current.customSections || []),
+      updatedAt: new Date().toISOString(),
+    };
+
+    db.platformAbout = updatedAbout;
+    saveDB();
+
+    try {
+      await Promise.race([
+        savePlatformAboutToFirestore(updatedAbout),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore about timed out')), 4000)),
+      ]);
+    } catch (fsErr) {
+      console.warn('Firestore about sync notice:', fsErr);
+    }
+
+    res.json({
+      success: true,
+      message: 'تم حفظ وتحديث محتوى «عن المنصة والرؤية والرسالة» بنجاح.',
+      platformAbout: updatedAbout,
+    });
+  } catch (err: any) {
+    console.error('About update error:', err);
+    res.status(500).json({ error: 'خطأ أثناء حفظ البيانات: ' + (err?.message || 'خطأ غير معروف') });
+  }
 });
 
 // Public Contact Us Info Endpoint (أرقام الواتساب والبريد للتواصل)
@@ -2644,6 +2710,129 @@ app.get('/api/supervisors', async (req, res) => {
   }
   const sorted = [...db.supervisors].sort((a, b) => (a.order || 0) - (b.order || 0));
   res.json({ supervisors: sorted });
+});
+
+// Supervisors Header Customization (العنوان والوصف المخصص)
+app.get('/api/admin/settings/supervisors-header', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  const title = (db as any).supervisorsHeader?.title || db.settings?.supervisorsHeaderTitle || 'إدارة هيئة المشرفين والخبراء القانونيين';
+  const subtitle = (db as any).supervisorsHeader?.subtitle || db.settings?.supervisorsHeaderSubtitle || 'يمكنك إضافة صورة المشرف واسمه ونبذة كاملة عن خبراته، ليتم عرضها في الصفحة العامة للمشرفين لكافة الزوار.';
+  const badge = (db as any).supervisorsHeader?.badge || db.settings?.supervisorsHeaderBadge || '';
+  res.json({ title, subtitle, badge });
+});
+
+app.post('/api/admin/settings/supervisors-header', async (req, res) => {
+  try {
+    let body = req.body;
+    if (typeof body === 'string' && body.trim()) {
+      try {
+        body = JSON.parse(body);
+      } catch {}
+    }
+    const { title, subtitle, badge } = body || {};
+    if (!(db as any).supervisorsHeader) {
+      (db as any).supervisorsHeader = {};
+    }
+    if (title !== undefined) (db as any).supervisorsHeader.title = String(title).trim();
+    if (subtitle !== undefined) (db as any).supervisorsHeader.subtitle = String(subtitle).trim();
+    if (badge !== undefined) (db as any).supervisorsHeader.badge = String(badge).trim();
+
+    if (!db.settings) db.settings = {} as any;
+    db.settings.supervisorsHeaderTitle = (db as any).supervisorsHeader.title;
+    db.settings.supervisorsHeaderSubtitle = (db as any).supervisorsHeader.subtitle;
+    saveDB();
+
+    res.json({
+      success: true,
+      title: (db as any).supervisorsHeader.title,
+      subtitle: (db as any).supervisorsHeader.subtitle,
+      badge: (db as any).supervisorsHeader.badge,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to update supervisors header' });
+  }
+});
+
+// Professionals Header Customization (تخصيص عنوان ووصف الدليل المهني)
+app.get('/api/admin/settings/professionals-header', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  const title = (db as any).professionalsHeader?.title || db.settings?.professionalsHeaderTitle || 'إدارة الدليل المهني (المحاسبين والمدققين والمكاتب)';
+  const subtitle = (db as any).professionalsHeader?.subtitle || db.settings?.professionalsHeaderSubtitle || 'إدارة ومراجعة طلبات الانضمام للدليل المهني واعتماد ظهورها أو تعديلها وحذفها.';
+  const badge = (db as any).professionalsHeader?.badge || db.settings?.professionalsHeaderBadge || '';
+  res.json({ title, subtitle, badge });
+});
+
+app.post('/api/admin/settings/professionals-header', async (req, res) => {
+  try {
+    let body = req.body;
+    if (typeof body === 'string' && body.trim()) {
+      try {
+        body = JSON.parse(body);
+      } catch {}
+    }
+    const { title, subtitle, badge } = body || {};
+    if (!(db as any).professionalsHeader) {
+      (db as any).professionalsHeader = {};
+    }
+    if (title !== undefined) (db as any).professionalsHeader.title = String(title).trim();
+    if (subtitle !== undefined) (db as any).professionalsHeader.subtitle = String(subtitle).trim();
+    if (badge !== undefined) (db as any).professionalsHeader.badge = String(badge).trim();
+
+    if (!db.settings) db.settings = {} as any;
+    db.settings.professionalsHeaderTitle = (db as any).professionalsHeader.title;
+    db.settings.professionalsHeaderSubtitle = (db as any).professionalsHeader.subtitle;
+    saveDB();
+
+    res.json({
+      success: true,
+      title: (db as any).professionalsHeader.title,
+      subtitle: (db as any).professionalsHeader.subtitle,
+      badge: (db as any).professionalsHeader.badge,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to update professionals header' });
+  }
+});
+
+// Related Sites Header Customization (تخصيص عنوان ووصف دليل المواقع ذات الصلة)
+app.get('/api/admin/settings/related-sites-header', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  const title = (db as any).relatedSitesHeader?.title || db.settings?.relatedSitesHeaderTitle || 'إدارة دليل المواقع ذات الصلة';
+  const subtitle = (db as any).relatedSitesHeader?.subtitle || db.settings?.relatedSitesHeaderSubtitle || 'أضف المواقع الرسمية والتشريعية وصنفها بدقة مع إمكانية عرض وفلترة وإدارة التصنيفات بسهولة.';
+  const badge = (db as any).relatedSitesHeader?.badge || db.settings?.relatedSitesHeaderBadge || '';
+  res.json({ title, subtitle, badge });
+});
+
+app.post('/api/admin/settings/related-sites-header', async (req, res) => {
+  try {
+    let body = req.body;
+    if (typeof body === 'string' && body.trim()) {
+      try {
+        body = JSON.parse(body);
+      } catch {}
+    }
+    const { title, subtitle, badge } = body || {};
+    if (!(db as any).relatedSitesHeader) {
+      (db as any).relatedSitesHeader = {};
+    }
+    if (title !== undefined) (db as any).relatedSitesHeader.title = String(title).trim();
+    if (subtitle !== undefined) (db as any).relatedSitesHeader.subtitle = String(subtitle).trim();
+    if (badge !== undefined) (db as any).relatedSitesHeader.badge = String(badge).trim();
+
+    if (!db.settings) db.settings = {} as any;
+    db.settings.relatedSitesHeaderTitle = (db as any).relatedSitesHeader.title;
+    db.settings.relatedSitesHeaderSubtitle = (db as any).relatedSitesHeader.subtitle;
+    saveDB();
+
+    res.json({
+      success: true,
+      title: (db as any).relatedSitesHeader.title,
+      subtitle: (db as any).relatedSitesHeader.subtitle,
+      badge: (db as any).relatedSitesHeader.badge,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to update related sites header' });
+  }
 });
 
 app.post('/api/admin/supervisors', async (req, res) => {
@@ -3423,6 +3612,9 @@ app.post('/api/admin/settings/about', async (req, res) => {
       } catch {}
     }
     const {
+      pageHeaderTitle,
+      pageHeaderBadge,
+      pageHeaderSubtitle,
       overviewTitle,
       overviewContent,
       visionTitle,
@@ -3432,18 +3624,21 @@ app.post('/api/admin/settings/about', async (req, res) => {
       customSections,
     } = body || {};
 
-    if (!overviewContent || !String(overviewContent).trim()) {
-      return res.status(400).json({ error: 'يرجى إدخال نبذة تعريفية صحيحة عن المنصة' });
-    }
+    const current = db.platformAbout || DEFAULT_PLATFORM_ABOUT;
+    const effectiveOverviewContent = (overviewContent && String(overviewContent).trim()) || current.overviewContent;
 
     const updatedAbout: StoredPlatformAbout = {
-      overviewTitle: (overviewTitle && String(overviewTitle).trim()) || DEFAULT_PLATFORM_ABOUT.overviewTitle,
-      overviewContent: String(overviewContent).trim(),
-      visionTitle: (visionTitle && String(visionTitle).trim()) || DEFAULT_PLATFORM_ABOUT.visionTitle,
-      visionContent: (visionContent && String(visionContent).trim()) || DEFAULT_PLATFORM_ABOUT.visionContent,
-      missionTitle: (missionTitle && String(missionTitle).trim()) || DEFAULT_PLATFORM_ABOUT.missionTitle,
-      missionContent: (missionContent && String(missionContent).trim()) || DEFAULT_PLATFORM_ABOUT.missionContent,
-      customSections: Array.isArray(customSections) ? customSections : (db.platformAbout?.customSections || []),
+      ...current,
+      pageHeaderTitle: (pageHeaderTitle !== undefined ? String(pageHeaderTitle).trim() : current.pageHeaderTitle) || DEFAULT_PLATFORM_ABOUT.pageHeaderTitle,
+      pageHeaderBadge: (pageHeaderBadge !== undefined ? String(pageHeaderBadge).trim() : current.pageHeaderBadge) || DEFAULT_PLATFORM_ABOUT.pageHeaderBadge,
+      pageHeaderSubtitle: (pageHeaderSubtitle !== undefined ? String(pageHeaderSubtitle).trim() : current.pageHeaderSubtitle) || DEFAULT_PLATFORM_ABOUT.pageHeaderSubtitle,
+      overviewTitle: (overviewTitle && String(overviewTitle).trim()) || current.overviewTitle || DEFAULT_PLATFORM_ABOUT.overviewTitle,
+      overviewContent: effectiveOverviewContent,
+      visionTitle: (visionTitle && String(visionTitle).trim()) || current.visionTitle || DEFAULT_PLATFORM_ABOUT.visionTitle,
+      visionContent: (visionContent && String(visionContent).trim()) || current.visionContent || DEFAULT_PLATFORM_ABOUT.visionContent,
+      missionTitle: (missionTitle && String(missionTitle).trim()) || current.missionTitle || DEFAULT_PLATFORM_ABOUT.missionTitle,
+      missionContent: (missionContent && String(missionContent).trim()) || current.missionContent || DEFAULT_PLATFORM_ABOUT.missionContent,
+      customSections: Array.isArray(customSections) ? customSections : (current.customSections || []),
       updatedAt: new Date().toISOString(),
     };
 

@@ -59,6 +59,7 @@ interface ProfessionalsDirectoryViewProps {
   initialType?: ProfessionalType | 'all';
   onBackToHome: () => void;
   onOpenChatWithAdvisor?: (advisorName: string) => void;
+  onGoToAdminPortal?: () => void;
   isAdmin?: boolean;
 }
 
@@ -75,6 +76,7 @@ function shuffleArray<T>(array: T[]): T[] {
 export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProps> = ({
   initialType = 'all',
   onBackToHome,
+  onGoToAdminPortal,
   isAdmin,
 }) => {
   const [isUserAdmin, setIsUserAdmin] = useState<boolean>(() => {
@@ -121,6 +123,48 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
   const [editingServiceIdx, setEditingServiceIdx] = useState<number | null>(null);
   const [editingServiceValue, setEditingServiceValue] = useState<string>('');
   const [servicesManagerFeedback, setServicesManagerFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Custom Header Title & Subtitle from settings / admin customization
+  const [customTitle, setCustomTitle] = useState(() => {
+    try {
+      const saved = localStorage.getItem('professionals_header_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.title) return parsed.title;
+      }
+    } catch {}
+    return 'دليل المحاسبين والمدققين والمكاتب';
+  });
+
+  const [customSubtitle, setCustomSubtitle] = useState(() => {
+    try {
+      const saved = localStorage.getItem('professionals_header_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.subtitle) return parsed.subtitle;
+      }
+    } catch {}
+    return 'دليل معتمد للمحاسبين القانونيين ومدققي الحسابات ومكاتب المحاسبة والتدقيق المرخصة بدولة فلسطين';
+  });
+
+  const loadHeaderSettings = async () => {
+    try {
+      const res = await fetch('/api/admin/settings/professionals-header');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.title) setCustomTitle(data.title);
+        if (data.subtitle) setCustomSubtitle(data.subtitle);
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    loadHeaderSettings();
+  }, []);
+
+  useSync(['professionals_header', 'all'], () => {
+    loadHeaderSettings();
+  });
 
   // Sync and fetch dynamic types
   useEffect(() => {
@@ -660,14 +704,39 @@ export const ProfessionalsDirectoryView: React.FC<ProfessionalsDirectoryViewProp
               <Briefcase className="w-5 h-5 text-emerald-400" />
             </div>
             <div>
-              <h1 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                <span>دليل المحاسبين والمدققين والمكاتب</span>
+              <h1 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2 flex-wrap">
+                <span>{customTitle}</span>
                 <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
                   فلسطين
                 </span>
+                {isUserAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onGoToAdminPortal) {
+                        onGoToAdminPortal();
+                      } else {
+                        const newTitle = prompt('تعديل عنوان الدليل المهني:', customTitle);
+                        if (newTitle && newTitle.trim()) {
+                          setCustomTitle(newTitle.trim());
+                          fetch('/api/admin/settings/professionals-header', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ title: newTitle.trim() }),
+                          }).then(() => notifySync('professionals_header'));
+                        }
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold transition-all shadow-xs cursor-pointer hover:scale-105"
+                    title="تعديل هذا العنوان بالقلم ✍️"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>تعديل بالقلم ✍️</span>
+                  </button>
+                )}
               </h1>
               <p className="text-xs sm:text-sm text-slate-600 mt-1 font-normal">
-                دليل معتمد للمحاسبين القانونيين ومدققي الحسابات ومكاتب المحاسبة والتدقيق المرخصة بدولة فلسطين
+                {customSubtitle}
               </p>
             </div>
           </div>

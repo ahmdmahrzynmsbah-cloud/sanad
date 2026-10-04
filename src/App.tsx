@@ -510,6 +510,8 @@ export default function App() {
             <RelatedSitesView
               onBackToHome={() => setActiveView('home')}
               onGoToProfessionalsDirectory={() => setActiveView('professionals-directory')}
+              onGoToAdminPortal={() => setActiveView('admin-portal')}
+              isAdmin={Boolean(currentAdmin || currentUser?.role === 'admin' || currentUser?.role === 'supervisor')}
             />
           </div>
         )}
@@ -519,6 +521,7 @@ export default function App() {
           <div className="w-full">
             <ProfessionalsDirectoryView
               onBackToHome={() => setActiveView('home')}
+              onGoToAdminPortal={() => setActiveView('admin-portal')}
               isAdmin={Boolean(currentAdmin || currentUser?.role === 'admin' || currentUser?.role === 'supervisor')}
             />
           </div>
@@ -538,6 +541,17 @@ export default function App() {
           <div className="w-full">
             <AboutPlatformView
               aboutData={platformAbout}
+              isAdmin={Boolean(currentAdmin || currentUser?.role === 'admin' || currentUser?.role === 'supervisor')}
+              isLoggedIn={Boolean(currentUser || currentAdmin)}
+              onUpdateAbout={(newAbout) => setPlatformAbout(newAbout)}
+              onOpenLogin={() => {
+                setAuthInitialMode('login');
+                setActiveView('auth');
+              }}
+              onOpenRegister={() => {
+                setAuthInitialMode('register');
+                setActiveView('auth');
+              }}
             />
           </div>
         )}

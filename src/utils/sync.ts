@@ -45,6 +45,17 @@ export function notifySync(collection: string = 'all') {
   } catch {}
 }
 
+/**
+ * Broadcast sync helper supporting arrays of collections or single collection
+ */
+export function broadcastSync(collections: string | string[] = 'all') {
+  if (Array.isArray(collections)) {
+    collections.forEach((col) => notifySync(col));
+  } else {
+    notifySync(collections);
+  }
+}
+
 export function initGlobalSync() {
   if (activeEventSource) {
     try { activeEventSource.close(); } catch {}

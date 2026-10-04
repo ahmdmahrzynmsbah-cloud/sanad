@@ -269,6 +269,9 @@ export interface AboutSectionCard {
 }
 
 export interface PlatformAboutData {
+  pageHeaderTitle?: string;
+  pageHeaderBadge?: string;
+  pageHeaderSubtitle?: string;
   overviewTitle?: string;
   overviewContent: string;
   visionTitle?: string;

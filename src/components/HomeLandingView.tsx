@@ -69,6 +69,72 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
     return (SEED_SUPERVISORS as unknown as Supervisor[]) || [];
   });
 
+  const [supervisorsTitle, setSupervisorsTitle] = useState(() => {
+    try {
+      const saved = localStorage.getItem('supervisors_header_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.title) return parsed.title;
+      }
+    } catch {}
+    return 'هيئة المشرفين والخبراء القانونيين';
+  });
+
+  const [supervisorsSubtitle, setSupervisorsSubtitle] = useState(() => {
+    try {
+      const saved = localStorage.getItem('supervisors_header_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.subtitle) return parsed.subtitle;
+      }
+    } catch {}
+    return 'استعرض قائمة المشرفين والخبراء المعتمدين في التدقيق والمراجعة التشريعية وتخصصاتهم القانونية والضريبية.';
+  });
+
+  const [relatedSitesTitle, setRelatedSitesTitle] = useState(() => {
+    try {
+      const saved = localStorage.getItem('related_sites_header_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.title) return parsed.title;
+      }
+    } catch {}
+    return 'دليل المواقع والمنصات ذات الصلة';
+  });
+
+  const [relatedSitesSubtitle, setRelatedSitesSubtitle] = useState(() => {
+    try {
+      const saved = localStorage.getItem('related_sites_header_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.subtitle) return parsed.subtitle;
+      }
+    } catch {}
+    return 'روابط وبوابات رسمية تابعة لوزارة المالية، ديوان الفتوى والتشريع، والدوائر الاقتصادية والجمركية في فلسطين.';
+  });
+
+  useSync(['supervisors_header', 'all'], () => {
+    try {
+      const saved = localStorage.getItem('supervisors_header_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.title) setSupervisorsTitle(parsed.title);
+        if (parsed.subtitle) setSupervisorsSubtitle(parsed.subtitle);
+      }
+    } catch {}
+  });
+
+  useSync(['related_sites_header', 'all'], () => {
+    try {
+      const saved = localStorage.getItem('related_sites_header_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.title) setRelatedSitesTitle(parsed.title);
+        if (parsed.subtitle) setRelatedSitesSubtitle(parsed.subtitle);
+      }
+    } catch {}
+  });
+
   const loadSupervisors = async () => {
     try {
       const res = await fetch(`/api/supervisors?t=${Date.now()}`);
@@ -518,10 +584,10 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
               <Users className="w-5 h-5" />
             </div>
             <h4 className="text-base sm:text-lg font-black text-slate-950 group-hover:text-emerald-800 transition-colors">
-              هيئة المشرفين والخبراء القانونيين
+              {supervisorsTitle}
             </h4>
             <p className="text-xs sm:text-sm text-slate-700 leading-relaxed font-medium">
-              استعرض قائمة المشرفين والخبراء المعتمدين في التدقيق والمراجعة التشريعية وتخصصاتهم القانونية والضريبية.
+              {supervisorsSubtitle}
             </p>
           </div>
           <ArrowLeft className="w-5 h-5 text-slate-400 group-hover:text-emerald-700 group-hover:-translate-x-1 transition-all shrink-0 mt-2" />
@@ -537,10 +603,10 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
               <Globe className="w-5 h-5" />
             </div>
             <h4 className="text-base sm:text-lg font-black text-slate-950 group-hover:text-blue-800 transition-colors">
-              دليل المواقع والمنصات ذات الصلة
+              {relatedSitesTitle}
             </h4>
             <p className="text-xs sm:text-sm text-slate-700 leading-relaxed font-medium">
-              روابط وبوابات رسمية تابعة لوزارة المالية، ديوان الفتوى والتشريع، والدوائر الاقتصادية والجمركية في فلسطين.
+              {relatedSitesSubtitle}
             </p>
           </div>
           <ArrowLeft className="w-5 h-5 text-slate-400 group-hover:text-blue-700 group-hover:-translate-x-1 transition-all shrink-0 mt-2" />

@@ -12,7 +12,8 @@ import {
   Sparkles,
   ShieldAlert,
   UserCheck,
-  Scale
+  Scale,
+  Edit3
 } from 'lucide-react';
 import { Supervisor } from '../types';
 import { useSync } from '../utils/sync';
@@ -64,6 +65,48 @@ export const SupervisorsView: React.FC<SupervisorsViewProps> = ({
     loadSupervisorsData();
   });
 
+  // Custom Header Title & Subtitle from settings / admin customization
+  const [customTitle, setCustomTitle] = useState(() => {
+    try {
+      const saved = localStorage.getItem('supervisors_header_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.title) return parsed.title;
+      }
+    } catch {}
+    return 'هيئة المشرفين والخبراء القانونيين والضريبيين';
+  });
+
+  const [customSubtitle, setCustomSubtitle] = useState(() => {
+    try {
+      const saved = localStorage.getItem('supervisors_header_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.subtitle) return parsed.subtitle;
+      }
+    } catch {}
+    return 'نخبة من المستشارين والخبراء المعتمدين في فحص القوانين والأنظمة الجمركية والضريبية بدولة فلسطين';
+  });
+
+  const loadHeaderSettings = async () => {
+    try {
+      const res = await fetch('/api/admin/settings/supervisors-header');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.title) setCustomTitle(data.title);
+        if (data.subtitle) setCustomSubtitle(data.subtitle);
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    loadHeaderSettings();
+  }, []);
+
+  useSync(['supervisors_header', 'all'], () => {
+    loadHeaderSettings();
+  });
+
   // Filter departments
   const departments = Array.from(
     new Set(supervisors.map((s) => s.department).filter(Boolean))
@@ -99,11 +142,24 @@ export const SupervisorsView: React.FC<SupervisorsViewProps> = ({
               <Users className="w-5 h-5 text-emerald-400" />
             </div>
             <div>
-              <h1 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                هيئة المشرفين والخبراء القانونيين والضريبيين
-              </h1>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                  {customTitle}
+                </h1>
+                {isAdmin && onGoToAdminPortal && (
+                  <button
+                    type="button"
+                    onClick={onGoToAdminPortal}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-300 shadow-2xs transition-all hover:scale-105 cursor-pointer"
+                    title="تعديل هذا الكلام في لوحة التحكم ✍️"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>تعديل هذا الكلام ✍️</span>
+                  </button>
+                )}
+              </div>
               <p className="text-xs sm:text-sm text-slate-600 mt-1 font-normal">
-                نخبة من المستشارين والخبراء المعتمدين في فحص القوانين والأنظمة الجمركية والضريبية بدولة فلسطين
+                {customSubtitle}
               </p>
             </div>
           </div>

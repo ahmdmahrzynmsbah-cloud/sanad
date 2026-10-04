@@ -16,7 +16,10 @@ import {
   Check,
   Layers,
   ArrowUpDown,
-  Filter
+  Filter,
+  Edit3,
+  RotateCcw,
+  Sparkles
 } from 'lucide-react';
 import { RelatedSite } from '../../types';
 import { useSync, notifySync } from '../../utils/sync';
@@ -68,6 +71,99 @@ export const RelatedSitesAdminTab: React.FC<RelatedSitesAdminTabProps> = ({
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Header customizable text state (نظام تعديل نصوص دليل المواقع ذات الصلة بالقلم)
+  const DEFAULT_SITES_TITLE = 'إدارة دليل المواقع ذات الصلة';
+  const DEFAULT_SITES_SUBTITLE = 'أضف المواقع الرسمية والتشريعية وصنفها بدقة مع إمكانية عرض وفلترة وإدارة التصنيفات بسهولة.';
+
+  const [headerTitle, setHeaderTitle] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('related_sites_header_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.title) return parsed.title;
+      }
+    } catch {}
+    return DEFAULT_SITES_TITLE;
+  });
+
+  const [headerSubtitle, setHeaderSubtitle] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('related_sites_header_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.subtitle) return parsed.subtitle;
+      }
+    } catch {}
+    return DEFAULT_SITES_SUBTITLE;
+  });
+
+  const [editingTarget, setEditingTarget] = useState<'none' | 'title' | 'subtitle' | 'all'>('none');
+  const [editTitleDraft, setEditTitleDraft] = useState(headerTitle);
+  const [editSubtitleDraft, setEditSubtitleDraft] = useState(headerSubtitle);
+  const [isSavingHeader, setIsSavingHeader] = useState(false);
+  const [showEditHeaderModal, setShowEditHeaderModal] = useState(false);
+
+  const loadHeaderSettings = async () => {
+    try {
+      const res = await fetch('/api/admin/settings/related-sites-header');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.title) {
+          setHeaderTitle(data.title);
+          setEditTitleDraft(data.title);
+        }
+        if (data.subtitle) {
+          setHeaderSubtitle(data.subtitle);
+          setEditSubtitleDraft(data.subtitle);
+        }
+      }
+    } catch {}
+  };
+
+  const handleSaveHeader = async (newTitle?: string, newSubtitle?: string) => {
+    const titleToSave = (newTitle !== undefined ? newTitle : editTitleDraft).trim() || DEFAULT_SITES_TITLE;
+    const subtitleToSave = (newSubtitle !== undefined ? newSubtitle : editSubtitleDraft).trim() || DEFAULT_SITES_SUBTITLE;
+
+    setIsSavingHeader(true);
+    setHeaderTitle(titleToSave);
+    setHeaderSubtitle(subtitleToSave);
+    try {
+      localStorage.setItem('related_sites_header_settings', JSON.stringify({
+        title: titleToSave,
+        subtitle: subtitleToSave,
+        updatedAt: new Date().toISOString()
+      }));
+    } catch {}
+
+    try {
+      const res = await fetch('/api/admin/settings/related-sites-header', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: titleToSave, subtitle: subtitleToSave }),
+      });
+      if (res.ok) {
+        setFeedback({ type: 'success', message: 'تم حفظ وتحديث نصوص دليل المواقع ذات الصلة بنجاح ✍️' });
+      }
+    } catch {
+      setFeedback({ type: 'success', message: 'تم حفظ التعديلات محلياً بنجاح ✍️' });
+    } finally {
+      setIsSavingHeader(false);
+      setEditingTarget('none');
+      setShowEditHeaderModal(false);
+      notifySync('related_sites_header');
+      window.dispatchEvent(new CustomEvent('related-sites-header-updated', {
+        detail: { title: titleToSave, subtitle: subtitleToSave }
+      }));
+      setTimeout(() => setFeedback(null), 3500);
+    }
+  };
+
+  const handleResetHeader = () => {
+    setEditTitleDraft(DEFAULT_SITES_TITLE);
+    setEditSubtitleDraft(DEFAULT_SITES_SUBTITLE);
+    handleSaveHeader(DEFAULT_SITES_TITLE, DEFAULT_SITES_SUBTITLE);
+  };
 
   // Modal: Category Management
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -148,10 +244,15 @@ export const RelatedSitesAdminTab: React.FC<RelatedSitesAdminTabProps> = ({
 
   useEffect(() => {
     fetchSites();
+    loadHeaderSettings();
   }, []);
 
   useSync(['related_sites', 'all'], () => {
     fetchSites();
+  });
+
+  useSync(['related_sites_header', 'all'], () => {
+    loadHeaderSettings();
   });
 
   // Compute live counts if categories list is empty or to keep them reactive
@@ -520,21 +621,314 @@ export const RelatedSitesAdminTab: React.FC<RelatedSitesAdminTabProps> = ({
       )}
 
       {/* Top Header & Actions */}
-      <div className="bg-white rounded-2xl p-5 border border-gray-200 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-2">
-            <Globe className="w-5 h-5 text-blue-800" />
-            <span>إدارة دليل المواقع ذات الصلة</span>
-            <span className="text-xs font-semibold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
-              {sites.length} موقع
-            </span>
-            <span className="text-xs font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
-              {categories.length} تصنيف
-            </span>
-          </h2>
-          <p className="text-xs text-gray-500 mt-1">
-            أضف المواقع الرسمية والتشريعية وصنفها بدقة مع إمكانية عرض وفلترة وإدارة التصنيفات بسهولة.
-          </p>
+      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="w-full sm:max-w-2xl">
+          {/* Top helper badge system */}
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+            <button
+              type="button"
+              onClick={() => {
+                setEditTitleDraft(headerTitle);
+                setEditSubtitleDraft(headerSubtitle);
+                setEditingTarget('all');
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-700 hover:bg-blue-800 text-white text-[11px] sm:text-xs font-bold shadow-xs border border-blue-500/70 transition-all cursor-pointer hover:scale-105 active:scale-95 group/pen"
+              title="نظام القلم: انقر لتعديل هذا العنوان والوصف بحرية ✍️"
+            >
+              <Edit3 className="w-3.5 h-3.5 text-blue-200 group-hover/pen:rotate-12 transition-transform" />
+              <span>تعديل هذا الكلام ✍️</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setEditTitleDraft(headerTitle);
+                setEditSubtitleDraft(headerSubtitle);
+                setShowEditHeaderModal(true);
+              }}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold border border-slate-200 transition-colors cursor-pointer"
+              title="فتح نافذة التعديل المتقدمة"
+            >
+              <Sparkles className="w-3 h-3 text-blue-700" />
+              <span>نافذة التعديل</span>
+            </button>
+          </div>
+
+          {/* Main Container with direct pen system */}
+          <div className="relative pt-6 group/target rounded-xl transition-all">
+            {/* Direct Pen Badge hovering directly over this text block */}
+            <div className="absolute top-0 right-0 flex items-center gap-1.5 z-10">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditTitleDraft(headerTitle);
+                  setEditSubtitleDraft(headerSubtitle);
+                  setEditingTarget(editingTarget === 'all' ? 'none' : 'all');
+                }}
+                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-700 hover:bg-blue-800 text-white text-[10px] sm:text-[11px] font-bold shadow-sm border border-blue-400/80 transition-all cursor-pointer hover:scale-105 active:scale-95 animate-in fade-in"
+                title="تعديل هذا الكلام بالقلم ✍️"
+              >
+                <Edit3 className="w-3 h-3 text-blue-200 animate-pulse" />
+                <span>تعديل هذا الكلام ✍️</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setEditTitleDraft(headerTitle);
+                  setEditSubtitleDraft(headerSubtitle);
+                  setShowEditHeaderModal(true);
+                }}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-800 text-[10px] font-semibold border border-slate-200 transition-colors cursor-pointer"
+                title="تعديل في نافذة مخصصة"
+              >
+                <Sparkles className="w-2.5 h-2.5 text-blue-600" />
+                <span>تعديل متقدم</span>
+              </button>
+            </div>
+
+            {editingTarget === 'all' ? (
+              /* Inline Direct Edit Mode for both Title and Subtitle */
+              <div className="bg-blue-50/80 border-2 border-blue-400/90 rounded-2xl p-4 space-y-3 animate-in fade-in zoom-in-95 shadow-sm">
+                <div className="flex items-center justify-between gap-2 border-b border-blue-200 pb-2">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-blue-950">
+                    <Edit3 className="w-4 h-4 text-blue-700" />
+                    <span>تعديل عنوان ووصف دليل المواقع ذات الصلة بحرية بالقلم:</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleResetHeader}
+                    className="text-[11px] text-slate-600 hover:text-slate-900 flex items-center gap-1 cursor-pointer"
+                    title="استعادة النص الافتراضي"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>استعادة الافتراضي</span>
+                  </button>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    العنوان الرئيسي:
+                  </label>
+                  <input
+                    type="text"
+                    value={editTitleDraft}
+                    onChange={(e) => setEditTitleDraft(e.target.value)}
+                    className="w-full px-3 py-1.5 bg-white border border-blue-300 rounded-xl text-xs sm:text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="اكتب العنوان هنا..."
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSaveHeader(editTitleDraft, editSubtitleDraft);
+                      if (e.key === 'Escape') setEditingTarget('none');
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    الوصف التوضيحي:
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={editSubtitleDraft}
+                    onChange={(e) => setEditSubtitleDraft(e.target.value)}
+                    className="w-full px-3 py-1.5 bg-white border border-blue-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                    placeholder="اكتب الوصف التوضيحي هنا..."
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 justify-end pt-1">
+                  <button
+                    type="button"
+                    onClick={() => handleSaveHeader(editTitleDraft, editSubtitleDraft)}
+                    disabled={isSavingHeader}
+                    className="px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50"
+                  >
+                    <Check className="w-4 h-4 text-blue-200" />
+                    <span>{isSavingHeader ? 'جاري الحفظ...' : 'حفظ التعديلات ✍️'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditTitleDraft(headerTitle);
+                      setEditSubtitleDraft(headerSubtitle);
+                      setEditingTarget('none');
+                    }}
+                    className="px-3.5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl flex items-center gap-1 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                    <span>إلغاء</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-start gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-800 border border-blue-200 flex items-center justify-center shrink-0 mt-0.5">
+                  <Globe className="w-5 h-5 text-blue-800" />
+                </div>
+                <div className="space-y-1.5 flex-1 min-w-0">
+                  {/* Title Element with Inline Editing */}
+                  {editingTarget === 'title' ? (
+                    <div className="flex items-center gap-2 flex-wrap bg-blue-50/80 p-2.5 rounded-xl border border-blue-300 animate-in fade-in">
+                      <input
+                        type="text"
+                        value={editTitleDraft}
+                        onChange={(e) => setEditTitleDraft(e.target.value)}
+                        className="flex-1 min-w-[220px] px-3 py-1.5 bg-white border border-blue-400 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        autoFocus
+                        placeholder="اكتب عنوان الصفحة هنا..."
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveHeader(editTitleDraft, undefined);
+                          if (e.key === 'Escape') setEditingTarget('none');
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleSaveHeader(editTitleDraft, undefined)}
+                        disabled={isSavingHeader}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer"
+                      >
+                        <Check className="w-4 h-4" />
+                        <span>حفظ العنوان ✍️</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditTitleDraft(headerTitle);
+                          setEditingTarget('none');
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                        <span>إلغاء</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      {/* Prominent floating pen indicator directly above the text */}
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditTitleDraft(headerTitle);
+                            setEditSubtitleDraft(headerSubtitle);
+                            setEditingTarget('all');
+                          }}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-100/90 hover:bg-blue-200 text-blue-900 border border-blue-300 text-[10px] font-bold shadow-2xs cursor-pointer transition-all hover:scale-105"
+                          title="قلم التعديل المباشر فوق النص ✍️"
+                        >
+                          <Edit3 className="w-3 h-3 text-blue-700 animate-pulse" />
+                          <span>قلم تعديل العنوان والوصف ✍️</span>
+                        </button>
+                      </div>
+
+                      <h2 className="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-2 flex-wrap group/title">
+                        <span
+                          onClick={() => {
+                            setEditTitleDraft(headerTitle);
+                            setEditingTarget('title');
+                          }}
+                          className="relative inline-flex items-center gap-2 cursor-pointer hover:text-blue-800 transition-colors border-b-2 border-dashed border-blue-400/60 hover:border-blue-700 pb-0.5 select-all"
+                          title="انقر لتعديل هذا العنوان بالقلم بحرية ✍️"
+                        >
+                          {/* Pen icon button right beside the text */}
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-300 shadow-2xs transition-transform group-hover/title:scale-110 shrink-0">
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </span>
+                          <span>{headerTitle}</span>
+                        </span>
+
+                        <span className="text-xs font-semibold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
+                          {sites.length} موقع
+                        </span>
+                        <span className="text-xs font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                          {categories.length} تصنيف
+                        </span>
+
+                        {/* Quick Action buttons */}
+                        <div className="inline-flex items-center gap-1 mr-auto sm:mr-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditTitleDraft(headerTitle);
+                              setEditSubtitleDraft(headerSubtitle);
+                              setEditingTarget('all');
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 text-xs font-bold cursor-pointer hover:scale-105 active:scale-95 transition-all"
+                            title="تعديل سريع لكامل النصوص"
+                          >
+                            <Edit3 className="w-3 h-3 text-blue-600" />
+                            <span>تعديل سريع</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditTitleDraft(headerTitle);
+                              setEditSubtitleDraft(headerSubtitle);
+                              setShowEditHeaderModal(true);
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-bold cursor-pointer hover:scale-105 active:scale-95 transition-all"
+                            title="فتح نافذة التعديل المتقدمة"
+                          >
+                            <Sparkles className="w-3 h-3 text-blue-600" />
+                            <span>تعديل متقدم</span>
+                          </button>
+                        </div>
+                      </h2>
+                    </div>
+                  )}
+
+                  {/* Subtitle Element with Inline Editing */}
+                  {editingTarget === 'subtitle' ? (
+                    <div className="space-y-2 bg-blue-50/80 p-2.5 rounded-xl border border-blue-300 animate-in fade-in">
+                      <textarea
+                        rows={2}
+                        value={editSubtitleDraft}
+                        onChange={(e) => setEditSubtitleDraft(e.target.value)}
+                        className="w-full px-3 py-1.5 bg-white border border-blue-400 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                        autoFocus
+                        placeholder="اكتب الوصف التوضيحي هنا..."
+                      />
+                      <div className="flex items-center gap-2 justify-end">
+                        <button
+                          type="button"
+                          onClick={() => handleSaveHeader(undefined, editSubtitleDraft)}
+                          disabled={isSavingHeader}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer"
+                        >
+                          <Check className="w-4 h-4" />
+                          <span>حفظ الوصف ✍️</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditSubtitleDraft(headerSubtitle);
+                            setEditingTarget('none');
+                          }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl cursor-pointer"
+                        >
+                          <X className="w-4 h-4" />
+                          <span>إلغاء</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p
+                      onClick={() => {
+                        setEditSubtitleDraft(headerSubtitle);
+                        setEditingTarget('subtitle');
+                      }}
+                      className="text-xs text-gray-500 mt-1 cursor-pointer hover:text-blue-900 hover:bg-blue-50/60 p-1.5 rounded-lg border border-transparent hover:border-blue-200 transition-all flex items-start gap-1.5 group/sub"
+                      title="انقر لتعديل هذا الوصف بالقلم بحرية ✍️"
+                    >
+                      <Edit3 className="w-3.5 h-3.5 text-blue-500 opacity-60 group-hover/sub:opacity-100 mt-0.5 shrink-0" />
+                      <span>{headerSubtitle}</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
@@ -1313,6 +1707,107 @@ export const RelatedSitesAdminTab: React.FC<RelatedSitesAdminTabProps> = ({
                 <Trash2 className="w-4 h-4" />
                 <span>{deletingCategoryName ? 'جارٍ الحذف...' : 'تأكيد حذف التصنيف'}</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Related Sites Header Customization Modal */}
+      {showEditHeaderModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in" dir="rtl">
+          <div className="bg-white rounded-3xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden animate-in zoom-in-95">
+            <div className="p-5 bg-gradient-to-l from-blue-900 to-blue-800 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-blue-200">
+                  <Edit3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-sm sm:text-base">تعديل عنوان ووصف دليل المواقع ذات الصلة</h3>
+                  <p className="text-[11px] text-blue-200">يمكنك تعديل النصوص بحرية لتظهر في جميع أنحاء المنصة</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEditHeaderModal(false)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  العنوان الرئيسي لدليل المواقع ذات الصلة:
+                </label>
+                <input
+                  type="text"
+                  value={editTitleDraft}
+                  onChange={(e) => setEditTitleDraft(e.target.value)}
+                  placeholder="مثال: إدارة دليل المواقع ذات الصلة"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  الوصف التوضيحي والمقدمة:
+                </label>
+                <textarea
+                  rows={3}
+                  value={editSubtitleDraft}
+                  onChange={(e) => setEditSubtitleDraft(e.target.value)}
+                  placeholder="اكتب نبذة أو وصفاً توضيحياً..."
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                />
+              </div>
+
+              {/* Preview Box */}
+              <div className="bg-slate-50 rounded-2xl p-3 border border-slate-200">
+                <span className="text-[10px] font-bold text-slate-400 block mb-1">معاينة مباشرة للشكل النهائي:</span>
+                <div className="space-y-1">
+                  <div className="font-black text-sm text-slate-900 flex items-center gap-1.5">
+                    <Globe className="w-4 h-4 text-blue-700 shrink-0" />
+                    <span>{editTitleDraft || DEFAULT_SITES_TITLE}</span>
+                    <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-bold">
+                      {sites.length} موقع
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 leading-relaxed font-normal">
+                    {editSubtitleDraft || DEFAULT_SITES_SUBTITLE}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={handleResetHeader}
+                  className="text-xs font-bold text-slate-600 hover:text-slate-900 flex items-center gap-1 cursor-pointer py-1.5 px-2.5 rounded-lg hover:bg-slate-100 transition-colors"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+                  <span>استعادة النص الأصلي</span>
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditHeaderModal(false)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveHeader(editTitleDraft, editSubtitleDraft)}
+                    disabled={isSavingHeader}
+                    className="px-5 py-2 bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-md shadow-blue-700/20 cursor-pointer disabled:opacity-50"
+                  >
+                    <Check className="w-4 h-4 text-blue-200" />
+                    <span>{isSavingHeader ? 'جاري الحفظ...' : 'حفظ التعديلات ✍️'}</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

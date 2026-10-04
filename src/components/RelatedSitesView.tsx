@@ -20,7 +20,8 @@ import {
   Loader2,
   Upload,
   AlertCircle,
-  UserCheck
+  UserCheck,
+  Edit3
 } from 'lucide-react';
 import { RelatedSite, ProfessionalType, PALESTINIAN_GOVERNORATES } from '../types';
 import { useSync, notifySync } from '../utils/sync';
@@ -44,6 +45,48 @@ export const RelatedSitesView: React.FC<RelatedSitesViewProps> = ({
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+
+  // Dynamic header customization
+  const [customTitle, setCustomTitle] = useState(() => {
+    try {
+      const saved = localStorage.getItem('related_sites_header_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.title) return parsed.title;
+      }
+    } catch {}
+    return 'دليل المواقع والمنصات ذات الصلة';
+  });
+
+  const [customSubtitle, setCustomSubtitle] = useState(() => {
+    try {
+      const saved = localStorage.getItem('related_sites_header_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.subtitle) return parsed.subtitle;
+      }
+    } catch {}
+    return 'بوابات حكومية، تشريعية، واقتصادية فلسطينية معتمدة تخدم المكلفين والتجار والمستوردين';
+  });
+
+  const loadHeaderSettings = async () => {
+    try {
+      const res = await fetch('/api/admin/settings/related-sites-header');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.title) setCustomTitle(data.title);
+        if (data.subtitle) setCustomSubtitle(data.subtitle);
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    loadHeaderSettings();
+  }, []);
+
+  useSync(['related_sites_header', 'all'], () => {
+    loadHeaderSettings();
+  });
 
   // Registration Modal State
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
@@ -288,11 +331,38 @@ export const RelatedSitesView: React.FC<RelatedSitesViewProps> = ({
               <Globe className="w-5 h-5 text-emerald-400" />
             </div>
             <div>
-              <h1 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                دليل المواقع والمنصات ذات الصلة
-              </h1>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                  {customTitle}
+                </h1>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onGoToAdminPortal) {
+                        onGoToAdminPortal();
+                      } else {
+                        const newTitle = prompt('تعديل عنوان دليل المواقع ذات الصلة:', customTitle);
+                        if (newTitle && newTitle.trim()) {
+                          setCustomTitle(newTitle.trim());
+                          fetch('/api/admin/settings/related-sites-header', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ title: newTitle.trim() }),
+                          }).then(() => notifySync('related_sites_header'));
+                        }
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 text-xs font-bold transition-all shadow-xs cursor-pointer hover:scale-105"
+                    title="تعديل هذا العنوان بالقلم ✍️"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 text-blue-600" />
+                    <span>تعديل بالقلم ✍️</span>
+                  </button>
+                )}
+              </div>
               <p className="text-xs sm:text-sm text-slate-600 mt-1 font-normal">
-                بوابات حكومية، تشريعية، واقتصادية فلسطينية معتمدة تخدم المكلفين والتجار والمستوردين
+                {customSubtitle}
               </p>
             </div>
           </div>

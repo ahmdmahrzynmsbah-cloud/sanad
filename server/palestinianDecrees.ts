@@ -129,10 +129,9 @@ export function findKnownPalestinianDecree(fileName: string, rawText = '', numPa
     (fileName.toLowerCase().includes('law') && (numPages === 82 || rawText.length > 30000));
 
   if (isLaw39Match) {
-    const law39 = BUNDLED_PALESTINE_LAWS.find((l) =>
-      l.id === 'law-1789470617181-uysx' ||
-      (l.title.includes('39') && l.title.includes('غسل'))
-    );
+    const law39 =
+      BUNDLED_PALESTINE_LAWS.find((l) => l.id === 'law-1789470617181-uysx') ||
+      BUNDLED_PALESTINE_LAWS.find((l) => l.title.includes('39') && l.title.includes('غسل'));
     if (law39 && law39.content && law39.content.length > 1000) {
       return {
         keywords: ['قرار بقانون رقم 39 لسنة 2022', 'غسل الاموال', 'تمويل الارهاب', 'law.pdf'],

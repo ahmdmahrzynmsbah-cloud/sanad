@@ -105,8 +105,8 @@
       "isSubscribed": false,
       "trialDays": 30,
       "subscriptionPlan": "",
-      "remainingTrialDays": 5,
-      "remainingTrialHours": 15
+      "remainingTrialDays": 4,
+      "remainingTrialHours": 12
     },
     {
       "id": "user-1789300631180",
@@ -128,8 +128,8 @@
       "status": "approved",
       "subscriptionStatus": "trial",
       "frozenAt": "",
-      "remainingTrialDays": 27,
-      "remainingTrialHours": 10
+      "remainingTrialDays": 26,
+      "remainingTrialHours": 7
     },
     {
       "id": "user-1789332628388",
@@ -173,8 +173,8 @@
       "trialStartedAt": "2026-09-13T21:57:49.393Z",
       "username": "anas_123@sanadtax.com",
       "subscriptionPlan": "",
-      "remainingTrialDays": 1198,
-      "remainingTrialHours": 16
+      "remainingTrialDays": 1197,
+      "remainingTrialHours": 13
     },
     {
       "id": "user-1789396673929",
@@ -233,8 +233,8 @@
       "trialDays": 30,
       "updatedAt": "2026-09-14T19:53:17.044Z",
       "username": "sup_epvh@sanadtax.com",
-      "remainingTrialDays": 25,
-      "remainingTrialHours": 14
+      "remainingTrialDays": 24,
+      "remainingTrialHours": 10
     },
     {
       "id": "user-1789426489363",
@@ -337,8 +337,8 @@
       "password": "123456789",
       "phone": "059999232323",
       "isSubscribed": false,
-      "remainingTrialDays": 179,
-      "remainingTrialHours": 18
+      "remainingTrialDays": 178,
+      "remainingTrialHours": 15
     },
     {
       "id": "user-1790970896943",
@@ -356,8 +356,8 @@
       "reviewedAt": "2026-10-02T19:54:56.943Z",
       "password": "123456789",
       "phone": "05966565656565",
-      "remainingTrialDays": 179,
-      "remainingTrialHours": 18
+      "remainingTrialDays": 178,
+      "remainingTrialHours": 15
     }
   ],
   "laws": [
@@ -1935,7 +1935,11 @@
     "plansSectionBadge": "خطط وباقات مرنة ومناسبة لكافة القطاعات",
     "plansSectionTitle": "خطط وباقات الاشتراك",
     "plansSectionSubtitle": "اختر الباقة المثالية لاحتياجاتك واستفد من مرجع ذكاء اصطناعي قانوني وضريبي فلسطيني متكامل يواكب التشريعات والقرارات والتعرفة الجمركية لحظة بلحظة.",
-    "showPlansSectionInLanding": true
+    "showPlansSectionInLanding": true,
+    "supervisorsHeaderTitle": "إدارة هيئة المشرفين والخبراء القانونيين",
+    "supervisorsHeaderSubtitle": "يمكنك إضافة صورة المشرف واسمه ونبذة كاملة عن خبراته، ليتم عرضها في الصفحة العامة للمشرفين لكافة الزوار.",
+    "professionalsHeaderTitle": "إدارة الدليل المهني (المحاسبين والمدققين والمكاتب)",
+    "professionalsHeaderSubtitle": "إدارة ومراجعة طلبات الانضمام للدليل المهني واعتماد ظهورها أو تعديلها وحذفها."
   },
   "categories": [
     {
@@ -2158,11 +2162,14 @@
     "visionContent": "أن نكون المنظومة الذكية الأولى والرائدة في فلسطين والمنطقة، التي تربط التشريعات والقوانين بالحلول المالية والمحاسبية المتقدمة، لتمكين قطاع الأعمال والمحاسبين من اتخاذ قرارات دقيقة بكل ثقة.",
     "missionTitle": "رسالتنا (Mission)",
     "overviewTitle": "عن منصة «سَنَد»",
-    "updatedAt": "2026-09-16T17:54:10.323Z",
+    "updatedAt": "2026-10-04T00:32:11.487Z",
     "visionTitle": "رؤيتنا (Vision)",
     "missionContent": "تمكين المحاسبين، ومكاتب المحاسبة، والشركات، والقطاع الخاص من خلال توفير منصة ذكية تدمج قواعد المعرفة القانونية والضريبية بالذكاء الاصطناعي والأدوات المالية، لتوفير الوقت، وضمان الامتثال، وتبسيط أعقد الإجراءات الإدارية والقانونية بدقة متناهية ومصادر موثوقة.",
     "overviewContent": "«سَنَد» هي منصتك القانونية والمالية الذكية الأولى في فلسطين، صُممت لتكون مرجعك الموثوق في الضرائب والقوانين والتشريعات والتحليل المالي والمساعدة في التدقيق. نحن نقدم أدوات ذكية وأنظمة متطورة لدعم المدققين والمحاسبين، وشركات التدقيق ومكاتب التدقيق والمحاسبة، والمدراء الماليين والمهتمين من القطاع الخاص، مع تحديثات مستمرة لتسهيل أعمالكم وتعزيز كفاءتكم التشغيلية.",
-    "customSections": []
+    "customSections": [],
+    "pageHeaderTitle": "عن منصة «سَنَد» الذكية",
+    "pageHeaderBadge": "PS المنظومة الوطنية الأولى",
+    "pageHeaderSubtitle": "تشريعات، ضرائب، وتدقيق مالي ذكي"
   },
   "conversations": [
     {
@@ -3422,5 +3429,13 @@
       ],
       "lastRatedAt": "2026-10-03T00:21:21.021Z"
     }
+  },
+  "supervisorsHeader": {
+    "title": "إدارة هيئة المشرفين والخبراء القانونيين",
+    "subtitle": "يمكنك إضافة صورة المشرف واسمه ونبذة كاملة عن خبراته، ليتم عرضها في الصفحة العامة للمشرفين لكافة الزوار."
+  },
+  "professionalsHeader": {
+    "title": "إدارة الدليل المهني (المحاسبين والمدققين والمكاتب)",
+    "subtitle": "إدارة ومراجعة طلبات الانضمام للدليل المهني واعتماد ظهورها أو تعديلها وحذفها."
   }
 }
