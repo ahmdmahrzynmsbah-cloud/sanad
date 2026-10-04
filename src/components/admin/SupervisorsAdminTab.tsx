@@ -257,11 +257,11 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
 
     // 3. Background sync to Cloud Firestore & sync matching supervisor user login
     try {
-      const { directSaveSupervisorToFirestore, directRegisterUserInFirestore } = await import('../../services/clientFirestore');
+      const { directSaveSupervisorToFirestore, directRegisterUser } = await import('../../services/clientFirestore');
       directSaveSupervisorToFirestore(payloadToSave).catch(() => {});
 
       if (finalEmail.endsWith('@sanadtax.com')) {
-        directRegisterUserInFirestore({
+        directRegisterUser({
           username: finalEmail,
           fullName: name.trim(),
           phone: phone.trim(),

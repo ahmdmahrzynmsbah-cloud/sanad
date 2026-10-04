@@ -192,23 +192,39 @@ export function fixSpacedArabicLetters(text: string): string {
 }
 
 /**
- * Clean Palestinian gazette headers, footers, website URLs and reference bar noise
+ * Clean Palestinian gazette headers, footers, website URLs, watermarks, logos, and reference bar noise
  */
 export function cleanGazetteNoise(text: string): string {
   if (!text) return '';
 
-  return text
+  let cleaned = text;
+
+  // 1. Remove multi-token inline gazette running headers (e.g. Palestinian Official Gazette headers)
+  cleaned = cleaned.replace(/mjr\.[^\s]+\s+\d+\s+ديوان الجريدة الرسمية\s+[\d\-]+\s+الرقم المرجعي:\s*[\d\/\-]+\s+العدد\s+\d+/gi, '\n');
+  cleaned = cleaned.replace(/mjr\.[^\s]+\s+\d+\s+ديوان الجريدة الرسمية\s+[\d\-]+/gi, '\n');
+  cleaned = cleaned.replace(/الرقم المرجعي:\s*[\d\/\-]+\s+العدد\s+\d+/gi, '\n');
+  cleaned = cleaned.replace(/mjr\.[a-z0-9\-_.]+\.ps[^\s]*/gi, '');
+  cleaned = cleaned.replace(/https?:\/\/[^\s]+/gi, '');
+  cleaned = cleaned.replace(/www\.[a-z0-9\-_.]+\.ps[^\s]*/gi, '');
+
+  // 2. Remove watermark and logo annotations
+  cleaned = cleaned.replace(/\[\s*(علامة مائية|شعار|لوجو|ختم رسمي|ترويسة)[^\]]*\]/gi, '');
+  cleaned = cleaned.replace(/(?:^|\n)\s*(علامة مائية|شعار دولة فلسطين|شعار السلطة الوطنية|ختم رسمي)\s*(?=\n|$)/gi, '\n');
+
+  // 3. Remove line-based gazette metadata
+  return cleaned
     .split('\n')
     .filter((line) => {
       const l = line.trim();
-      // Drop lines that are purely website URLs or official gazette metadata headers
+      if (!l) return false;
       if (/^https?:\/\//i.test(l)) return false;
       if (/^mjr\.(lab|ogb|pna|gov)\.ps/i.test(l)) return false;
       if (/^www\.[a-z0-9\-_.]+\.ps/i.test(l)) return false;
       if (/^الرقم المرجعي\s*:\s*[\d\s\-_/]+$/i.test(l)) return false;
       if (/^صفحة\s*\d+\s*من\s*\d+$/i.test(l)) return false;
-      if (/^\d+\s*ديوان الفتوى والتشريع\s*[\d\s\-_/]+$/i.test(l)) return false;
-      if (/^ديوان الفتوى والتشريع\s*[\d\s\-_/]+$/i.test(l)) return false;
+      if (/^\d+\s*ديوان (الجريدة الرسمية|الفتوى والتشريع)\s*[\d\s\-_/]*$/i.test(l)) return false;
+      if (/^ديوان (الجريدة الرسمية|الفتوى والتشريع)\s*[\d\s\-_/]*$/i.test(l)) return false;
+      if (/^الوقائع الفلسطينية\s+العدد\s+\d+[\d\s\-_/]*$/i.test(l)) return false;
       return true;
     })
     .join('\n');
@@ -224,25 +240,39 @@ export function isMojibakeText(text: string): boolean {
   const sample = text.slice(0, 5000);
   if (sample.length < 15) return false;
 
-  // 1. Extended Latin accented / CP1256 glyph matches
-  const mojibakeCharsMatch = sample.match(/[áâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ°µ§©«»±²³´¶·¸¹º¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞß]/g);
-  const mojibakeCount = mojibakeCharsMatch ? mojibakeCharsMatch.length : 0;
-
-  // 2. Specific Mojibake token signatures common in PDF exports
-  const signatureMatches = sample.match(/(?:hcG|ág|°û|¿É|âE|á«|ác|ôa|aà|ºû|øj|ÉA|ªG|âS|âC)/g);
-  const signatureCount = signatureMatches ? signatureMatches.length : 0;
-
-  // 3. Ratio of actual Arabic Unicode characters (0x0600-0x06FF) vs total non-space length
-  const nonSpaceLength = sample.replace(/\s+/g, '').length;
-  const arabicMatch = sample.match(/[\u0600-\u06FF]/g);
-  const arabicCount = arabicMatch ? arabicMatch.length : 0;
-  const arabicRatio = nonSpaceLength > 0 ? arabicCount / nonSpaceLength : 0;
-
-  if (mojibakeCount >= 5 || signatureCount >= 3) {
+  // 1. Specific AXT / PDF corrupted font signatures (from Al-Rassam, PageMaker, QuarkXPress, Palestinian gazettes)
+  const axtSignatures = sample.match(/(?:TMjQ|Qòa|hcG|bEòY|ÙYG|Yhòa|SE'G|Hhõd|gójö|gój|øjôa|eC|JQÒ|acò|Aسنتد|Aسنذ|ág|°û|¿É|âE|á«|ác|ôa|aà|ºû|øj|ÉA|ªG|âS|âC|øe|üe|TMe|TMj|Qò|Yhò|bEò|SE'|bE|Yh|Oôa|ájO|fEcG)/g);
+  if (axtSignatures && axtSignatures.length >= 2) {
     return true;
   }
 
-  if (arabicRatio < 0.25 && (mojibakeCount >= 2 || signatureCount >= 1)) {
+  // 2. Extended Latin accented / CP1256 glyph matches
+  const mojibakeCharsMatch = sample.match(/[áâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ°µ§©«»±²³´¶·¸¹º¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßπΩ∑√∫¢]/g);
+  const mojibakeCount = mojibakeCharsMatch ? mojibakeCharsMatch.length : 0;
+  if (mojibakeCount >= 4) {
+    return true;
+  }
+
+  // 3. Ratio of Latin letters in supposedly Arabic text:
+  const nonSpace = sample.replace(/\s+/g, '');
+  const arabicMatch = sample.match(/[\u0600-\u06FF]/g);
+  const arabicCount = arabicMatch ? arabicMatch.length : 0;
+  const latinMatch = sample.match(/[a-zA-Z]/g);
+  const latinCount = latinMatch ? latinMatch.length : 0;
+
+  const latinRatio = nonSpace.length > 0 ? latinCount / nonSpace.length : 0;
+  const arabicRatio = nonSpace.length > 0 ? arabicCount / nonSpace.length : 0;
+
+  // In an Arabic document, if Latin characters exceed 12% and Arabic is < 65%
+  if (latinRatio > 0.12 && arabicRatio < 0.65) {
+    return true;
+  }
+
+  if (latinCount > 15 && (mojibakeCount >= 1 || (axtSignatures && axtSignatures.length >= 1))) {
+    return true;
+  }
+
+  if (arabicRatio < 0.35 && (latinCount > 20 || mojibakeCount > 0)) {
     return true;
   }
 
@@ -289,9 +319,10 @@ export function repairMojibakeArabic(text: string): string {
  * Universal Arabic text normalizer and repair pipeline:
  * 1. Normalize Unicode NFKC (Presentation Forms-A & B to base Arabic).
  * 2. Remove zero-width spaces, directional marks, and control glyphs.
- * 3. Fix spaced-out characters.
- * 4. Detect and correct reversed Arabic words safely without corrupting normal text.
- * 5. Format paragraphs and legal article numbering.
+ * 3. Fix spaced-out characters and tatweel elongation.
+ * 4. Detect and correct reversed Arabic words and article numbering.
+ * 5. Clean gazette watermarks, logos, and headers.
+ * 6. Format paragraphs and legal article numbering cleanly.
  */
 export function normalizeAndFixArabicText(rawText: string): string {
   if (!rawText || typeof rawText !== 'string') return '';
@@ -309,27 +340,45 @@ export function normalizeAndFixArabicText(rawText: string): string {
   // 2. Strip non-printable and invisible control marks (except newlines, tabs, and spaces)
   text = text.replace(/[\u200B-\u200F\u202A-\u202E\uFEFF\u00A0]/g, ' ');
 
-  // 3. Fix spaced-out Arabic letters
+  // 3. Remove excessive Tatweel (ـ) that distorts words (e.g. رئيـــــــــس -> رئيس)
+  text = text.replace(/ـ{2,}/g, '');
+
+  // 4. Clean gazette URL, watermark, and running header noise early
+  text = cleanGazetteNoise(text);
+
+  // 5. Fix reversed article titles and patterns from PDF.js RTL inverted streams:
+  // e.g. ")1 مادة (" or ") 10 مادة (" -> "المادة (1): "
+  text = text.replace(/\)\s*(\d+)\s+مادة\s*\(/g, '\n\nالمادة ($1): ');
+  text = text.replace(/\(\s*(\d+)\s+مادة\s*\)/g, '\n\nالمادة ($1): ');
+  text = text.replace(/مادة\s*\(\s*(\d+)\s*\)/g, '\n\nالمادة ($1): ');
+
+  // Fix reversed decree header pattern: e.g. "م 2022 ) لسنة 39 قرار بقانون رقم (" -> "قرار بقانون رقم (39) لسنة 2022م"
+  text = text.replace(/\s*م\s*(\d{4})\s*\)\s*لسنة\s*(\d+)\s*قرار\s*بقانون\s*رقم\s*\(/gi, 'قرار بقانون رقم ($2) لسنة $1م');
+  text = text.replace(/\)\s*لسنة\s*(\d+)\s*قرار\s*بقانون\s*رقم\s*\(/gi, 'قرار بقانون رقم ($1)');
+  text = text.replace(/\)\s*لسنة\s*(\d+)\s*قانون\s*رقم\s*\(/gi, 'قانون رقم ($1)');
+  text = text.replace(/\)\s*لسنة\s*(\d+)\s*مرسوم\s*رقم\s*\(/gi, 'مرسوم رقم ($1)');
+
+  // Fix reversed parentheses around standalone numbers: e.g. ") 10 (" -> "(10)"
+  text = text.replace(/\)\s*(\d+)\s*\(/g, '($1)');
+
+  // 6. Fix spaced-out Arabic letters
   text = fixSpacedArabicLetters(text);
 
-  // 4. Detect and fix reversed Arabic text
+  // 7. Detect and fix reversed Arabic text
   if (isArabicTextReversed(text)) {
     text = reverseArabicWords(text);
   }
 
-  // 5. Structure legal articles cleanly:
-  // Ensure "المادة (1):" or "المادة 1 -" starts on a clean newline
-  text = text.replace(/([^\n])\s*(المادة\s*(\(\d+\)|\d+))/g, '$1\n\n$2');
-  text = text.replace(/([^\n])\s*(الفصل\s*(\(\d+\)|\d+|الأول|الثاني|الثالث|الرابع|الخامس|السادس|السابع|الثامن|التاسع|العاشر))/g, '$1\n\n$2');
-  text = text.replace(/([^\n])\s*(الباب\s*(\(\d+\)|\d+|الأول|الثاني|الثالث|الرابع|الخامس|السادس|السابع|الثامن|التاسع|العاشر))/g, '$1\n\n$2');
+  // 8. Structure legal articles and chapters cleanly
+  text = text.replace(/([^\n])\s*(المادة\s*(\(\d+\)|\d+):?)/g, '$1\n\n$2');
+  text = text.replace(/([^\n])\s*(الفصل\s*(\(\d+\)|\d+|الأول|الثاني|الثالث|الرابع|الخامس|السادس|السابع|الثامن|التاسع|العاشر)[^\n]*)/g, '$1\n\n$2\n');
+  text = text.replace(/([^\n])\s*(الباب\s*(\(\d+\)|\d+|الأول|الثاني|الثالث|الرابع|الخامس|السادس|السابع|الثامن|التاسع|العاشر)[^\n]*)/g, '$1\n\n$2\n');
 
-  // 6. Clean gazette URL noise
-  text = cleanGazetteNoise(text);
-
-  // 7. Clean up excessive whitespace
+  // 9. Clean up excessive whitespace and duplicate newlines
   text = text
     .split('\n')
     .map((l) => l.trim())
+    .filter(Boolean)
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
