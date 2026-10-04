@@ -2814,13 +2814,14 @@ app.post('/api/admin/settings/professionals-header', async (req, res) => {
   }
 });
 
-// Related Sites Header Customization (تخصيص عنوان ووصف دليل المواقع ذات الصلة)
+// Related Sites Header Customization (تخصيص عنوان ووصف ودليل الشرح لدليل المواقع ذات الصلة)
 app.get('/api/admin/settings/related-sites-header', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   const title = (db as any).relatedSitesHeader?.title || db.settings?.relatedSitesHeaderTitle || 'إدارة دليل المواقع ذات الصلة';
   const subtitle = (db as any).relatedSitesHeader?.subtitle || db.settings?.relatedSitesHeaderSubtitle || 'أضف المواقع الرسمية والتشريعية وصنفها بدقة مع إمكانية عرض وفلترة وإدارة التصنيفات بسهولة.';
+  const explanationText = (db as any).relatedSitesHeader?.explanationText || (db.settings as any)?.relatedSitesHeaderExplanation || 'دليل إرشادي شامل للمواقع والمنصات الحكومية والرسمية ذات الصلة بالجمارك والضرائب والتشريعات المالية والتنمية الاقتصادية في دولة فلسطين. توفر هذه الخانة الوصول السريع والمباشر للخدمات والنشرات الرسمية المعتمدة.';
   const badge = (db as any).relatedSitesHeader?.badge || db.settings?.relatedSitesHeaderBadge || '';
-  res.json({ title, subtitle, badge });
+  res.json({ title, subtitle, explanationText, badge });
 });
 
 app.post('/api/admin/settings/related-sites-header', async (req, res) => {
@@ -2831,23 +2832,26 @@ app.post('/api/admin/settings/related-sites-header', async (req, res) => {
         body = JSON.parse(body);
       } catch {}
     }
-    const { title, subtitle, badge } = body || {};
+    const { title, subtitle, explanationText, badge } = body || {};
     if (!(db as any).relatedSitesHeader) {
       (db as any).relatedSitesHeader = {};
     }
     if (title !== undefined) (db as any).relatedSitesHeader.title = String(title).trim();
     if (subtitle !== undefined) (db as any).relatedSitesHeader.subtitle = String(subtitle).trim();
+    if (explanationText !== undefined) (db as any).relatedSitesHeader.explanationText = String(explanationText).trim();
     if (badge !== undefined) (db as any).relatedSitesHeader.badge = String(badge).trim();
 
     if (!db.settings) db.settings = {} as any;
     db.settings.relatedSitesHeaderTitle = (db as any).relatedSitesHeader.title;
     db.settings.relatedSitesHeaderSubtitle = (db as any).relatedSitesHeader.subtitle;
+    (db.settings as any).relatedSitesHeaderExplanation = (db as any).relatedSitesHeader.explanationText;
     saveDB();
 
     res.json({
       success: true,
       title: (db as any).relatedSitesHeader.title,
       subtitle: (db as any).relatedSitesHeader.subtitle,
+      explanationText: (db as any).relatedSitesHeader.explanationText,
       badge: (db as any).relatedSitesHeader.badge,
     });
   } catch (err: any) {

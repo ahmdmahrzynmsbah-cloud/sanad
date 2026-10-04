@@ -21,7 +21,9 @@ import {
   Upload,
   AlertCircle,
   UserCheck,
-  Edit3
+  Edit3,
+  Check,
+  RotateCcw
 } from 'lucide-react';
 import { RelatedSite, ProfessionalType, PALESTINIAN_GOVERNORATES } from '../types';
 import { useSync, notifySync } from '../utils/sync';
@@ -47,6 +49,8 @@ export const RelatedSitesView: React.FC<RelatedSitesViewProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
   // Dynamic header customization
+  const DEFAULT_EXPLANATION = 'دليل إرشادي شامل للمواقع والمنصات الحكومية والرسمية ذات الصلة بالجمارك والضرائب والتشريعات المالية والتنمية الاقتصادية في دولة فلسطين. توفر هذه الخانة الوصول السريع والمباشر للخدمات والنشرات الرسمية المعتمدة.';
+
   const [customTitle, setCustomTitle] = useState(() => {
     try {
       const saved = localStorage.getItem('related_sites_header_settings');
@@ -69,6 +73,21 @@ export const RelatedSitesView: React.FC<RelatedSitesViewProps> = ({
     return 'بوابات حكومية، تشريعية، واقتصادية فلسطينية معتمدة تخدم المكلفين والتجار والمستوردين';
   });
 
+  const [customExplanation, setCustomExplanation] = useState(() => {
+    try {
+      const saved = localStorage.getItem('related_sites_header_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.explanationText) return parsed.explanationText;
+      }
+    } catch {}
+    return DEFAULT_EXPLANATION;
+  });
+
+  const [isEditingExplanation, setIsEditingExplanation] = useState(false);
+  const [explanationDraft, setExplanationDraft] = useState(customExplanation);
+  const [isSavingExplanation, setIsSavingExplanation] = useState(false);
+
   const loadHeaderSettings = async () => {
     try {
       const res = await fetch('/api/admin/settings/related-sites-header');
@@ -76,8 +95,38 @@ export const RelatedSitesView: React.FC<RelatedSitesViewProps> = ({
         const data = await res.json();
         if (data.title) setCustomTitle(data.title);
         if (data.subtitle) setCustomSubtitle(data.subtitle);
+        if (data.explanationText) {
+          setCustomExplanation(data.explanationText);
+          setExplanationDraft(data.explanationText);
+        }
       }
     } catch {}
+  };
+
+  const saveExplanation = async (newText: string) => {
+    const textToSave = newText.trim() || DEFAULT_EXPLANATION;
+    setIsSavingExplanation(true);
+    setCustomExplanation(textToSave);
+    try {
+      const saved = localStorage.getItem('related_sites_header_settings');
+      const parsed = saved ? JSON.parse(saved) : {};
+      localStorage.setItem(
+        'related_sites_header_settings',
+        JSON.stringify({ ...parsed, explanationText: textToSave, updatedAt: new Date().toISOString() })
+      );
+    } catch {}
+
+    try {
+      await fetch('/api/admin/settings/related-sites-header', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ explanationText: textToSave }),
+      });
+    } catch {} finally {
+      setIsSavingExplanation(false);
+      setIsEditingExplanation(false);
+      notifySync('related_sites_header');
+    }
   };
 
   useEffect(() => {
@@ -377,6 +426,91 @@ export const RelatedSitesView: React.FC<RelatedSitesViewProps> = ({
             <span>إدارة المواقع في لوحة التحكم</span>
           </button>
         )}
+      </div>
+
+      {/* Green Explanation Rectangle (مستطيل أخضر توضيحي وإرشادي للقسم) */}
+      <div className="bg-gradient-to-br from-[#0d2116] via-[#143224] to-[#0a1c11] border-2 border-emerald-500/70 rounded-2xl p-4 sm:p-5 my-4 sm:my-5 shadow-lg text-white relative overflow-hidden group/greenbox">
+        {/* Background ambient light */}
+        <div className="absolute -top-10 -left-10 w-40 h-40 bg-emerald-400/10 rounded-full blur-2xl pointer-events-none" />
+        <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-amber-400/10 rounded-full blur-2xl pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5 flex-1 w-full">
+            <div className="p-2.5 rounded-xl bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 shrink-0 mt-0.5 shadow-sm">
+              <Sparkles className="w-5 h-5 text-amber-300 animate-pulse" />
+            </div>
+            <div className="space-y-1.5 flex-1 w-full">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-black tracking-wide text-emerald-300 uppercase bg-emerald-950/80 px-2.5 py-0.5 rounded-full border border-emerald-500/40">
+                  شرح إرشادي وخريطة الدليل
+                </span>
+                <span className="text-[11px] text-amber-300 font-bold flex items-center gap-1">
+                  <span>المستشار الذكي</span>
+                  <span>•</span>
+                  <span>دولة فلسطين</span>
+                </span>
+              </div>
+
+              {isEditingExplanation ? (
+                <div className="space-y-2 mt-2 w-full">
+                  <textarea
+                    rows={3}
+                    value={explanationDraft}
+                    onChange={(e) => setExplanationDraft(e.target.value)}
+                    placeholder="اكتب الشرح التوضيحي والإرشادي لخانة دليل المواقع ذات الصلة هنا..."
+                    className="w-full text-xs sm:text-sm bg-emerald-950/90 border-2 border-emerald-400/80 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-400 resize-none font-sans"
+                    autoFocus
+                  />
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExplanationDraft(customExplanation);
+                        setIsEditingExplanation(false);
+                      }}
+                      className="px-3 py-1.5 rounded-xl border border-emerald-700 bg-emerald-900/60 hover:bg-emerald-800 text-emerald-200 text-xs font-bold cursor-pointer"
+                    >
+                      إلغاء
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => saveExplanation(explanationDraft)}
+                      disabled={isSavingExplanation}
+                      className="px-4 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-emerald-950 text-xs font-black shadow-md cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      {isSavingExplanation ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Check className="w-3.5 h-3.5 text-emerald-950" />
+                      )}
+                      <span>حفظ الشرح والتوضيح ✍️</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs sm:text-sm text-emerald-100/95 leading-relaxed font-normal">
+                  {customExplanation}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Admin Pen Action inside the Green Box */}
+          {isAdmin && !isEditingExplanation && (
+            <button
+              type="button"
+              onClick={() => {
+                setExplanationDraft(customExplanation);
+                setIsEditingExplanation(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-400/20 hover:bg-amber-400/30 text-amber-200 hover:text-amber-100 border border-amber-400/40 text-xs font-bold transition-all shadow-sm cursor-pointer hover:scale-105 shrink-0 self-end md:self-center"
+              title="تعديل هذا الشرح بالقلم ✍️"
+            >
+              <Edit3 className="w-3.5 h-3.5 text-amber-300" />
+              <span>تعديل الشرح بالقلم ✍️</span>
+            </button>
+          )}
+        </div>
       </div>
 
 
