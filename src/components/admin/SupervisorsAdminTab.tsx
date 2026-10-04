@@ -30,11 +30,13 @@ import { SkeletonSupervisorCard } from '../common/Skeleton';
 interface SupervisorsAdminTabProps {
   initialSupervisors?: Supervisor[];
   onSupervisorsUpdated?: (supervisors: Supervisor[]) => void;
+  onOpenMailTab?: (supervisor?: Supervisor) => void;
 }
 
 export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
   initialSupervisors,
   onSupervisorsUpdated,
+  onOpenMailTab,
 }) => {
   const [supervisors, setSupervisors] = useState<Supervisor[]>(() => {
     if (initialSupervisors && initialSupervisors.length > 0) return initialSupervisors;
@@ -902,31 +904,45 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
                   </div>
                 </div>
 
-                {/* Contact details */}
+                {/* Contact & Internal Mail details */}
                 {(sup.email || sup.phone) && (
                   <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2 text-[11px]">
-                    {sup.email && (
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-mono text-[11px] font-medium transition-colors ${
-                          sup.email.endsWith('@sanadtax.com')
-                            ? 'bg-emerald-50 text-emerald-900 border border-emerald-200/90'
-                            : 'bg-gray-50 text-gray-700 border border-gray-200'
-                        }`}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {sup.email && (
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-mono text-[11px] font-medium transition-colors ${
+                            sup.email.endsWith('@sanadtax.com')
+                              ? 'bg-emerald-50 text-emerald-900 border border-emerald-200/90'
+                              : 'bg-gray-50 text-gray-700 border border-gray-200'
+                          }`}
+                        >
+                          <Mail className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                          <span className="truncate max-w-[180px]">{sup.email}</span>
+                          {sup.email.endsWith('@sanadtax.com') && (
+                            <span className="bg-emerald-700 text-white text-[9px] px-1.5 py-0.5 rounded-md font-sans font-bold shrink-0">
+                              معتمد
+                            </span>
+                          )}
+                        </span>
+                      )}
+                      {sup.phone && (
+                        <span className="flex items-center gap-1 font-mono text-gray-500" dir="ltr">
+                          <Phone className="w-3 h-3 text-gray-400" />
+                          {sup.phone}
+                        </span>
+                      )}
+                    </div>
+
+                    {onOpenMailTab && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenMailTab(sup)}
+                        className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-800 hover:bg-emerald-900 text-white text-[10px] font-bold rounded-lg shadow-2xs cursor-pointer transition-transform hover:scale-105 active:scale-95"
+                        title="مراسلة هذا المشرف في صندوق البريد الداخلي"
                       >
-                        <Mail className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                        <span className="truncate max-w-[180px]">{sup.email}</span>
-                        {sup.email.endsWith('@sanadtax.com') && (
-                          <span className="bg-emerald-700 text-white text-[9px] px-1.5 py-0.5 rounded-md font-sans font-bold shrink-0">
-                            معتمد
-                          </span>
-                        )}
-                      </span>
-                    )}
-                    {sup.phone && (
-                      <span className="flex items-center gap-1 font-mono text-gray-500" dir="ltr">
-                        <Phone className="w-3 h-3 text-gray-400" />
-                        {sup.phone}
-                      </span>
+                        <Mail className="w-3 h-3 text-emerald-300" />
+                        <span>البريد الداخلي ✉️</span>
+                      </button>
                     )}
                   </div>
                 )}

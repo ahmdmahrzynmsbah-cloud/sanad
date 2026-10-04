@@ -225,9 +225,32 @@ export interface Supervisor {
   bio: string;
   photoUrl?: string;
   email?: string;
+  officialEmail?: string;
+  emailPassword?: string;
   phone?: string;
   department?: string;
   order?: number;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface InternalMail {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderEmail: string;
+  senderRole: 'admin' | 'supervisor' | 'manager';
+  recipientId: string; // 'all' or supervisor ID or admin ID
+  recipientName: string;
+  recipientEmail: string;
+  subject: string;
+  body: string;
+  priority?: 'normal' | 'important' | 'urgent';
+  category?: string;
+  isRead?: boolean;
+  isStarred?: boolean;
+  attachments?: { title: string; url?: string }[];
+  parentMailId?: string;
   createdAt: string;
   updatedAt?: string;
 }

@@ -593,6 +593,14 @@ interface DBSettings {
   portalHeaderTitle?: string;
   portalHeaderSubtitle?: string;
 
+  // General Manager / Admin Official Email & Name Customization
+  adminEmail?: string;
+  adminName?: string;
+
+  // Internal Mail Header Customization (تخصيص ترويسة البريد والتراسل الداخلي)
+  mailHeaderTitle?: string;
+  mailHeaderSubtitle?: string;
+
   footerCopyright?: string;
   footerShowScaleIcon?: boolean;
 }
@@ -641,6 +649,8 @@ export interface StoredSupervisor {
   bio: string;
   photoUrl?: string;
   email?: string;
+  officialEmail?: string;
+  emailPassword?: string;
   phone?: string;
   department?: string;
   order?: number;
@@ -655,6 +665,8 @@ export const DEFAULT_SUPERVISORS: StoredSupervisor[] = [
     bio: 'دكتوراه في القانون المالي والتشريعات الضريبية المقارنة. أستاذ جامعي ومستشار قانوني معتمد، متخصص في صياغة اللوائح الضريبية والطعون الاستئنافية والسياسات المالية العامة.',
     photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80',
     email: 'k.shehada@pal-tax.ps',
+    officialEmail: 'k.shehada@sanadtax.ps',
+    emailPassword: 'k.shehada2026',
     phone: '+970 59 911 2233',
     department: 'الهيئة التشريعية والسياسات المالية',
     order: 1,
@@ -667,6 +679,8 @@ export const DEFAULT_SUPERVISORS: StoredSupervisor[] = [
     bio: 'ماجستير في قانون التجارة الدولية. متخصصة في جداول التعريفة الجمركية المنسقة، قواعد المنشأ، إجراءات التخليص الجمركي، وحل منازعات التقييم في الموانئ والمعابر.',
     photoUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=500&auto=format&fit=crop&q=80',
     email: 's.tamimi@pal-tax.ps',
+    officialEmail: 's.tamimi@sanadtax.ps',
+    emailPassword: 's.tamimi2026',
     phone: '+970 59 922 3344',
     department: 'إدارة الرقابة والتعريفة الجمركية',
     order: 2,
@@ -679,11 +693,67 @@ export const DEFAULT_SUPERVISORS: StoredSupervisor[] = [
     bio: 'محاسب قانوني ومستشار ضرائب معتمد. خبير في الفحص والتدقيق الميداني، إعداد الدفاتر المحاسبية القانونية، وإقرارات المقاصة وضريبة القيمة المضافة وخصم المصدر.',
     photoUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80',
     email: 'r.assaf@pal-tax.ps',
+    officialEmail: 'r.assaf@sanadtax.ps',
+    emailPassword: 'r.assaf2026',
     phone: '+970 59 933 4455',
     department: 'لجنة الفحص والامتثال الضريبي',
     order: 3,
     createdAt: '2026-01-01T00:00:00.000Z',
   },
+];
+
+export const DEFAULT_INTERNAL_MAIL = [
+  {
+    id: 'mail-1',
+    senderId: 'admin',
+    senderName: 'المدير العام • لوحة التحكم',
+    senderEmail: 'admin@sanadtax.ps',
+    senderRole: 'admin',
+    recipientId: 'sup-1',
+    recipientName: 'د. خليل إبراهيم شحادة',
+    recipientEmail: 'k.shehada@sanadtax.ps',
+    subject: 'اعتماد وتحديث اللوائح الجمركية والضريبية لعام 2026',
+    body: 'سعادة الدكتور خليل المحترم،\n\nتحية طيبة وبعد،\nيرجى الاطلاع على المادة رقم 42 المتعلقة بتعديلات التعرفة الجمركية ومراجعة الصياغة القانونية قبل اعتمادها وحقنها في قاعدة معرفة المستشار الذكي.\n\nوتفضلوا بقبول فائق الاحترام والتقدير،\nإدارة المنظومة المركزية.',
+    priority: 'important',
+    category: 'قرارات وقوانين',
+    isRead: false,
+    isStarred: true,
+    createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
+  },
+  {
+    id: 'mail-2',
+    senderId: 'sup-1',
+    senderName: 'د. خليل إبراهيم شحادة',
+    senderEmail: 'k.shehada@sanadtax.ps',
+    senderRole: 'supervisor',
+    recipientId: 'admin',
+    recipientName: 'المدير العام • لوحة التحكم',
+    recipientEmail: 'admin@sanadtax.ps',
+    subject: 'تقرير مراجعة نصوص قانون ضريبة الدخل المعدل',
+    body: 'سعادة المدير العام المحترم،\n\nتم الانتهاء من مراجعة وتدقيق نصوص المواد الخاصة بالخصم المباشر والإعفاءات الاستثمارية. التقرير جاهز ولدينا ملاحظات طفيفة بخصوص الشرح الإرشادي المرفق بالدليل.\n\nدمتم بدوام التوفيق والنجاح.',
+    priority: 'normal',
+    category: 'فتاوى واستشارات',
+    isRead: true,
+    isStarred: false,
+    createdAt: new Date(Date.now() - 3600000 * 8).toISOString(),
+  },
+  {
+    id: 'mail-3',
+    senderId: 'admin',
+    senderName: 'المدير العام • لوحة التحكم',
+    senderEmail: 'admin@sanadtax.ps',
+    senderRole: 'admin',
+    recipientId: 'sup-2',
+    recipientName: 'أ. سمر كمال التميمي',
+    recipientEmail: 's.tamimi@sanadtax.ps',
+    subject: 'توجيهات معالجة الطعون والتخليص الجمركي في المعابر',
+    body: 'الأستاذة الفاضلة سمر التميمي المحترمة،\n\nيرجى التكرم بتزويدنا بالجدول المحدث للتثمين الجمركي للسلع المستوردة لإدراجه ضمن قاعدة بيانات المحاسبين والمدققين.\n\nنشكر جهودكم المباركة.',
+    priority: 'urgent',
+    category: 'عاجل',
+    isRead: false,
+    isStarred: true,
+    createdAt: new Date(Date.now() - 3600000 * 18).toISOString(),
+  }
 ];
 
 export interface StoredRelatedSite {
@@ -2859,6 +2929,78 @@ app.post('/api/admin/settings/related-sites-header', async (req, res) => {
   }
 });
 
+// General Manager / Admin Official Email Customization (تخصيص بريد وسجل المدير العام)
+app.get('/api/admin/settings/admin-email', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  const email = (db as any).adminEmail || db.settings?.adminEmail || 'admin@sanadtax.ps';
+  const name = (db as any).adminName || db.settings?.adminName || 'المدير العام • لوحة التحكم';
+  res.json({ email, name });
+});
+
+app.post('/api/admin/settings/admin-email', async (req, res) => {
+  try {
+    let body = req.body;
+    if (typeof body === 'string' && body.trim()) {
+      try { body = JSON.parse(body); } catch {}
+    }
+    const { email, name } = body || {};
+    if (email !== undefined && String(email).trim()) {
+      (db as any).adminEmail = String(email).trim().toLowerCase();
+      if (!db.settings) db.settings = {} as any;
+      db.settings.adminEmail = (db as any).adminEmail;
+    }
+    if (name !== undefined && String(name).trim()) {
+      (db as any).adminName = String(name).trim();
+      if (!db.settings) db.settings = {} as any;
+      db.settings.adminName = (db as any).adminName;
+    }
+    saveDB();
+    res.json({
+      success: true,
+      email: (db as any).adminEmail || 'admin@sanadtax.ps',
+      name: (db as any).adminName || 'المدير العام • لوحة التحكم',
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to update admin email' });
+  }
+});
+
+// Internal Mail Header Customization (تخصيص عنوان ووصف ترويسة البريد والتراسل الداخلي)
+app.get('/api/admin/settings/mail-header', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  const title = (db as any).mailHeader?.title || db.settings?.mailHeaderTitle || 'بريد التواصل المباشر بين المشرفين والإدارة';
+  const subtitle = (db as any).mailHeader?.subtitle || db.settings?.mailHeaderSubtitle || 'إرسال واستقبال التوجيهات الإدارية، اعتماد الملاحظات الفقهية والقانونية، والتدقيق التشاركي بخصوص التشريعات.';
+  res.json({ title, subtitle });
+});
+
+app.post('/api/admin/settings/mail-header', async (req, res) => {
+  try {
+    let body = req.body;
+    if (typeof body === 'string' && body.trim()) {
+      try { body = JSON.parse(body); } catch {}
+    }
+    const { title, subtitle } = body || {};
+    if (!(db as any).mailHeader) {
+      (db as any).mailHeader = {};
+    }
+    if (title !== undefined) (db as any).mailHeader.title = String(title).trim();
+    if (subtitle !== undefined) (db as any).mailHeader.subtitle = String(subtitle).trim();
+
+    if (!db.settings) db.settings = {} as any;
+    db.settings.mailHeaderTitle = (db as any).mailHeader.title;
+    db.settings.mailHeaderSubtitle = (db as any).mailHeader.subtitle;
+    saveDB();
+
+    res.json({
+      success: true,
+      title: (db as any).mailHeader.title,
+      subtitle: (db as any).mailHeader.subtitle,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to update mail header' });
+  }
+});
+
 // Partners Header Customization (تخصيص عنوان ووصف الشركاء والمؤسسات الشريكة)
 app.get('/api/admin/settings/partners-header', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -3013,7 +3155,7 @@ app.post('/api/admin/settings/portal-header', async (req, res) => {
 });
 
 app.post('/api/admin/supervisors', async (req, res) => {
-  const { name, title, bio, photoUrl, email, phone, department, order } = req.body;
+  const { name, title, bio, photoUrl, email, officialEmail, emailPassword, phone, department, order } = req.body;
   if (!name || !String(name).trim() || !title || !String(title).trim()) {
     return res.status(400).json({ error: 'اسم المشرف وصفته الرسمية مطلوبان' });
   }
@@ -3028,8 +3170,12 @@ app.post('/api/admin/supervisors', async (req, res) => {
 
   // Auto generate system email or use provided email
   const uniqueSuffix = Math.random().toString(36).substr(2, 4);
-  const generatedEmail = email && String(email).trim() ? String(email).trim() : `sup_${uniqueSuffix}@sanadtax.com`;
-  const generatedPassword = 'sanadtax' + uniqueSuffix;
+  const cleanNameForEmail = String(name).trim().toLowerCase().replace(/[^\w]/g, '').slice(0, 10) || 'supervisor';
+  const genOfficialEmail = officialEmail && String(officialEmail).trim()
+    ? String(officialEmail).trim()
+    : `${cleanNameForEmail}.${uniqueSuffix}@sanadtax.ps`;
+  const generatedEmail = email && String(email).trim() ? String(email).trim() : genOfficialEmail;
+  const genPassword = emailPassword && String(emailPassword).trim() ? String(emailPassword).trim() : 'sanadtax' + uniqueSuffix;
 
   const newSupervisor: StoredSupervisor = {
     id: `sup-${Date.now()}-${uniqueSuffix}`,
@@ -3038,6 +3184,8 @@ app.post('/api/admin/supervisors', async (req, res) => {
     bio: String(bio || '').trim(),
     photoUrl: String(photoUrl || '').trim(),
     email: generatedEmail,
+    officialEmail: genOfficialEmail,
+    emailPassword: genPassword,
     phone: String(phone || '').trim(),
     department: String(department || '').trim(),
     order: Number(order) || (db.supervisors.length + 1),
@@ -3047,10 +3195,10 @@ app.post('/api/admin/supervisors', async (req, res) => {
   // Create an auth user for this supervisor
   const newSupervisorUser = {
     id: `usr-${Date.now()}-${uniqueSuffix}`,
-    username: generatedEmail,
-    password: generatedPassword,
+    username: genOfficialEmail,
+    password: genPassword,
     fullName: String(name).trim(),
-    role: 'supervisor' as any, // Cast to any to bypass type check for new role
+    role: 'supervisor' as any,
     status: 'approved' as any,
     createdAt: new Date().toISOString(),
     isSubscribed: true
@@ -3067,16 +3215,16 @@ app.post('/api/admin/supervisors', async (req, res) => {
 
   res.status(201).json({
     success: true,
-    message: `تمت إضافة المشرف "${newSupervisor.name}" بنجاح. كلمة المرور الافتراضية: ${generatedPassword}`,
+    message: `تمت إضافة المشرف "${newSupervisor.name}" وتجهيز بريده الرسمي (${genOfficialEmail}) بنجاح. كلمة المرور: ${genPassword}`,
     supervisor: newSupervisor,
-    generatedPassword: generatedPassword,
+    generatedPassword: genPassword,
     supervisors: db.supervisors.sort((a, b) => (a.order || 0) - (b.order || 0)),
   });
 });
 
 app.put('/api/admin/supervisors/:id', async (req, res) => {
   const { id } = req.params;
-  const { name, title, bio, photoUrl, email, phone, department, order } = req.body;
+  const { name, title, bio, photoUrl, email, officialEmail, emailPassword, phone, department, order } = req.body;
 
   if (!db.supervisors) {
     db.supervisors = [...DEFAULT_SUPERVISORS];
@@ -3095,6 +3243,8 @@ app.put('/api/admin/supervisors/:id', async (req, res) => {
     bio: bio !== undefined ? String(bio).trim() : existing.bio,
     photoUrl: photoUrl !== undefined ? String(photoUrl).trim() : existing.photoUrl,
     email: email !== undefined ? String(email).trim() : existing.email,
+    officialEmail: officialEmail !== undefined ? String(officialEmail).trim() : existing.officialEmail,
+    emailPassword: emailPassword !== undefined ? String(emailPassword).trim() : existing.emailPassword,
     phone: phone !== undefined ? String(phone).trim() : existing.phone,
     department: department !== undefined ? String(department).trim() : existing.department,
     order: order !== undefined ? Number(order) : existing.order,
@@ -3106,7 +3256,7 @@ app.put('/api/admin/supervisors/:id', async (req, res) => {
 
   res.json({
     success: true,
-    message: `تم تحديث بيانات المشرف "${updated.name}" بنجاح`,
+    message: `تم تحديث بيانات المشرف وبريده الرسمي بنجاح`,
     supervisor: updated,
     supervisors: db.supervisors.sort((a, b) => (a.order || 0) - (b.order || 0)),
   });
@@ -3134,6 +3284,94 @@ app.delete('/api/admin/supervisors/:id', async (req, res) => {
     deletedId: id,
     supervisors: db.supervisors.sort((a, b) => (a.order || 0) - (b.order || 0)),
   });
+});
+
+// ----------------------------------------------------
+// Internal Mail System Endpoints (البريد والتراسل الداخلي للمشرفين والإدارة)
+// ----------------------------------------------------
+app.get('/api/admin/mail', (req, res) => {
+  if (!(db as any).internalMail) {
+    (db as any).internalMail = [...DEFAULT_INTERNAL_MAIL];
+  }
+  const mail = (db as any).internalMail || [];
+  res.json({ mail });
+});
+
+app.post('/api/admin/mail', (req, res) => {
+  if (!(db as any).internalMail) {
+    (db as any).internalMail = [...DEFAULT_INTERNAL_MAIL];
+  }
+  const { senderId, senderName, senderEmail, senderRole, recipientId, recipientName, recipientEmail, subject, body, priority, category } = req.body || {};
+
+  if (!subject || !String(subject).trim() || !body || !String(body).trim()) {
+    return res.status(400).json({ error: 'موضوع البريد ونصه مطلوبان' });
+  }
+
+  const newMail = {
+    id: `mail-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+    senderId: senderId || 'admin',
+    senderName: senderName || 'المدير العام • لوحة التحكم',
+    senderEmail: senderEmail || 'admin@sanadtax.ps',
+    senderRole: senderRole || 'admin',
+    recipientId: recipientId || 'all',
+    recipientName: recipientName || 'جميع المشرفين والخبراء',
+    recipientEmail: recipientEmail || 'supervisors@sanadtax.ps',
+    subject: String(subject).trim(),
+    body: String(body).trim(),
+    priority: priority || 'normal',
+    category: category || 'إداري',
+    isRead: false,
+    isStarred: false,
+    createdAt: new Date().toISOString(),
+  };
+
+  (db as any).internalMail.unshift(newMail);
+  saveDB();
+
+  res.status(201).json({
+    success: true,
+    message: 'تم إرسال البريد الإلكتروني بنجاح ✉️',
+    mailItem: newMail,
+    mail: (db as any).internalMail,
+  });
+});
+
+app.put('/api/admin/mail/:id/read', (req, res) => {
+  if (!(db as any).internalMail) {
+    (db as any).internalMail = [...DEFAULT_INTERNAL_MAIL];
+  }
+  const { id } = req.params;
+  const { isRead } = req.body;
+  const item = (db as any).internalMail.find((m: any) => m.id === id);
+  if (item) {
+    item.isRead = isRead !== undefined ? Boolean(isRead) : true;
+    saveDB();
+  }
+  res.json({ success: true, mail: (db as any).internalMail });
+});
+
+app.put('/api/admin/mail/:id/star', (req, res) => {
+  if (!(db as any).internalMail) {
+    (db as any).internalMail = [...DEFAULT_INTERNAL_MAIL];
+  }
+  const { id } = req.params;
+  const { isStarred } = req.body;
+  const item = (db as any).internalMail.find((m: any) => m.id === id);
+  if (item) {
+    item.isStarred = isStarred !== undefined ? Boolean(isStarred) : !item.isStarred;
+    saveDB();
+  }
+  res.json({ success: true, mail: (db as any).internalMail });
+});
+
+app.delete('/api/admin/mail/:id', (req, res) => {
+  if (!(db as any).internalMail) {
+    (db as any).internalMail = [...DEFAULT_INTERNAL_MAIL];
+  }
+  const { id } = req.params;
+  (db as any).internalMail = (db as any).internalMail.filter((m: any) => m.id !== id);
+  saveDB();
+  res.json({ success: true, mail: (db as any).internalMail });
 });
 
 // ----------------------------------------------------

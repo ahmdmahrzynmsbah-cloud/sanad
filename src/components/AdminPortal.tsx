@@ -56,6 +56,7 @@ import {
   CreditCard,
   User as UserIcon,
   Bot,
+  Mail,
 } from 'lucide-react';
 import { User, Law, LawCategory, LegalCategory, DEFAULT_LEGAL_CATEGORIES, SystemBranding, PlatformAboutData, ContactInfo, Video, RelatedSite, Partner, SubscriptionPlan, Supervisor, ProfessionalProfile } from '../types';
 import { formatBytes, sanitizeLawTitle, PDFProgress } from '../utils/pdfParser';
@@ -73,6 +74,7 @@ import { ContactAdminTab } from './admin/ContactAdminTab';
 import { LawRequestsAdminTab } from './admin/LawRequestsAdminTab';
 import { ProfessionalsAdminTab } from './admin/ProfessionalsAdminTab';
 import { ReferenceLearningAdminTab } from './admin/ReferenceLearningAdminTab';
+import { InternalMailboxAdminTab } from './admin/InternalMailboxAdminTab';
 import { UserDetailsModal } from './admin/UserDetailsModal';
 import { fetchReferenceRatings } from '../services/referenceRatingService';
 import { ReferenceEvaluation, ReferenceStats } from '../types';
@@ -150,7 +152,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     }
     return [];
   });
-  const [activeTab, setActiveTab] = useState<'requests' | 'laws' | 'law-requests' | 'learning' | 'professionals' | 'supervisors' | 'related-sites' | 'partners' | 'plans' | 'about' | 'contact' | 'settings' | 'videos'>(() => isSupervisor ? 'laws' : 'requests');
+  const [activeTab, setActiveTab] = useState<'requests' | 'laws' | 'law-requests' | 'learning' | 'professionals' | 'supervisors' | 'related-sites' | 'partners' | 'plans' | 'about' | 'contact' | 'settings' | 'videos' | 'mail'>(() => isSupervisor ? 'laws' : 'requests');
 
   // Admin Daily Upload Limit & Quota (40 files max, 40MB per file, 800MB total quota per day)
   const ADMIN_DAILY_LIMIT = 40;
@@ -3368,6 +3370,23 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
           </span>
         </button>
         )}
+
+        {/* Internal Mail Tab (البريد الداخلي بين المشرفين والمدير) */}
+        <button
+          id="admin-tab-mail"
+          onClick={() => setActiveTab('mail')}
+          className={`pb-3 px-3.5 sm:px-5 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 transition-all shrink-0 cursor-pointer ${
+            activeTab === 'mail'
+              ? 'border-emerald-700 text-emerald-800'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
+          }`}
+        >
+          <Mail className="w-4 h-4 text-emerald-700" />
+          <span>البريد</span>
+          <span className="bg-emerald-100 text-emerald-900 text-[10px] sm:text-[11px] px-2 py-0.5 rounded-full font-extrabold border border-emerald-300 shadow-2xs">
+            وارد وصادر
+          </span>
+        </button>
 
         {!isSupervisor && (
         <button
@@ -6859,6 +6878,17 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         <SupervisorsAdminTab
           initialSupervisors={supervisors}
           onSupervisorsUpdated={setSupervisors}
+          onOpenMailTab={() => setActiveTab('mail')}
+        />
+      )}
+
+      {/* ======================================================== */}
+      {/* TAB: INTERNAL MAILBOX (البريد الداخلي بين المشرفين والمدير) */}
+      {/* ======================================================== */}
+      {activeTab === 'mail' && (
+        <InternalMailboxAdminTab
+          currentSupervisor={supervisors.find((s) => s.name === currentAdmin?.fullName || s.email === currentAdmin?.username) || null}
+          isAdmin={!isSupervisor}
         />
       )}
 

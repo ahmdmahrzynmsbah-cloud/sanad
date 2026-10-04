@@ -993,90 +993,7 @@ export const RelatedSitesAdminTab: React.FC<RelatedSitesAdminTabProps> = ({
         </div>
       </div>
 
-      {/* Green Explanation Rectangle (مستطيل أخضر توضيحي وإرشادي للقسم) */}
-      <div className="bg-gradient-to-br from-[#0d2116] via-[#143224] to-[#0a1c11] border-2 border-emerald-500/70 rounded-2xl p-4 sm:p-5 shadow-md text-white relative overflow-hidden group/greenbox">
-        {/* Background ambient light */}
-        <div className="absolute -top-10 -left-10 w-40 h-40 bg-emerald-400/10 rounded-full blur-2xl pointer-events-none" />
-        <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-amber-400/10 rounded-full blur-2xl pointer-events-none" />
 
-        <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="flex items-start gap-3.5 flex-1 w-full">
-            <div className="p-2.5 rounded-xl bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 shrink-0 mt-0.5 shadow-sm">
-              <Sparkles className="w-5 h-5 text-amber-300 animate-pulse" />
-            </div>
-            <div className="space-y-1.5 flex-1 w-full">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-black tracking-wide text-emerald-300 uppercase bg-emerald-950/80 px-2.5 py-0.5 rounded-full border border-emerald-500/40">
-                  شرح إرشادي وخريطة الدليل
-                </span>
-                <span className="text-[11px] text-amber-300 font-bold flex items-center gap-1">
-                  <span>لوحة الإشراف</span>
-                  <span>•</span>
-                  <span>دولة فلسطين</span>
-                </span>
-              </div>
-
-              {isEditingBoxExplanation ? (
-                <div className="space-y-2 mt-2 w-full">
-                  <textarea
-                    rows={3}
-                    value={editExplanationDraft}
-                    onChange={(e) => setEditExplanationDraft(e.target.value)}
-                    placeholder="اكتب الشرح التوضيحي والإرشادي لخانة دليل المواقع ذات الصلة هنا..."
-                    className="w-full text-xs sm:text-sm bg-emerald-950/90 border-2 border-emerald-400/80 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-400 resize-none font-sans"
-                    autoFocus
-                  />
-                  <div className="flex items-center justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditExplanationDraft(headerExplanation);
-                        setIsEditingBoxExplanation(false);
-                      }}
-                      className="px-3 py-1.5 rounded-xl border border-emerald-700 bg-emerald-900/60 hover:bg-emerald-800 text-emerald-200 text-xs font-bold cursor-pointer"
-                    >
-                      إلغاء
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleSaveHeader(undefined, undefined, editExplanationDraft)}
-                      disabled={isSavingHeader}
-                      className="px-4 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-emerald-950 text-xs font-black shadow-md cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
-                    >
-                      {isSavingHeader ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Check className="w-3.5 h-3.5 text-emerald-950" />
-                      )}
-                      <span>حفظ الشرح والتوضيح ✍️</span>
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-xs sm:text-sm text-emerald-100/95 leading-relaxed font-normal">
-                  {headerExplanation}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Admin Pen Action inside the Green Box */}
-          {!isEditingBoxExplanation && (
-            <button
-              type="button"
-              onClick={() => {
-                setEditExplanationDraft(headerExplanation);
-                setIsEditingBoxExplanation(true);
-              }}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-400/20 hover:bg-amber-400/30 text-amber-200 hover:text-amber-100 border border-amber-400/40 text-xs font-bold transition-all shadow-sm cursor-pointer hover:scale-105 shrink-0 self-end md:self-center"
-              title="تعديل هذا الشرح بالقلم ✍️"
-            >
-              <Edit3 className="w-3.5 h-3.5 text-amber-300" />
-              <span>تعديل الشرح بالقلم ✍️</span>
-            </button>
-          )}
-        </div>
-      </div>
 
       {/* Search & Category Filter Controls */}
       <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-xs space-y-3.5">
@@ -1862,7 +1779,7 @@ export const RelatedSitesAdminTab: React.FC<RelatedSitesAdminTabProps> = ({
                   الوصف التوضيحي والمقدمة:
                 </label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   value={editSubtitleDraft}
                   onChange={(e) => setEditSubtitleDraft(e.target.value)}
                   placeholder="اكتب نبذة أو وصفاً توضيحياً..."
