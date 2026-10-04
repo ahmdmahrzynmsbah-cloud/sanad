@@ -12,9 +12,10 @@ import {
   BadgeCheck,
   Globe,
   Sparkles,
+  Edit3,
 } from 'lucide-react';
 import { Partner } from '../types';
-import { useSync } from '../utils/sync';
+import { useSync, notifySync } from '../utils/sync';
 
 interface PartnersViewProps {
   onBackToHome: () => void;
@@ -32,6 +33,48 @@ export const PartnersView: React.FC<PartnersViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
+
+  // Dynamic header customization
+  const [customTitle, setCustomTitle] = useState(() => {
+    try {
+      const saved = localStorage.getItem('partners_header_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.title) return parsed.title;
+      }
+    } catch {}
+    return 'شركاؤنا المؤسسيون';
+  });
+
+  const [customSubtitle, setCustomSubtitle] = useState(() => {
+    try {
+      const saved = localStorage.getItem('partners_header_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.subtitle) return parsed.subtitle;
+      }
+    } catch {}
+    return 'المؤسسات، والنقابات، والجامعات، والغرف التجارية، والجهات الشريكة في إثراء المعرفة ودعم قطاع الأعمال الفلسطيني';
+  });
+
+  const loadHeaderSettings = async () => {
+    try {
+      const res = await fetch('/api/admin/settings/partners-header');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.title) setCustomTitle(data.title);
+        if (data.subtitle) setCustomSubtitle(data.subtitle);
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    loadHeaderSettings();
+  }, []);
+
+  useSync(['partners_header', 'all'], () => {
+    loadHeaderSettings();
+  });
 
   const fetchPartners = async () => {
     setLoading(true);
@@ -133,14 +176,39 @@ export const PartnersView: React.FC<PartnersViewProps> = ({
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                  شركاؤنا المؤسسيون
+                  {customTitle}
                 </h1>
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                   شبكة التعاون الوطني
                 </span>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onGoToAdminPortal) {
+                        onGoToAdminPortal();
+                      } else {
+                        const newTitle = prompt('تعديل عنوان المؤسسات الشريكة:', customTitle);
+                        if (newTitle && newTitle.trim()) {
+                          setCustomTitle(newTitle.trim());
+                          fetch('/api/admin/settings/partners-header', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ title: newTitle.trim() }),
+                          }).then(() => notifySync('partners_header'));
+                        }
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold transition-all shadow-xs cursor-pointer hover:scale-105"
+                    title="تعديل هذا العنوان بالقلم ✍️"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>تعديل بالقلم ✍️</span>
+                  </button>
+                )}
               </div>
               <p className="text-xs sm:text-sm text-slate-600 mt-1">
-                المؤسسات، والنقابات، والجامعات، والغرف التجارية، والجهات الشريكة في إثراء المعرفة ودعم قطاع الأعمال الفلسطيني
+                {customSubtitle}
               </p>
             </div>
           </div>

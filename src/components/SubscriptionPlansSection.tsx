@@ -263,6 +263,47 @@ export const SubscriptionPlansSection: React.FC<SubscriptionPlansSectionProps> =
     };
   }, []);
 
+  const [customHeaderTitle, setCustomHeaderTitle] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('plans_header_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.title) return parsed.title;
+      }
+    } catch {}
+    return '';
+  });
+
+  const [customHeaderSubtitle, setCustomHeaderSubtitle] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('plans_header_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.subtitle) return parsed.subtitle;
+      }
+    } catch {}
+    return '';
+  });
+
+  const loadHeaderSettings = async () => {
+    try {
+      const res = await fetch('/api/admin/settings/plans-header');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.title) setCustomHeaderTitle(data.title);
+        if (data.subtitle) setCustomHeaderSubtitle(data.subtitle);
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    loadHeaderSettings();
+  }, []);
+
+  useSync(['plans_header', 'all'], () => {
+    loadHeaderSettings();
+  });
+
   useSync(['subscription_plans', 'contact_info', 'all'], async () => {
     let deletedIds: string[] = [];
     try {
@@ -350,11 +391,11 @@ export const SubscriptionPlansSection: React.FC<SubscriptionPlansSectionProps> =
         )}
 
         <h3 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 tracking-tight">
-          {sectionTitle}
+          {customHeaderTitle || sectionTitle}
         </h3>
 
         <p className="text-sm sm:text-base text-slate-600 leading-relaxed font-normal whitespace-pre-line">
-          {sectionSubtitle}
+          {customHeaderSubtitle || sectionSubtitle}
         </p>
       </div>
 

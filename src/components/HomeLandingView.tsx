@@ -113,6 +113,28 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
     return 'روابط وبوابات رسمية تابعة لوزارة المالية، ديوان الفتوى والتشريع، والدوائر الاقتصادية والجمركية في فلسطين.';
   });
 
+  const [partnersTitle, setPartnersTitle] = useState(() => {
+    try {
+      const saved = localStorage.getItem('partners_header_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.title) return parsed.title;
+      }
+    } catch {}
+    return 'شركاؤنا والمؤسسات الشريكة';
+  });
+
+  const [partnersSubtitle, setPartnersSubtitle] = useState(() => {
+    try {
+      const saved = localStorage.getItem('partners_header_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.subtitle) return parsed.subtitle;
+      }
+    } catch {}
+    return 'استعرض شبكة الهيئات والجامعات والمؤسسات والشركات الشريكة في نشر الثقافة والوعي القانوني.';
+  });
+
   useSync(['supervisors_header', 'all'], () => {
     try {
       const saved = localStorage.getItem('supervisors_header_settings');
@@ -131,6 +153,17 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
         const parsed = JSON.parse(saved);
         if (parsed.title) setRelatedSitesTitle(parsed.title);
         if (parsed.subtitle) setRelatedSitesSubtitle(parsed.subtitle);
+      }
+    } catch {}
+  });
+
+  useSync(['partners_header', 'all'], () => {
+    try {
+      const saved = localStorage.getItem('partners_header_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.title) setPartnersTitle(parsed.title);
+        if (parsed.subtitle) setPartnersSubtitle(parsed.subtitle);
       }
     } catch {}
   });
@@ -622,10 +655,10 @@ export const HomeLandingView: React.FC<HomeLandingViewProps> = ({
               <Handshake className="w-5 h-5 text-amber-700 group-hover:text-white" />
             </div>
             <h4 className="text-base sm:text-lg font-black text-slate-950 group-hover:text-amber-800 transition-colors">
-              شركاؤنا والمؤسسات الشريكة
+              {partnersTitle}
             </h4>
             <p className="text-xs sm:text-sm text-slate-700 leading-relaxed font-medium">
-              استعرض شبكة الهيئات والجامعات والمؤسسات والشركات الشريكة في نشر الثقافة والوعي القانوني.
+              {partnersSubtitle}
             </p>
           </div>
           <ArrowLeft className="w-5 h-5 text-slate-400 group-hover:text-amber-700 group-hover:-translate-x-1 transition-all shrink-0 mt-2" />

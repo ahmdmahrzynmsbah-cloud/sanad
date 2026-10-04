@@ -12,6 +12,7 @@ import {
   AlertCircle,
   Save,
   X,
+  Edit3,
   Search,
   Filter,
   ShieldCheck,
@@ -327,6 +328,99 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   const [footerCopyrightInput, setFooterCopyrightInput] = useState('جميع الحقوق محفوظة © دولة فلسطين');
   const [footerShowScaleIconInput, setFooterShowScaleIconInput] = useState(true);
 
+  // Admin Portal Top Banner Customization (نظام الإشراف المركزي وإدارة التشريعات)
+  const [portalHeaderTitle, setPortalHeaderTitle] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('portal_header_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.title) return parsed.title;
+      }
+    } catch {}
+    return isSupervisor ? 'نظام الإشراف على التشريعات وقاعدة المعرفة' : 'نظام الإشراف المركزي وإدارة التشريعات';
+  });
+
+  const [portalHeaderSubtitle, setPortalHeaderSubtitle] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('portal_header_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.subtitle) return parsed.subtitle;
+      }
+    } catch {}
+    return isSupervisor 
+      ? 'إدارة ومراجعة نصوص المواد والقوانين والقرارات بقانون المالية والجمركية المحقونة في قاعدة معرفة البوت.'
+      : 'مراجعة واعتماد طلبات حسابات المستفيدين الجدد، وإدارة نصوص المواد والقوانين المالية والجمركية المحقونة في قاعدة معرفة البوت.';
+  });
+
+  const [portalHeaderEditingTarget, setPortalHeaderEditingTarget] = useState<'none' | 'all'>('none');
+  const [portalEditTitleDraft, setPortalEditTitleDraft] = useState(portalHeaderTitle);
+  const [portalEditSubtitleDraft, setPortalEditSubtitleDraft] = useState(portalHeaderSubtitle);
+  const [isSavingPortalHeader, setIsSavingPortalHeader] = useState(false);
+  const [showEditPortalHeaderModal, setShowEditPortalHeaderModal] = useState(false);
+
+  const loadPortalHeaderSettings = async () => {
+    try {
+      const res = await fetch('/api/admin/settings/portal-header');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.title) {
+          setPortalHeaderTitle(data.title);
+          setPortalEditTitleDraft(data.title);
+        }
+        if (data.subtitle) {
+          setPortalHeaderSubtitle(data.subtitle);
+          setPortalEditSubtitleDraft(data.subtitle);
+        }
+      }
+    } catch {}
+  };
+
+  const handleSavePortalHeader = async (newTitle?: string, newSubtitle?: string) => {
+    const defaultTitle = isSupervisor ? 'نظام الإشراف على التشريعات وقاعدة المعرفة' : 'نظام الإشراف المركزي وإدارة التشريعات';
+    const defaultSubtitle = isSupervisor 
+      ? 'إدارة ومراجعة نصوص المواد والقوانين والقرارات بقانون المالية والجمركية المحقونة في قاعدة معرفة البوت.'
+      : 'مراجعة واعتماد طلبات حسابات المستفيدين الجدد، وإدارة نصوص المواد والقوانين المالية والجمركية المحقونة في قاعدة معرفة البوت.';
+
+    const titleToSave = (newTitle !== undefined ? newTitle : portalEditTitleDraft).trim() || defaultTitle;
+    const subtitleToSave = (newSubtitle !== undefined ? newSubtitle : portalEditSubtitleDraft).trim() || defaultSubtitle;
+
+    setIsSavingPortalHeader(true);
+    setPortalHeaderTitle(titleToSave);
+    setPortalHeaderSubtitle(subtitleToSave);
+    try {
+      localStorage.setItem('portal_header_settings', JSON.stringify({
+        title: titleToSave,
+        subtitle: subtitleToSave,
+        updatedAt: new Date().toISOString()
+      }));
+    } catch {}
+
+    try {
+      await fetch('/api/admin/settings/portal-header', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: titleToSave, subtitle: subtitleToSave }),
+      });
+    } catch {} finally {
+      setIsSavingPortalHeader(false);
+      setPortalHeaderEditingTarget('none');
+      setShowEditPortalHeaderModal(false);
+      notifySync('portal_header');
+    }
+  };
+
+  const handleResetPortalHeader = () => {
+    const defaultTitle = isSupervisor ? 'نظام الإشراف على التشريعات وقاعدة المعرفة' : 'نظام الإشراف المركزي وإدارة التشريعات';
+    const defaultSubtitle = isSupervisor 
+      ? 'إدارة ومراجعة نصوص المواد والقوانين والقرارات بقانون المالية والجمركية المحقونة في قاعدة معرفة البوت.'
+      : 'مراجعة واعتماد طلبات حسابات المستفيدين الجدد، وإدارة نصوص المواد والقوانين المالية والجمركية المحقونة في قاعدة معرفة البوت.';
+
+    setPortalEditTitleDraft(defaultTitle);
+    setPortalEditSubtitleDraft(defaultSubtitle);
+    handleSavePortalHeader(defaultTitle, defaultSubtitle);
+  };
+
   // Laws state with resilient local caching
   const [laws, setLaws] = useState<Law[]>(() => {
     if (typeof window !== 'undefined') {
@@ -374,10 +468,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
 
   useEffect(() => {
     loadReferenceRatings();
+    loadPortalHeaderSettings();
   }, []);
 
   useSync('reference_ratings', () => {
     loadReferenceRatings();
+  });
+
+  useSync('portal_header', () => {
+    loadPortalHeaderSettings();
   });
 
   // Dynamic Legal Categories state with resilient local caching
@@ -2901,19 +3000,147 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6">
       {/* Official Government Admin Header Banner */}
       <div className="bg-[#12281e] text-white rounded-2xl p-5 sm:p-6 shadow-xs border border-emerald-900/60 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
+        <div className="w-full md:max-w-2xl">
+          {/* Top helper badge system */}
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => {
+                setPortalEditTitleDraft(portalHeaderTitle);
+                setPortalEditSubtitleDraft(portalHeaderSubtitle);
+                setPortalHeaderEditingTarget('all');
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-700 hover:bg-emerald-600 text-white text-[11px] sm:text-xs font-bold shadow-xs border border-emerald-500/70 transition-all cursor-pointer hover:scale-105 active:scale-95 group/pen"
+              title="نظام القلم: انقر لتعديل هذا العنوان والوصف بحرية ✍️"
+            >
+              <Edit3 className="w-3.5 h-3.5 text-emerald-200 group-hover/pen:rotate-12 transition-transform" />
+              <span>تعديل هذا الكلام ✍️</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setPortalEditTitleDraft(portalHeaderTitle);
+                setPortalEditSubtitleDraft(portalHeaderSubtitle);
+                setShowEditPortalHeaderModal(true);
+              }}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/10 hover:bg-white/20 text-emerald-200 text-[11px] font-semibold border border-white/15 transition-colors cursor-pointer"
+              title="فتح نافذة التعديل المتقدمة"
+            >
+              <Sparkles className="w-3 h-3 text-amber-300" />
+              <span>نافذة التعديل</span>
+            </button>
+          </div>
+
           <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400 mb-1.5">
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
             <span>{isSupervisor ? 'لوحة تحكم المشرف المعتمد • هيئة الإشراف التشريعي' : 'لوحة تحكم المسؤول المعتمد • وزارة المالية'}</span>
           </div>
-          <h2 className="text-xl sm:text-2xl font-black tracking-tight">
-            {isSupervisor ? 'نظام الإشراف على التشريعات وقاعدة المعرفة' : 'نظام الإشراف المركزي وإدارة التشريعات'}
-          </h2>
-          <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl">
-            {isSupervisor 
-              ? 'إدارة ومراجعة نصوص المواد والقوانين والقرارات بقانون المالية والجمركية المحقونة في قاعدة معرفة البوت.'
-              : 'مراجعة واعتماد طلبات حسابات المستفيدين الجدد، وإدارة نصوص المواد والقوانين المالية والجمركية المحقونة في قاعدة معرفة البوت.'}
-          </p>
+
+          {portalHeaderEditingTarget === 'all' ? (
+            /* Inline Direct Edit Mode for Portal Header */
+            <div className="bg-emerald-950/90 border-2 border-emerald-400/80 rounded-2xl p-4 my-2 space-y-3 animate-in fade-in shadow-xl text-white">
+              <div className="flex items-center justify-between gap-2 border-b border-emerald-800/80 pb-2">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-300">
+                  <Edit3 className="w-4 h-4 text-emerald-400" />
+                  <span>تعديل عنوان ووصف لوحة الإشراف المركزي بالقلم:</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleResetPortalHeader}
+                  className="text-[11px] text-emerald-300/80 hover:text-white flex items-center gap-1 cursor-pointer"
+                  title="استعادة النص الافتراضي"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>استعادة الافتراضي</span>
+                </button>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-emerald-200">العنوان الرئيسي:</label>
+                <input
+                  type="text"
+                  value={portalEditTitleDraft}
+                  onChange={(e) => setPortalEditTitleDraft(e.target.value)}
+                  placeholder="نظام الإشراف المركزي وإدارة التشريعات"
+                  className="w-full text-sm font-bold bg-emerald-900/80 border border-emerald-500 rounded-xl px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-emerald-200">الوصف الفرعي:</label>
+                <textarea
+                  rows={2}
+                  value={portalEditSubtitleDraft}
+                  onChange={(e) => setPortalEditSubtitleDraft(e.target.value)}
+                  placeholder="الوصف الشامل لترويسة الإشراف المركزي..."
+                  className="w-full text-xs bg-emerald-900/80 border border-emerald-500 rounded-xl p-2.5 text-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-400 resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setPortalHeaderEditingTarget('none')}
+                  className="px-3 py-1.5 rounded-xl border border-emerald-700 bg-emerald-900/50 hover:bg-emerald-900 text-emerald-200 text-xs font-bold cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSavePortalHeader()}
+                  disabled={isSavingPortalHeader}
+                  className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {isSavingPortalHeader ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Check className="w-3.5 h-3.5 text-emerald-100" />
+                  )}
+                  <span>حفظ النصوص الجديدة</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <h2 className="text-xl sm:text-2xl font-black tracking-tight flex items-center gap-2 flex-wrap group/title">
+                <span
+                  onClick={() => {
+                    setPortalEditTitleDraft(portalHeaderTitle);
+                    setPortalEditSubtitleDraft(portalHeaderSubtitle);
+                    setPortalHeaderEditingTarget('all');
+                  }}
+                  className="cursor-pointer hover:text-emerald-300 transition-colors"
+                  title="انقر لتعديل هذا العنوان"
+                >
+                  {portalHeaderTitle}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPortalEditTitleDraft(portalHeaderTitle);
+                    setPortalEditSubtitleDraft(portalHeaderSubtitle);
+                    setPortalHeaderEditingTarget('all');
+                  }}
+                  className="p-1 rounded-md text-emerald-300 hover:bg-emerald-800/80 transition-all cursor-pointer opacity-80 hover:opacity-100"
+                  title="تعديل هذا العنوان بالقلم ✍️"
+                >
+                  <Edit3 className="w-4 h-4 text-emerald-300" />
+                </button>
+              </h2>
+              <p
+                onClick={() => {
+                  setPortalEditTitleDraft(portalHeaderTitle);
+                  setPortalEditSubtitleDraft(portalHeaderSubtitle);
+                  setPortalHeaderEditingTarget('all');
+                }}
+                className="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl cursor-pointer hover:text-white transition-colors"
+                title="انقر لتعديل هذا الوصف"
+              >
+                {portalHeaderSubtitle}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Global Stats Badges */}
@@ -7202,6 +7429,90 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
           onUpdateStatus={handleUpdateStatus}
           defaultTrialDays={defaultTrialDays}
         />
+      )}
+
+      {/* Modal: Edit Portal Header Customization */}
+      {showEditPortalHeaderModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in" dir="rtl">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-5 text-slate-900">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200">
+                  <Edit3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 text-base">تخصيص عنوان ووصف «الإشراف المركزي»</h3>
+                  <p className="text-xs text-slate-500">تعديل الكلام الظاهر في ترويسة اللوحة الرئيسية</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEditPortalHeaderModal(false)}
+                className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700">العنوان الرئيسي:</label>
+                <input
+                  type="text"
+                  value={portalEditTitleDraft}
+                  onChange={(e) => setPortalEditTitleDraft(e.target.value)}
+                  placeholder="نظام الإشراف المركزي وإدارة التشريعات"
+                  className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700">الوصف الفرعي:</label>
+                <textarea
+                  rows={3}
+                  value={portalEditSubtitleDraft}
+                  onChange={(e) => setPortalEditSubtitleDraft(e.target.value)}
+                  placeholder="الوصف الشامل لترويسة الإشراف المركزي..."
+                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={handleResetPortalHeader}
+                className="px-3 py-2 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer flex items-center gap-1"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>استعادة الافتراضي</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowEditPortalHeaderModal(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSavePortalHeader()}
+                  disabled={isSavingPortalHeader}
+                  className="px-5 py-2 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-bold shadow-sm transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {isSavingPortalHeader ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Check className="w-4 h-4 text-emerald-200" />
+                  )}
+                  <span>حفظ وتحديث</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -573,6 +573,26 @@ interface DBSettings {
   relatedSitesHeaderTitle?: string;
   relatedSitesHeaderSubtitle?: string;
   relatedSitesHeaderBadge?: string;
+
+  // Partners Header Customization (تخصيص المؤسسات والجهات الشريكة)
+  partnersHeaderTitle?: string;
+  partnersHeaderSubtitle?: string;
+  partnersHeaderBadge?: string;
+
+  // Subscription Plans Header Customization (تخصيص خطط وباقات الاشتراك)
+  plansHeaderTitle?: string;
+  plansHeaderSubtitle?: string;
+  plansHeaderBadge?: string;
+
+  // About Platform Header Customization (تخصيص عن المنصة والرؤية والرسالة)
+  aboutHeaderTitle?: string;
+  aboutHeaderSubtitle?: string;
+  aboutHeaderBadge?: string;
+
+  // Admin Portal Header Customization (نظام الإشراف المركزي وإدارة التشريعات)
+  portalHeaderTitle?: string;
+  portalHeaderSubtitle?: string;
+
   footerCopyright?: string;
   footerShowScaleIcon?: boolean;
 }
@@ -2832,6 +2852,159 @@ app.post('/api/admin/settings/related-sites-header', async (req, res) => {
     });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to update related sites header' });
+  }
+});
+
+// Partners Header Customization (تخصيص عنوان ووصف الشركاء والمؤسسات الشريكة)
+app.get('/api/admin/settings/partners-header', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  const title = (db as any).partnersHeader?.title || db.settings?.partnersHeaderTitle || 'إدارة المؤسسات والجهات الشريكة';
+  const subtitle = (db as any).partnersHeader?.subtitle || db.settings?.partnersHeaderSubtitle || 'إضافة وتعديل المؤسسات الشريكة، الجامعات، النقابات، والاتحادات التي تظهر في الواجهة العامة';
+  const badge = (db as any).partnersHeader?.badge || db.settings?.partnersHeaderBadge || '';
+  res.json({ title, subtitle, badge });
+});
+
+app.post('/api/admin/settings/partners-header', async (req, res) => {
+  try {
+    let body = req.body;
+    if (typeof body === 'string' && body.trim()) {
+      try { body = JSON.parse(body); } catch {}
+    }
+    const { title, subtitle, badge } = body || {};
+    if (!(db as any).partnersHeader) {
+      (db as any).partnersHeader = {};
+    }
+    if (title !== undefined) (db as any).partnersHeader.title = String(title).trim();
+    if (subtitle !== undefined) (db as any).partnersHeader.subtitle = String(subtitle).trim();
+    if (badge !== undefined) (db as any).partnersHeader.badge = String(badge).trim();
+
+    if (!db.settings) db.settings = {} as any;
+    db.settings.partnersHeaderTitle = (db as any).partnersHeader.title;
+    db.settings.partnersHeaderSubtitle = (db as any).partnersHeader.subtitle;
+    saveDB();
+
+    res.json({
+      success: true,
+      title: (db as any).partnersHeader.title,
+      subtitle: (db as any).partnersHeader.subtitle,
+      badge: (db as any).partnersHeader.badge,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to update partners header' });
+  }
+});
+
+// Subscription Plans Header Customization (تخصيص عنوان ووصف خطط وباقات الاشتراك)
+app.get('/api/admin/settings/plans-header', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  const title = (db as any).plansHeader?.title || db.settings?.plansHeaderTitle || 'إدارة خطط وباقات الاشتراك';
+  const subtitle = (db as any).plansHeader?.subtitle || db.settings?.plansHeaderSubtitle || 'تحكم بالأسعار، التفاصيل، المميزات، الخطة المميزة (الأكثر طلباً)، وطرق الاشتراك في الواجهة الرئيسية.';
+  const badge = (db as any).plansHeader?.badge || db.settings?.plansHeaderBadge || '';
+  res.json({ title, subtitle, badge });
+});
+
+app.post('/api/admin/settings/plans-header', async (req, res) => {
+  try {
+    let body = req.body;
+    if (typeof body === 'string' && body.trim()) {
+      try { body = JSON.parse(body); } catch {}
+    }
+    const { title, subtitle, badge } = body || {};
+    if (!(db as any).plansHeader) {
+      (db as any).plansHeader = {};
+    }
+    if (title !== undefined) (db as any).plansHeader.title = String(title).trim();
+    if (subtitle !== undefined) (db as any).plansHeader.subtitle = String(subtitle).trim();
+    if (badge !== undefined) (db as any).plansHeader.badge = String(badge).trim();
+
+    if (!db.settings) db.settings = {} as any;
+    db.settings.plansHeaderTitle = (db as any).plansHeader.title;
+    db.settings.plansHeaderSubtitle = (db as any).plansHeader.subtitle;
+    saveDB();
+
+    res.json({
+      success: true,
+      title: (db as any).plansHeader.title,
+      subtitle: (db as any).plansHeader.subtitle,
+      badge: (db as any).plansHeader.badge,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to update plans header' });
+  }
+});
+
+// About Platform Header Customization (تخصيص عنوان ووصف عن المنصة، الرؤية، والرسالة)
+app.get('/api/admin/settings/about-header', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  const title = (db as any).aboutHeader?.title || db.settings?.aboutHeaderTitle || 'إدارة محتوى «عن المنصة، الرؤية، والرسالة»';
+  const subtitle = (db as any).aboutHeader?.subtitle || db.settings?.aboutHeaderSubtitle || 'تخصيص النبذة التعريفية لمنظومة «سَنَد»، وصياغة الرؤية والرسالة والأهداف الاستراتيجية التي تظهر للمستخدمين والزوار.';
+  const badge = (db as any).aboutHeader?.badge || db.settings?.aboutHeaderBadge || '';
+  res.json({ title, subtitle, badge });
+});
+
+app.post('/api/admin/settings/about-header', async (req, res) => {
+  try {
+    let body = req.body;
+    if (typeof body === 'string' && body.trim()) {
+      try { body = JSON.parse(body); } catch {}
+    }
+    const { title, subtitle, badge } = body || {};
+    if (!(db as any).aboutHeader) {
+      (db as any).aboutHeader = {};
+    }
+    if (title !== undefined) (db as any).aboutHeader.title = String(title).trim();
+    if (subtitle !== undefined) (db as any).aboutHeader.subtitle = String(subtitle).trim();
+    if (badge !== undefined) (db as any).aboutHeader.badge = String(badge).trim();
+
+    if (!db.settings) db.settings = {} as any;
+    db.settings.aboutHeaderTitle = (db as any).aboutHeader.title;
+    db.settings.aboutHeaderSubtitle = (db as any).aboutHeader.subtitle;
+    saveDB();
+
+    res.json({
+      success: true,
+      title: (db as any).aboutHeader.title,
+      subtitle: (db as any).aboutHeader.subtitle,
+      badge: (db as any).aboutHeader.badge,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to update about header' });
+  }
+});
+
+// Admin Portal Main Header Customization (نظام الإشراف المركزي وإدارة التشريعات)
+app.get('/api/admin/settings/portal-header', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  const title = (db as any).portalHeader?.title || db.settings?.portalHeaderTitle || 'نظام الإشراف المركزي وإدارة التشريعات';
+  const subtitle = (db as any).portalHeader?.subtitle || db.settings?.portalHeaderSubtitle || 'مراجعة واعتماد طلبات حسابات المستفيدين الجدد، وإدارة نصوص المواد والقوانين المالية والجمركية المحقونة في قاعدة معرفة البوت.';
+  res.json({ title, subtitle });
+});
+
+app.post('/api/admin/settings/portal-header', async (req, res) => {
+  try {
+    let body = req.body;
+    if (typeof body === 'string' && body.trim()) {
+      try { body = JSON.parse(body); } catch {}
+    }
+    const { title, subtitle } = body || {};
+    if (!(db as any).portalHeader) {
+      (db as any).portalHeader = {};
+    }
+    if (title !== undefined) (db as any).portalHeader.title = String(title).trim();
+    if (subtitle !== undefined) (db as any).portalHeader.subtitle = String(subtitle).trim();
+
+    if (!db.settings) db.settings = {} as any;
+    db.settings.portalHeaderTitle = (db as any).portalHeader.title;
+    db.settings.portalHeaderSubtitle = (db as any).portalHeader.subtitle;
+    saveDB();
+
+    res.json({
+      success: true,
+      title: (db as any).portalHeader.title,
+      subtitle: (db as any).portalHeader.subtitle,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to update portal header' });
   }
 });
 
