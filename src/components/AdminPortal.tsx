@@ -2002,6 +2002,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   const handleToggleSubscription = async (user: User) => {
     const newSubscriptionState = !user.isSubscribed;
     setProcessingUserId(user.id);
+
+    // Instant optimistic update
+    setUsers((prev) =>
+      prev.map((u) => (u.id === user.id ? { ...u, isSubscribed: newSubscriptionState } : u))
+    );
+    setSelectedUserDetails((prev) =>
+      prev && prev.id === user.id ? { ...prev, isSubscribed: newSubscriptionState } : prev
+    );
+
     try {
       const res = await fetch(`/api/admin/users/${user.id}/subscription`, {
         method: 'POST',
@@ -2119,7 +2128,24 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   // Toggle Freeze User
   const handleToggleFreeze = async (user: User) => {
     const isCurrentlyFrozen = user.status === 'frozen' || user.subscriptionStatus === 'frozen';
+    const newStatus = isCurrentlyFrozen ? 'approved' : 'frozen';
+    const newSubStatus = isCurrentlyFrozen ? 'active' : 'frozen';
     setProcessingUserId(user.id);
+
+    // Instant optimistic update
+    setUsers((prev) =>
+      prev.map((u) =>
+        u.id === user.id
+          ? { ...u, status: newStatus as any, subscriptionStatus: newSubStatus }
+          : u
+      )
+    );
+    setSelectedUserDetails((prev) =>
+      prev && prev.id === user.id
+        ? { ...prev, status: newStatus as any, subscriptionStatus: newSubStatus }
+        : prev
+    );
+
     try {
       const endpoint = isCurrentlyFrozen
         ? `/api/admin/users/${user.id}/unfreeze`
@@ -7243,7 +7269,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       {/* EXTEND / CUSTOMIZE TRIAL MODAL DIALOG                     */}
       {/* ======================================================== */}
       {trialModalUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
           <div className="bg-white rounded-2xl border border-gray-200 shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             {/* Modal Header */}
             <div className="bg-gradient-to-l from-[#193225] to-[#12281e] text-white px-5 py-4 flex items-center justify-between">
@@ -7422,12 +7448,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
           onClose={() => setSelectedUserDetails(null)}
           onToggleSubscription={handleToggleSubscription}
           onOpenExtendTrial={(user) => {
+            setSelectedUserDetails(null);
             setTrialModalUser(user);
             setExtendDaysInput(7);
           }}
           onToggleFreeze={handleToggleFreeze}
           onUpdateStatus={handleUpdateStatus}
           defaultTrialDays={defaultTrialDays}
+          isProcessing={processingUserId === selectedUserDetails.id}
         />
       )}
 

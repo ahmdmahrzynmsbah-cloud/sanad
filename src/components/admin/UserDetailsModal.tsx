@@ -21,7 +21,8 @@ import {
   Lock,
   Hash,
   Sparkles,
-  AlertCircle
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
 import { User } from '../../types';
 
@@ -33,6 +34,7 @@ interface UserDetailsModalProps {
   onToggleFreeze?: (user: User) => void;
   onUpdateStatus?: (userId: string, status: 'approved' | 'rejected') => void;
   defaultTrialDays?: number;
+  isProcessing?: boolean;
 }
 
 export const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
@@ -43,6 +45,7 @@ export const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
   onToggleFreeze,
   onUpdateStatus,
   defaultTrialDays = 7,
+  isProcessing = false,
 }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -594,14 +597,27 @@ export const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
                   onClick={() => {
                     onToggleSubscription(user);
                   }}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs ${
+                  disabled={isProcessing}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs disabled:opacity-50 ${
                     user.isSubscribed
                       ? 'bg-gray-200 hover:bg-gray-300 text-gray-800'
                       : 'bg-emerald-700 hover:bg-emerald-800 text-white'
                   }`}
                 >
-                  <Crown className="w-3.5 h-3.5 text-amber-300" />
-                  <span>{user.isSubscribed ? 'إلغاء الاشتراك' : 'تفعيل اشتراك دائم'}</span>
+                  {isProcessing ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-500" />
+                  ) : (
+                    <Crown className="w-3.5 h-3.5 text-amber-300" />
+                  )}
+                  <span>
+                    {isProcessing
+                      ? user.isSubscribed
+                        ? 'جاري إيقاف الاشتراك...'
+                        : 'جاري التفعيل...'
+                      : user.isSubscribed
+                      ? 'إلغاء الاشتراك'
+                      : 'تفعيل اشتراك دائم'}
+                  </span>
                 </button>
               )}
 
@@ -612,7 +628,8 @@ export const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
                   onClick={() => {
                     onOpenExtendTrial(user);
                   }}
-                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 flex items-center gap-1.5 cursor-pointer transition-colors"
+                  disabled={isProcessing}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 flex items-center gap-1.5 cursor-pointer transition-colors disabled:opacity-50"
                 >
                   <Calendar className="w-3.5 h-3.5 text-blue-600" />
                   <span>تمديد التجربة</span>
@@ -626,14 +643,27 @@ export const UserDetailsModal: React.FC<UserDetailsModalProps> = ({
                   onClick={() => {
                     onToggleFreeze(user);
                   }}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors ${
+                  disabled={isProcessing}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors disabled:opacity-50 ${
                     isUserFrozen
                       ? 'bg-purple-700 hover:bg-purple-800 text-white'
                       : 'bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200'
                   }`}
                 >
-                  <Snowflake className="w-3.5 h-3.5" />
-                  <span>{isUserFrozen ? 'فك التجميد' : 'تجميد الحساب'}</span>
+                  {isProcessing ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-600" />
+                  ) : (
+                    <Snowflake className="w-3.5 h-3.5" />
+                  )}
+                  <span>
+                    {isProcessing
+                      ? isUserFrozen
+                        ? 'جاري فك التجميد...'
+                        : 'جاري التجميد...'
+                      : isUserFrozen
+                      ? 'فك التجميد'
+                      : 'تجميد الحساب'}
+                  </span>
                 </button>
               )}
             </div>
