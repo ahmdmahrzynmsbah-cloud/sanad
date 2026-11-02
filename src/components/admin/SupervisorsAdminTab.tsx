@@ -39,7 +39,7 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
   onOpenMailTab,
 }) => {
   const [supervisors, setSupervisors] = useState<Supervisor[]>(() => {
-    if (initialSupervisors && initialSupervisors.length > 0) return initialSupervisors;
+    if (initialSupervisors && Array.isArray(initialSupervisors)) return initialSupervisors;
     return getCachedSupervisors();
   });
   const [loading, setLoading] = useState(false);
@@ -194,7 +194,7 @@ export const SupervisorsAdminTab: React.FC<SupervisorsAdminTabProps> = ({
   }, []);
 
   useEffect(() => {
-    if (initialSupervisors && initialSupervisors.length > 0) {
+    if (initialSupervisors && Array.isArray(initialSupervisors)) {
       setSupervisors(initialSupervisors);
     }
   }, [initialSupervisors]);

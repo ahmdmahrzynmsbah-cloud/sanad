@@ -182,18 +182,13 @@ export const PartnersAdminTab: React.FC = () => {
 
       if (res.ok) {
         const data = await res.json();
-        if (data.partners && Array.isArray(data.partners) && data.partners.length > 0) {
+        if (data.partners && Array.isArray(data.partners)) {
           const items: Partner[] = data.partners;
-          setPartners((prev) => {
-            const map = new Map<string, Partner>();
-            prev.forEach((p) => map.set(p.id, p));
-            items.forEach((p) => map.set(p.id, p));
-            const merged = Array.from(map.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
-            try {
-              localStorage.setItem('sanad_cached_partners', JSON.stringify(merged));
-            } catch {}
-            return merged;
-          });
+          setPartners(items);
+          try {
+            localStorage.setItem('sanad_cached_partners', JSON.stringify(items));
+          } catch {}
+          return;
         }
       }
     } catch (err) {

@@ -186,50 +186,49 @@ export const RelatedSitesView: React.FC<RelatedSitesViewProps> = ({
 
   const fetchSites = async () => {
     setLoading(true);
-    const map = new Map<string, RelatedSite>();
-
-    // 1. Cached sites
-    try {
-      const cached = localStorage.getItem('sanad_cached_related_sites');
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed)) {
-          parsed.forEach((s: any) => { if (s && s.id && s.title) map.set(s.id, s); });
-        }
-      }
-    } catch {}
-
-    // 2. API fetch
     try {
       const res = await fetch(`/api/related-sites?t=${Date.now()}`);
       if (res.ok) {
         const data = await res.json();
-        if (data.relatedSites && Array.isArray(data.relatedSites)) {
-          data.relatedSites.forEach((s: any) => { if (s && s.id && s.title) map.set(s.id, s); });
+        if (Array.isArray(data.relatedSites)) {
+          setSites(data.relatedSites);
+          try {
+            localStorage.setItem('sanad_cached_related_sites', JSON.stringify(data.relatedSites));
+          } catch {}
+          setLoading(false);
+          return;
         }
       }
     } catch (err) {
-      console.warn('API fetch related sites notice, trying Firestore fallback:', err);
+      console.warn('API fetch related sites notice:', err);
     }
 
-    // 3. Direct Firestore Fallback
+    // Direct Firestore Fallback if API fails
     try {
       const { directFetchRelatedSitesFromFirestore } = await import('../services/clientFirestore');
       const fsSites = await directFetchRelatedSitesFromFirestore();
-      if (fsSites && Array.isArray(fsSites)) {
-        fsSites.forEach((s: any) => { if (s && s.id && s.title) map.set(s.id, s); });
+      if (Array.isArray(fsSites)) {
+        setSites(fsSites);
+        try {
+          localStorage.setItem('sanad_cached_related_sites', JSON.stringify(fsSites));
+        } catch {}
+        setLoading(false);
+        return;
       }
     } catch (fsErr) {
       console.warn('Firestore fallback fetch notice:', fsErr);
     }
 
-    const merged = Array.from(map.values());
-    if (merged.length > 0) {
-      setSites(merged);
-      try {
-        localStorage.setItem('sanad_cached_related_sites', JSON.stringify(merged));
-      } catch {}
-    }
+    // Cached sites fallback only on network error
+    try {
+      const cached = localStorage.getItem('sanad_cached_related_sites');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          setSites(parsed);
+        }
+      }
+    } catch {}
     setLoading(false);
   };
 

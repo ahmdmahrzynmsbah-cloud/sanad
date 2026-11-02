@@ -385,8 +385,22 @@ app.all('/api/sync/pulse', (req, res) => {
     }
     if (col === 'users' || col === 'all') {
       fetchUsersFromFirestore().then((cloudUsers) => {
-        if (cloudUsers && cloudUsers.length > 0) {
-          db.users = cloudUsers;
+        if (cloudUsers && Array.isArray(cloudUsers)) {
+          db.users = cloudUsers.filter((u) => !isFakeUser(u));
+        }
+      }).catch(() => {});
+    }
+    if (col === 'supervisors' || col === 'all') {
+      fetchSupervisorsFromFirestore().then((cloudSups) => {
+        if (cloudSups && Array.isArray(cloudSups)) {
+          db.supervisors = cloudSups.filter((s) => !isFakeSupervisor(s));
+        }
+      }).catch(() => {});
+    }
+    if (col === 'related_sites' || col === 'all') {
+      fetchRelatedSitesFromFirestore().then((cloudSites) => {
+        if (cloudSites && Array.isArray(cloudSites)) {
+          db.relatedSites = cloudSites.filter((s) => s && s.id !== 'site-1790978648970-0e3w' && s.title !== 'rgr');
         }
       }).catch(() => {});
     }
@@ -399,15 +413,16 @@ app.all('/api/sync/pulse', (req, res) => {
     }
     if (col === 'subscription_plans' || col === 'all') {
       fetchSubscriptionPlansFromFirestore().then((cloudPlans) => {
-        if (cloudPlans && cloudPlans.length > 0) {
-          db.subscriptionPlans = cloudPlans;
+        if (cloudPlans && Array.isArray(cloudPlans)) {
+          db.subscriptionPlans = cloudPlans.filter((p) => p && p.id !== 'plan-1790971519128-uybr' && p.name !== 'الاحتراف');
         }
       }).catch(() => {});
     }
     if (col === 'law_requests' || col === 'all') {
       fetchLawRequestsFromFirestore().then((cloudRequests) => {
         if (cloudRequests && cloudRequests.length > 0) {
-          db.lawRequests = cloudRequests;
+          cloudRequests.forEach((r) => deleteLawRequestFromFirestore(r.id).catch(() => {}));
+          db.lawRequests = [];
         }
       }).catch(() => {});
     }
@@ -657,104 +672,9 @@ export interface StoredSupervisor {
   createdAt: string;
 }
 
-export const DEFAULT_SUPERVISORS: StoredSupervisor[] = [
-  {
-    id: 'sup-1',
-    name: 'د. خليل إبراهيم شحادة',
-    title: 'رئيس هيئة الإشراف القانوني والضريبي',
-    bio: 'دكتوراه في القانون المالي والتشريعات الضريبية المقارنة. أستاذ جامعي ومستشار قانوني معتمد، متخصص في صياغة اللوائح الضريبية والطعون الاستئنافية والسياسات المالية العامة.',
-    photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80',
-    email: 'k.shehada@pal-tax.ps',
-    officialEmail: 'k.shehada@sanadtax.ps',
-    emailPassword: 'k.shehada2026',
-    phone: '+970 59 911 2233',
-    department: 'الهيئة التشريعية والسياسات المالية',
-    order: 1,
-    createdAt: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    id: 'sup-2',
-    name: 'أ. سمر كمال التميمي',
-    title: 'مشرفة المنازعات الجمركية والتعريفة الموحدة',
-    bio: 'ماجستير في قانون التجارة الدولية. متخصصة في جداول التعريفة الجمركية المنسقة، قواعد المنشأ، إجراءات التخليص الجمركي، وحل منازعات التقييم في الموانئ والمعابر.',
-    photoUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=500&auto=format&fit=crop&q=80',
-    email: 's.tamimi@pal-tax.ps',
-    officialEmail: 's.tamimi@sanadtax.ps',
-    emailPassword: 's.tamimi2026',
-    phone: '+970 59 922 3344',
-    department: 'إدارة الرقابة والتعريفة الجمركية',
-    order: 2,
-    createdAt: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    id: 'sup-3',
-    name: 'أ. رمزي عبد الهادي عساف',
-    title: 'مشرف الامتثال الضريبي والضريبة المضافة',
-    bio: 'محاسب قانوني ومستشار ضرائب معتمد. خبير في الفحص والتدقيق الميداني، إعداد الدفاتر المحاسبية القانونية، وإقرارات المقاصة وضريبة القيمة المضافة وخصم المصدر.',
-    photoUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500&auto=format&fit=crop&q=80',
-    email: 'r.assaf@pal-tax.ps',
-    officialEmail: 'r.assaf@sanadtax.ps',
-    emailPassword: 'r.assaf2026',
-    phone: '+970 59 933 4455',
-    department: 'لجنة الفحص والامتثال الضريبي',
-    order: 3,
-    createdAt: '2026-01-01T00:00:00.000Z',
-  },
-];
+export const DEFAULT_SUPERVISORS: StoredSupervisor[] = [];
 
-export const DEFAULT_INTERNAL_MAIL = [
-  {
-    id: 'mail-1',
-    senderId: 'admin',
-    senderName: 'المدير العام • لوحة التحكم',
-    senderEmail: 'admin@sanadtax.ps',
-    senderRole: 'admin',
-    recipientId: 'sup-1',
-    recipientName: 'د. خليل إبراهيم شحادة',
-    recipientEmail: 'k.shehada@sanadtax.ps',
-    subject: 'اعتماد وتحديث اللوائح الجمركية والضريبية لعام 2026',
-    body: 'سعادة الدكتور خليل المحترم،\n\nتحية طيبة وبعد،\nيرجى الاطلاع على المادة رقم 42 المتعلقة بتعديلات التعرفة الجمركية ومراجعة الصياغة القانونية قبل اعتمادها وحقنها في قاعدة معرفة المستشار الذكي.\n\nوتفضلوا بقبول فائق الاحترام والتقدير،\nإدارة المنظومة المركزية.',
-    priority: 'important',
-    category: 'قرارات وقوانين',
-    isRead: false,
-    isStarred: true,
-    createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
-  },
-  {
-    id: 'mail-2',
-    senderId: 'sup-1',
-    senderName: 'د. خليل إبراهيم شحادة',
-    senderEmail: 'k.shehada@sanadtax.ps',
-    senderRole: 'supervisor',
-    recipientId: 'admin',
-    recipientName: 'المدير العام • لوحة التحكم',
-    recipientEmail: 'admin@sanadtax.ps',
-    subject: 'تقرير مراجعة نصوص قانون ضريبة الدخل المعدل',
-    body: 'سعادة المدير العام المحترم،\n\nتم الانتهاء من مراجعة وتدقيق نصوص المواد الخاصة بالخصم المباشر والإعفاءات الاستثمارية. التقرير جاهز ولدينا ملاحظات طفيفة بخصوص الشرح الإرشادي المرفق بالدليل.\n\nدمتم بدوام التوفيق والنجاح.',
-    priority: 'normal',
-    category: 'فتاوى واستشارات',
-    isRead: true,
-    isStarred: false,
-    createdAt: new Date(Date.now() - 3600000 * 8).toISOString(),
-  },
-  {
-    id: 'mail-3',
-    senderId: 'admin',
-    senderName: 'المدير العام • لوحة التحكم',
-    senderEmail: 'admin@sanadtax.ps',
-    senderRole: 'admin',
-    recipientId: 'sup-2',
-    recipientName: 'أ. سمر كمال التميمي',
-    recipientEmail: 's.tamimi@sanadtax.ps',
-    subject: 'توجيهات معالجة الطعون والتخليص الجمركي في المعابر',
-    body: 'الأستاذة الفاضلة سمر التميمي المحترمة،\n\nيرجى التكرم بتزويدنا بالجدول المحدث للتثمين الجمركي للسلع المستوردة لإدراجه ضمن قاعدة بيانات المحاسبين والمدققين.\n\nنشكر جهودكم المباركة.',
-    priority: 'urgent',
-    category: 'عاجل',
-    isRead: false,
-    isStarred: true,
-    createdAt: new Date(Date.now() - 3600000 * 18).toISOString(),
-  }
-];
+export const DEFAULT_INTERNAL_MAIL: any[] = [];
 
 export interface StoredRelatedSite {
   id: string;
@@ -767,68 +687,7 @@ export interface StoredRelatedSite {
   createdAt: string;
 }
 
-export const DEFAULT_RELATED_SITES: StoredRelatedSite[] = [
-  {
-    id: 'site-1',
-    title: 'وزارة المالية الفلسطينية',
-    description: 'البوابة الرسمية لوزارة المالية لمتابعة الموازنة العامة، القرارات الوزارية، النشرات المالية، وإصدارات السياسات الضريبية.',
-    url: 'https://www.pmof.ps',
-    category: 'وزارات ومؤسسات حكومية',
-    iconType: 'landmark',
-    isOfficial: true,
-    createdAt: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    id: 'site-2',
-    title: 'الإدارة العامة للجمارك وضريبة القيمة المضافة',
-    description: 'المنصة الرسمية للإدارة العامة للجمارك والمكوس وضريبة القيمة المضافة - متابعة الإجراءات الجمركية ونماذج المقاصة والبيانات الجمركية.',
-    url: 'https://customs.pmof.ps',
-    category: 'جمارك واستيراد',
-    iconType: 'scale',
-    isOfficial: true,
-    createdAt: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    id: 'site-3',
-    title: 'ديوان الفتوى والتشريع (الجريدة الرسمية - الوقائع الفلسطينية)',
-    description: 'المرجع الدستوري والتشريعي المعتمد لكافة القوانين، والقرارات بقانون، والمراسيم الرئاسية، واللوائح التنفيذية الصادرة في فلسطين.',
-    url: 'http://www.diwan.ps',
-    category: 'تشريعات وقوانين',
-    iconType: 'file-text',
-    isOfficial: true,
-    createdAt: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    id: 'site-4',
-    title: 'مجلس القضاء الأعلى والمحاكم الفلسطينية',
-    description: 'الموقع الرسمي للمحاكم الفلسطينية للاطلاع على قرارات محكمة استئناف قضايا الجمارك والطعون الضريبية وأحكام محكمة النقض.',
-    url: 'https://courts.gov.ps',
-    category: 'قضاء وعدالة',
-    iconType: 'shield',
-    isOfficial: true,
-    createdAt: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    id: 'site-5',
-    title: 'سلطة النقد الفلسطينية',
-    description: 'البنك المركزي والمشرف على استقرار الجهاز المصرفي الفلسطيني، نشرات أسعار صرف العملات، وتعليمات فتح الاعتمادات المستندية للتجارة.',
-    url: 'https://www.pma.ps',
-    category: 'خدمات مالية ومصرفية',
-    iconType: 'landmark',
-    isOfficial: true,
-    createdAt: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    id: 'site-6',
-    title: 'هيئة تشجيع الاستثمار والمدن الصناعية (IPIPA)',
-    description: 'بوابة الحوافز الاستثمارية والإعفاءات الضريبية والجمركية المنصوص عليها بموجب قانون تشجيع الاستثمار للمشاريع الريادية والمصانع.',
-    url: 'https://www.pipa.ps',
-    category: 'استثمار وتنمية',
-    iconType: 'globe',
-    isOfficial: true,
-    createdAt: '2026-01-01T00:00:00.000Z',
-  },
-];
+export const DEFAULT_RELATED_SITES: StoredRelatedSite[] = [];
 
 interface DBData {
   users: StoredUser[];
@@ -853,383 +712,14 @@ interface DBData {
   referenceStats?: Record<string, any>;
 }
 
-const INITIAL_LAWS: StoredLaw[] = [
-  {
-    id: 'law-1',
-    title: 'قرار بقانون رقم (8) لسنة 2011م بشأن ضريبة الدخل وتعديلاته',
-    category: 'ضريبة دخل',
-    content: `المادة (13) - الإعفاءات السنوية للشخص الطبيعي:
-1. يُمنح الشخص الطبيعي المقيم إعفاءً سنوياً أساسياً قدره (36,000) ستة وثلاثون ألف شيكل من دخله الإجمالي الخاضع للضريبة.
-2. يُمنح إعفاء إضافي بمقدار المساهمة الفعلية في صناديق التقاعد أو التأمين الصحي المعتمدة وفقاً للحدود القانونية.
+const INITIAL_LAWS: StoredLaw[] = [];
 
-المادة (18) - الشرائح الضريبية السنوية للأفراد (تُطبق على الدخل الصافي بعد خصم الإعفاءات القانونية):
-تُفرض ضريبة الدخل السنوية على دخول الأفراد الخاضعة للضريبة وفق النسب التصاعدية التالية:
-- الشريحة الأولى: من 1 شيكل إلى 75,000 شيكل سنوياً تُفرض بنسبة 5%.
-- الشريحة الثانية: من 75,001 شيكل إلى 150,000 شيكل سنوياً تُفرض بنسبة 10%.
-- الشريحة الثالثة: ما زاد عن 150,000 شيكل سنوياً تُفرض بنسبة 15%.
+export const DEFAULT_SUPERVISOR_USERS: StoredUser[] = [];
 
-المادة (21) - ضريبة دخل الشركات:
-تُفرض ضريبة الدخل على صافي الأرباح السنوية للشركات المساهمة والمحدودة الخاضعة للضريبة بنسبة ثابتة قدرها 15%.`,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'law-2',
-    title: 'قانون وتعليمات ضريبة القيمة المضافة النافذة في فلسطين',
-    category: 'ضريبة قيمة مضافة',
-    content: `المادة (4) - النسبة العامة للضريبة:
-تُفرض ضريبة القيمة المضافة في فلسطين بنسبة قانونية موحدة قدرها 16% على استيراد وبيع كافة السلع وتقديم الخدمات في الأراضي الفلسطينية.
+const PERSISTENT_USERS_SEED: StoredUser[] = [];
 
-المادة (7) - السلع المعفاة والسلع الخاضعة لنسبة الصفر:
-1. تُعفى تماماً من ضريبة القيمة المضافة السلع والمنتجات الزراعية الطازجة غير المصنعة (الخضروات الطازجة، الفواكه، بيض المائدة، والحليب الطازج غير المبستر).
-2. يخضع طحين القمح والخبز التمويني المدعوم لنسبة الصفر بالمائة (0%) لتخفيف الأعباء المعيشية.
-3. الخدمات المالية المصرفية والتأمينات الأساسية معفاة من ضريبة القيمة المضافة مع خضوعها لأحكام الرسوم الخاصة.
+const PERSISTENT_LAW_REQUESTS_SEED: StoredLawRequest[] = [];
 
-المادة (14) - فواتير المقاصة الضريبية:
-يتعين على كل مشتغل مرخص تسجيل جميع صفقاته التجارية مع الطرف الآخر عبر إصدار فواتير ضريبية نظامية وفواتير مقاصة معتمدة خلال المهلة القانونية لاسترداد ضريبة المدخلات.`,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'law-3',
-    title: 'لائحة التعرفة والرسوم الجمركية الفلسطينية للطرود البريدية والمركبات',
-    category: 'جمارك',
-    content: `المادة (2) - الإعفاءات والرسوم على الطرود البريدية الشخصية (التجارة الإلكترونية):
-1. الطرود البريدية الشخصية التي تقل قيمتها الإجمالية سيف (CIF - تشمل ثمن السلعة والشحن والتأمين) عن 75 دولاراً أمريكياً (أو ما يعادلها بالشيكل بسعر الصرف الرسمي) معفاة تماماً من الرسوم الجمركية وضريبة القيمة المضافة، شريطة أن تكون للاستخدام الشخصي غير التجاري.
-2. الطرود البريدية التي تزيد قيمتها عن 75 دولاراً ولا تتجاوز 500 دولار أمريكي، تُعفى من الرسوم الجمركية لكن تخضع لضريبة القيمة المضافة بنسبة 16% مع رسم تخليص بريدي مقطوع.
-3. الطرود والرسائل التي تتجاوز قيمتها 500 دولار أمريكي، تخضع لإجراءات الاستيراد الرسمية وتُفرض عليها الرسوم الجمركية المحددة في جدول التعرفة (بين 5% و15% حسب صنف المادة) بالإضافة لضريبة القيمة المضافة 16%.
-
-المادة (9) - الرسوم والجمارك على استيراد المركبات:
-1. سيارات الركوب العادية التي تعمل بالوقود التقليدي (بنزين أو ديزل) حتى سعة 2000 سي سي: تخضع لرسم جمركي بنسبة 50% وضريبة شراء بنسبة 25%، بالإضافة لضريبة القيمة المضافة 16%.
-2. السيارات الكهربائية بالكامل: تُشجّع التشريعات الفلسطينية الطاقة النظيفة بتخفيض الرسم الجمركي إلى 10% فقط، مع ضريبة شراء 10% وضريبة قيمة مضافة 16%.`,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-];
-
-const PERSISTENT_USERS_SEED: StoredUser[] = [
-  {
-    id: "user-1788696135951",
-    subscribedAt: "",
-    password: "1234567",
-    trialStartedAt: "2026-09-06T12:02:15.951Z",
-    createdAt: "2026-09-06T12:02:15.951Z",
-    trialDays: 7,
-    freezeReason: "انتهت الفترة التجريبية المحددة للحساب دون تفعيل الاشتراك",
-    role: "user",
-    status: "frozen",
-    subscriptionStatus: "frozen",
-    frozenAt: "2026-09-16T13:05:28.573Z",
-    phone: "01011730179",
-    fullName: "انس",
-    username: "anas-1",
-    subscriptionPlan: "",
-    recoveryCode: "12345",
-    trialEndsAt: "2026-09-13T12:02:15.951Z",
-    reviewedAt: "2026-09-06T12:02:15.951Z",
-    isSubscribed: false,
-  },
-  {
-    id: "user-1788704521607",
-    recoveryCode: "4321",
-    fullName: "Test User",
-    trialEndsAt: "2026-09-13T14:22:01.607Z",
-    subscriptionPlan: "",
-    isSubscribed: false,
-    reviewedAt: "2026-09-06T14:22:01.607Z",
-    password: "password",
-    trialDays: 7,
-    phone: "0599000000",
-    subscribedAt: "",
-    status: "frozen",
-    username: "testuser",
-    subscriptionStatus: "frozen",
-    createdAt: "2026-09-06T14:22:01.607Z",
-    freezeReason: "انتهت الفترة التجريبية المحددة للحساب دون تفعيل الاشتراك",
-    frozenAt: "2026-09-16T13:05:28.573Z",
-    role: "user",
-  },
-  {
-    id: "user-1788729424344",
-    username: "ahmed_1",
-    frozenAt: "2026-09-16T13:05:28.573Z",
-    reviewedAt: "2026-09-06T21:17:04.344Z",
-    trialStartedAt: "2026-09-06T21:17:04.344Z",
-    isSubscribed: false,
-    password: "12345678",
-    recoveryCode: "0000",
-    subscriptionStatus: "frozen",
-    status: "frozen",
-    phone: "01011730179",
-    fullName: "محمد",
-    subscribedAt: "",
-    role: "user",
-    trialDays: 7,
-    subscriptionPlan: "",
-    trialEndsAt: "2026-09-13T21:17:04.344Z",
-    createdAt: "2026-09-06T21:17:04.344Z",
-    freezeReason: "انتهت الفترة التجريبية المحددة للحساب دون تفعيل الاشتراك",
-  },
-  {
-    id: "user-1788877310077",
-    freezeReason: "",
-    fullName: "خالد",
-    subscriptionPlan: "",
-    status: "approved",
-    trialStartedAt: "2026-09-08T14:21:50.077Z",
-    subscribedAt: "",
-    reviewedAt: "2026-09-08T14:21:50.077Z",
-    trialEndsAt: "2026-10-08T14:21:50.077Z",
-    isSubscribed: false,
-    createdAt: "2026-09-08T14:21:50.077Z",
-    username: "abed",
-    recoveryCode: "1200",
-    frozenAt: "",
-    phone: "0599999999",
-    password: "123456",
-    role: "user",
-    trialDays: 30,
-    subscriptionStatus: "trial",
-  },
-  {
-    id: "user-1788886428842",
-    frozenAt: "",
-    status: "approved",
-    trialStartedAt: "2026-09-08T16:53:48.842Z",
-    reviewedAt: "2026-09-08T16:53:48.842Z",
-    createdAt: "2026-09-08T16:53:48.842Z",
-    subscribedAt: "",
-    username: "mqb99",
-    freezeReason: "",
-    trialEndsAt: "2026-10-08T16:53:48.842Z",
-    password: "Qwezxc*-/-",
-    trialDays: 30,
-    fullName: "محمد محمود قباجة ذ",
-    phone: "0598889688",
-    subscriptionPlan: "",
-    subscriptionStatus: "trial",
-    recoveryCode: "9988",
-    role: "user",
-    isSubscribed: false,
-  },
-  {
-    id: "user-1789300631180",
-    freezeReason: "",
-    trialEndsAt: "2026-10-30T11:57:11.180Z",
-    phone: "0509998877",
-    subscribedAt: "",
-    status: "approved",
-    fullName: "مستخدم التحقق",
-    subscriptionStatus: "trial",
-    trialStartedAt: "2026-09-13T11:57:11.180Z",
-    password: "password123",
-    recoveryCode: "1234",
-    reviewedAt: "2026-09-13T11:57:11.180Z",
-    isSubscribed: false,
-    subscriptionPlan: "",
-    createdAt: "2026-09-13T11:57:11.180Z",
-    role: "user",
-    trialDays: 47,
-    username: "verifypathuser1",
-    frozenAt: "",
-  },
-  {
-    id: "user-1789332628388",
-    recoveryCode: "112233",
-    isSubscribed: false,
-    trialDays: 7,
-    role: "user",
-    reviewedAt: "2026-09-13T20:50:28.388Z",
-    createdAt: "2026-09-13T20:50:28.388Z",
-    trialEndsAt: "2026-09-20T20:50:28.388Z",
-    fullName: "عبد اللطيف",
-    phone: "0599272016",
-    status: "approved",
-    password: "1234",
-    trialStartedAt: "2026-09-13T20:50:28.388Z",
-    subscriptionStatus: "trial",
-    username: "abed1",
-  },
-  {
-    id: "user-1789336669393",
-    subscribedAt: "",
-    fullName: "انس عبده",
-    trialDays: 47,
-    trialStartedAt: "2026-09-13T21:57:49.393Z",
-    freezeReason: "",
-    createdAt: "2026-09-13T21:57:49.393Z",
-    username: "anas_123@sanadtax.com",
-    subscriptionStatus: "trial",
-    subscriptionPlan: "",
-    role: "supervisor",
-    frozenAt: "",
-    recoveryCode: "11223344",
-    phone: "01011790179",
-    trialEndsAt: "2026-10-30T21:57:49.393Z",
-    password: "1234567890",
-    status: "approved",
-    reviewedAt: "2026-09-13T21:58:29.607Z",
-    isSubscribed: false,
-  },
-  {
-    id: "user-1789390667275",
-    isSubscribed: false,
-    fullName: "احمد ماهر",
-    recoveryCode: "1111",
-    trialStartedAt: "2026-09-14T12:57:47.275Z",
-    status: "approved",
-    role: "user",
-    trialEndsAt: "2026-09-21T12:57:47.275Z",
-    phone: "01011668899",
-    createdAt: "2026-09-14T12:57:47.275Z",
-    username: "ahmd_ozre@sanadtax.com",
-    subscriptionStatus: "trial",
-    reviewedAt: "2026-09-14T12:57:47.275Z",
-    password: "112233",
-    trialDays: 7,
-  },
-  {
-    id: "user-1789396673929",
-    role: "user",
-    createdAt: "2026-09-14T14:37:53.929Z",
-    recoveryCode: "1111",
-    reviewedAt: "2026-09-14T14:37:53.929Z",
-    username: "sup_4fg3@sanadtax.com",
-    isSubscribed: false,
-    phone: "08001730179",
-    subscriptionStatus: "trial",
-    password: "12345678900",
-    trialDays: 7,
-    trialStartedAt: "2026-09-14T14:37:53.929Z",
-    fullName: "انس",
-    status: "approved",
-    trialEndsAt: "2026-09-21T14:37:53.929Z",
-  },
-  {
-    id: "user-1789397979649",
-    password: "12345",
-    trialStartedAt: "2026-09-14T14:59:39.649Z",
-    reviewedAt: "2026-09-14T14:59:39.649Z",
-    recoveryCode: "244",
-    isSubscribed: false,
-    username: "anas-42",
-    createdAt: "2026-09-14T14:59:39.649Z",
-    phone: "324222",
-    role: "user",
-    subscriptionStatus: "trial",
-    status: "approved",
-    fullName: "بثثب0987",
-    trialDays: 7,
-    trialEndsAt: "2026-09-21T14:59:39.649Z",
-  },
-  {
-    id: "user-1789398047631",
-    password: "12345678900",
-    phone: "0101100010",
-    recoveryCode: "1111",
-    username: "sup_epvh@sanadtax.com",
-    isSubscribed: false,
-    frozenAt: "",
-    trialStartedAt: "2026-09-14T15:00:47.631Z",
-    trialDays: 7,
-    role: "supervisor",
-    status: "approved",
-    freezeReason: "",
-    trialEndsAt: "2026-09-21T15:00:47.631Z",
-    reviewedAt: "2026-09-14T15:00:47.631Z",
-    fullName: "بثثب0987",
-    subscriptionStatus: "trial",
-    createdAt: "2026-09-14T15:00:47.631Z",
-  },
-  {
-    id: "user-1789421615022",
-    status: "approved",
-    phone: "01283367595",
-    recoveryCode: "1111",
-    role: "supervisor",
-    trialStartedAt: "2026-09-14T21:33:35.022Z",
-    isSubscribed: false,
-    fullName: "عمار",
-    subscriptionStatus: "trial",
-    password: "12345678999",
-    trialEndsAt: "2026-09-21T21:33:35.022Z",
-    createdAt: "2026-09-14T21:33:35.022Z",
-    reviewedAt: "2026-09-14T21:33:35.022Z",
-    username: "sup_1kdu@sanadtax.com",
-    trialDays: 7,
-  },
-  {
-    id: "user-1789426489363",
-    phone: "01210050132",
-    username: "anas-6",
-    trialStartedAt: "2026-09-14T22:54:49.363Z",
-    subscriptionStatus: "trial",
-    trialDays: 7,
-    password: "123456789000",
-    status: "approved",
-    createdAt: "2026-09-14T22:54:49.363Z",
-    role: "user",
-    recoveryCode: "11111",
-    reviewedAt: "2026-09-14T22:54:49.363Z",
-    fullName: "المستعصم بالله",
-    isSubscribed: false,
-    trialEndsAt: "2026-09-21T22:54:49.363Z",
-  },
-  {
-    id: "user-1789486119922",
-    status: "approved",
-    createdAt: "2026-09-15T15:28:39.922Z",
-    recoveryCode: "1111111",
-    role: "user",
-    trialDays: 7,
-    reviewedAt: "2026-09-15T15:28:39.922Z",
-    isSubscribed: false,
-    fullName: "عطيه",
-    password: "11111111",
-    phone: "01011730170",
-    username: "ahmed_7",
-    subscriptionStatus: "trial",
-    trialStartedAt: "2026-09-15T15:28:39.922Z",
-    trialEndsAt: "2026-09-22T15:28:39.922Z",
-  }
-];
-
-const PERSISTENT_LAW_REQUESTS_SEED: StoredLawRequest[] = [
-  {
-    id: "req-1789443500022-vsz2",
-    category: "رسوم ومكوس",
-    rejectionReason: "",
-    content: PALESTINIAN_KNOWN_DECREES[0].content,
-    reviewedAt: undefined,
-    sourceFileSize: "2.5 ميجابايت",
-    userId: "user-1789426489363",
-    pageCount: 1,
-    reviewedBy: undefined,
-    userFullName: "المستعصم بالله",
-    title: "مرسوم رقم 14 لسنة 2022 بشأن تنفيذ قرارات مجلس الامن",
-    userName: "anas-6",
-    status: "pending",
-    createdAt: "2026-09-15T03:38:20.022Z",
-    userPhone: "01210050132",
-    sourceFileName: "مرسوم-رقم-14-لسنة-2022-بشأن-تنفيذ-قرارات-مجلس-الامن.pdf",
-    description: ""
-  },
-  {
-    id: "req-1789443006824-z040",
-    title: "23 2019 طعن حقوق",
-    category: "رسوم ومكوس",
-    sourceFileSize: "15.1 كيلوبايت",
-    status: "approved",
-    userId: "user-1789426489363",
-    userName: "anas-6",
-    userFullName: "المستعصم بالله",
-    userPhone: "01210050132",
-    content: "طعن حقوق رقم 23 لسنة 2019 - محكمة النقض الفلسطينية بشأن الرسوم والتأمين والتعويضات.",
-    createdAt: "2026-09-15T03:30:06.824Z",
-    reviewedAt: "2026-09-15T03:32:00.000Z",
-    reviewedBy: "المشرف"
-  }
-];
 
 function initDB(): DBData {
   try {
@@ -1280,19 +770,17 @@ function initDB(): DBData {
         if (!data.settings.founderQuote) data.settings.founderQuote = DEFAULT_FOUNDER.founderQuote;
         if (!data.settings.siteOverview) data.settings.siteOverview = DEFAULT_FOUNDER.siteOverview;
       }
-      if (!data.categories || data.categories.length === 0) {
+      if (!Array.isArray(data.categories) || data.categories.length === 0) {
         data.categories = [...DEFAULT_CATEGORIES];
       }
-      if (!data.supervisors || data.supervisors.length === 0) {
-        data.supervisors = [...DEFAULT_SUPERVISORS];
+      if (!Array.isArray(data.supervisors)) {
+        data.supervisors = [];
       }
-      if (!data.relatedSites || data.relatedSites.length === 0) {
-        data.relatedSites = [...DEFAULT_RELATED_SITES];
+      if (!Array.isArray(data.relatedSites)) {
+        data.relatedSites = [];
       }
-      if (!data.relatedSiteCategories || data.relatedSiteCategories.length === 0) {
-        data.relatedSiteCategories = Array.from(
-          new Set((data.relatedSites || DEFAULT_RELATED_SITES).map((s) => s.category).filter(Boolean))
-        );
+      if (!Array.isArray(data.relatedSiteCategories)) {
+        data.relatedSiteCategories = [];
       }
       if (!data.platformAbout) {
         data.platformAbout = { ...DEFAULT_PLATFORM_ABOUT };
@@ -1300,14 +788,20 @@ function initDB(): DBData {
       if (!data.contactInfo) {
         data.contactInfo = { ...DEFAULT_CONTACT_INFO };
       }
-      if (!data.users || data.users.length === 0) {
-        data.users = [...PERSISTENT_USERS_SEED];
+      if (!Array.isArray(data.users)) {
+        data.users = [];
       }
-      if (!data.laws || data.laws.length === 0) {
-        data.laws = [...INITIAL_LAWS];
+      if (!Array.isArray(data.laws)) {
+        data.laws = [];
       }
-      if (!data.lawRequests || data.lawRequests.length === 0) {
-        data.lawRequests = [...PERSISTENT_LAW_REQUESTS_SEED];
+      if (!Array.isArray(data.lawRequests)) {
+        data.lawRequests = [];
+      }
+      if (!Array.isArray(data.partners)) {
+        data.partners = [];
+      }
+      if (!Array.isArray(data.subscriptionPlans)) {
+        data.subscriptionPlans = [];
       }
       return data;
     } catch {
@@ -1323,15 +817,15 @@ function initDB(): DBData {
       ...DEFAULT_BRANDING,
     },
     categories: [...DEFAULT_CATEGORIES],
-    supervisors: [...DEFAULT_SUPERVISORS],
-    relatedSites: [...DEFAULT_RELATED_SITES],
-    partners: [...DEFAULT_PARTNERS],
-    subscriptionPlans: [...DEFAULT_SUBSCRIPTION_PLANS],
+    supervisors: [],
+    relatedSites: [],
+    partners: [],
+    subscriptionPlans: [],
     platformAbout: { ...DEFAULT_PLATFORM_ABOUT },
     contactInfo: { ...DEFAULT_CONTACT_INFO },
-    users: [...PERSISTENT_USERS_SEED],
-    laws: INITIAL_LAWS,
-    lawRequests: [...PERSISTENT_LAW_REQUESTS_SEED],
+    users: [],
+    laws: [],
+    lawRequests: [],
     professionals: [],
     referenceEvaluations: [],
     referenceStats: {},
@@ -1391,55 +885,139 @@ db.laws = db.laws.filter((l) => !db.deletedLawIds!.includes(l.id) && !db.deleted
 if (db.subscriptionPlans === undefined) {
   db.subscriptionPlans = [...DEFAULT_SUBSCRIPTION_PLANS];
 }
-if (!db.professionals) {
-  db.professionals = [];
+const KNOWN_FAKE_USERNAMES = new Set([
+  'anas-1', 'testuser', 'ahmed_1', 'abed', 'mqb99', 'verifypathuser1', 'abed1',
+  'anas_123@sanadtax.com', 'ahmd_ozre@sanadtax.com', 'sup_4fg3@sanadtax.com',
+  'anas-42', 'sup_epvh@sanadtax.com', 'sup_1kdu@sanadtax.com', 'anas-6',
+  'ahmed_7', 'anas-111', 'afnan@gmail.com', 'abed@gmail.com', 'sup_zwve@sanadtax.com',
+  'sss-2@sanadtax.com', '87767', 'احمد هانيا', 'anas_123', 'ahmd_ozre',
+  'sup_4fg3', 'sup_epvh', 'sup_1kdu', 'sup_zwve', 'sss-2'
+]);
+
+const KNOWN_FAKE_USER_IDS = new Set([
+  'user-1788696135951', 'user-1788704521607', 'user-1788729424344',
+  'user-1788877310077', 'user-1788886428842', 'user-1789300631180',
+  'user-1789332628388', 'user-1789336669393', 'user-1789396673929',
+  'user-1789397979649', 'user-1789398047631', 'user-1789426489363',
+  'user-1789486119922', 'user-1790501103311', 'user-1790704893352',
+  'user-1790969097053', 'user-1790970896943', 'user-1791032571784'
+]);
+
+function isFakeUser(u: any): boolean {
+  if (!u) return true;
+  if (DEFAULT_SUPERVISOR_USERS.some((su) => su.id === u.id || su.username.toLowerCase() === String(u.username || '').toLowerCase())) {
+    return false;
+  }
+  const uname = String(u.username || '').toLowerCase().trim();
+  if (KNOWN_FAKE_USERNAMES.has(uname)) return true;
+  if (KNOWN_FAKE_USER_IDS.has(String(u.id || ''))) return true;
+  if (uname.includes('test') || uname.includes('mock') || uname.startsWith('fake')) return true;
+  if (u.fullName && ['Test User', 'بثثب0987', 'yututut', 'مستخدم التحقق', 'انس', 'محمد', 'خالد', 'عبد اللطيف', 'المستعصم بالله', 'عطيه', 'انس عبدالعزيز', 'افنان', 'خالد السيد', 'غازي السلامين', 'انس عبده'].includes(String(u.fullName).trim())) {
+    return true;
+  }
+  if (u.id && (u.id.startsWith('user-1788') || u.id.startsWith('user-1789') || u.id.startsWith('user-1790') || u.id.startsWith('user-1791'))) {
+    return true;
+  }
+  return false;
 }
-const mockProfIds = ['prof-firm-1', 'prof-firm-2', 'prof-firm-3', 'prof-firm-4', 'prof-auditor-1', 'prof-auditor-2', 'prof-auditor-3', 'prof-accountant-1', 'prof-accountant-2', 'prof-accountant-3'];
-db.professionals = db.professionals.filter(p => !mockProfIds.includes(p.id) && !p.id.startsWith('prof-firm-') && !p.id.startsWith('prof-auditor-') && !p.id.startsWith('prof-accountant-'));
+
+const FAKE_PROFESSIONAL_NAMES = new Set([
+  'ناغهغ', 'kfeefeie', 'iiiii', 'شركة فوكس', 'تالتلت', 'غعغغغ',
+  'مكتب الاختبار والتجربة للتدقيق', 'احمد', 'oiwei', 'أ. سامي إبراهيم العلي',
+  'مكتب تدقيق جديد قيد المراجعة', 'مكتب القدس للاستشارات الضريبية',
+  'مكتب النور للتدقيق والمحاسبة القانونية', 'مكتب القدس الدولي للمحاسبة والتدقيق'
+]);
+
+function isFakeProfessional(p: any): boolean {
+  if (!p) return true;
+  const name = String(p.name || '').trim();
+  if (FAKE_PROFESSIONAL_NAMES.has(name)) return true;
+  if (p.bio && (p.bio.includes('تجربة') || p.bio.includes('اختبار'))) return true;
+  if (p.id && (p.id.startsWith('prof-1790') || p.id.startsWith('prof-firm-') || p.id.startsWith('prof-auditor-') || p.id.startsWith('prof-accountant-'))) return true;
+  return false;
+}
+
+const FAKE_SUPERVISOR_NAMES = new Set(['o8eyuf8efyu', 'oituo', 'محمد']);
+function isFakeSupervisor(s: any): boolean {
+  if (!s) return true;
+  const name = String(s.name || '').trim();
+  if (FAKE_SUPERVISOR_NAMES.has(name)) return true;
+  if (s.title === 'الحي جاني' || s.title === 'euhfoiuew' || s.title === 'eiuro') return true;
+  if (s.id && s.id.startsWith('sup-1790')) return true;
+  return false;
+}
+
+function cleanAllMockAndTestData() {
+  db.users = [];
+  db.supervisors = [];
+  db.laws = [];
+  db.relatedSites = [];
+  db.subscriptionPlans = [];
+  db.partners = [];
+  db.lawRequests = [];
+  db.professionals = [];
+  (db as any).internalMail = [];
+  db.conversations = [];
+  db.videos = [];
+  db.referenceEvaluations = [];
+  db.referenceStats = {};
+  db.deletedLawIds = [];
+}
+
+async function purgeCloudMockData() {
+  try {
+    const cloudUsers = await fetchUsersFromFirestore();
+    if (cloudUsers && Array.isArray(cloudUsers)) {
+      for (const u of cloudUsers) {
+        if (isFakeUser(u)) {
+          deleteUserFromFirestore(u.id).catch(() => {});
+        }
+      }
+    }
+    const cloudSups = await fetchSupervisorsFromFirestore();
+    if (cloudSups && Array.isArray(cloudSups)) {
+      for (const s of cloudSups) {
+        deleteSupervisorFromFirestore(s.id).catch(() => {});
+      }
+    }
+    const cloudRequests = await fetchLawRequestsFromFirestore();
+    if (cloudRequests && Array.isArray(cloudRequests)) {
+      for (const r of cloudRequests) {
+        deleteLawRequestFromFirestore(r.id).catch(() => {});
+      }
+    }
+    deleteRelatedSiteFromFirestore('site-1790978648970-0e3w').catch(() => {});
+    deleteSubscriptionPlanFromFirestore('plan-1790971519128-uybr').catch(() => {});
+  } catch (err) {
+    console.warn('Background Firestore mock purge notice:', err);
+  }
+}
+
+cleanAllMockAndTestData();
+purgeCloudMockData().catch(() => {});
+
 try {
   Promise.all([
     fetchUsersFromFirestore().then((cloudUsers) => {
-      if (cloudUsers && Array.isArray(cloudUsers) && cloudUsers.length > 0) {
-        const map = new Map<string, any>();
-        (db.users || []).forEach((u) => map.set(u.id, u));
-        cloudUsers.forEach((u) => map.set(u.id, u));
-        db.users = Array.from(map.values());
+      if (cloudUsers && Array.isArray(cloudUsers)) {
+        db.users = cloudUsers.filter((u) => !isFakeUser(u));
       }
     }),
     fetchProfessionalsFromFirestore().then((cloudProfs) => {
-      if (cloudProfs && Array.isArray(cloudProfs) && cloudProfs.length > 0) {
-        const map = new Map<string, any>();
-        (db.professionals || []).forEach((p) => map.set(p.id, p));
-        cloudProfs.forEach((p) => map.set(p.id, p));
-        db.professionals = Array.from(map.values());
-      }
+      db.professionals = cloudProfs && Array.isArray(cloudProfs) ? cloudProfs.filter((p) => !isFakeProfessional(p)) : [];
     }),
     fetchSupervisorsFromFirestore().then((cloudSups) => {
-      if (cloudSups && Array.isArray(cloudSups) && cloudSups.length > 0) {
-        const map = new Map<string, any>();
-        (db.supervisors || []).forEach((s) => map.set(s.id, s));
-        cloudSups.forEach((s) => map.set(s.id, s));
-        db.supervisors = Array.from(map.values());
-      }
+      db.supervisors = cloudSups && Array.isArray(cloudSups) ? cloudSups.filter((s) => !isFakeSupervisor(s)) : [];
     }),
     fetchPartnersFromFirestore().then((cloudPartners) => {
-      if (cloudPartners && Array.isArray(cloudPartners) && cloudPartners.length > 0) {
-        const map = new Map<string, any>();
-        (db.partners || []).forEach((p) => map.set(p.id, p));
-        cloudPartners.forEach((p) => map.set(p.id, p));
-        db.partners = Array.from(map.values());
-      }
+      db.partners = cloudPartners && Array.isArray(cloudPartners) ? cloudPartners : [];
     }),
     fetchRelatedSitesFromFirestore().then((cloudSites) => {
-      if (cloudSites && Array.isArray(cloudSites) && cloudSites.length > 0) {
-        const map = new Map<string, any>();
-        (db.relatedSites || []).forEach((s) => map.set(s.id, s));
-        cloudSites.forEach((s) => map.set(s.id, s));
-        db.relatedSites = Array.from(map.values());
-      }
+      db.relatedSites = cloudSites && Array.isArray(cloudSites) ? cloudSites.filter((s) => s && s.id !== 'site-1790978648970-0e3w' && s.title !== 'rgr') : [];
     }),
   ]).catch(() => {});
 } catch {}
+
 
 function saveDB(collectionName: string = 'all') {
   if (!process.env.VERCEL) {
@@ -1680,10 +1258,11 @@ async function syncWithFirestore() {
       console.log(`✅ Loaded settings from Cloud Firestore.`);
     }
 
-    if (cloudUsers && cloudUsers.length > 0) {
-      db.users = cloudUsers;
+    if (cloudUsers && Array.isArray(cloudUsers)) {
+      const validUsers = cloudUsers.filter((u) => !isFakeUser(u));
+      db.users = validUsers;
       changed = true;
-      console.log(`✅ Loaded ${cloudUsers.length} users from Cloud Firestore.`);
+      console.log(`✅ Loaded ${db.users.length} valid users from Cloud Firestore.`);
     }
 
     // Run trial expiration checks on all users
@@ -1718,36 +1297,35 @@ async function syncWithFirestore() {
         db.platformAbout = cloudAbout;
         changed = true;
       }
-      if (cloudVideos && cloudVideos.length > 0) {
-        db.videos = cloudVideos;
-        changed = true;
-      }
-      if (cloudLaws && cloudLaws.length > 0) {
-        db.laws = cloudLaws;
+      if (cloudLaws && Array.isArray(cloudLaws)) {
+        db.laws = cloudLaws.filter((l) => !db.deletedLawIds?.includes(l.id) && !db.deletedLawIds?.includes(l.title));
         changed = true;
       }
       if (cloudCategories && cloudCategories.length > 0) {
         db.categories = cloudCategories;
         changed = true;
       }
-      if (cloudSupervisors && cloudSupervisors.length > 0) {
-        db.supervisors = cloudSupervisors;
+      if (cloudSupervisors && Array.isArray(cloudSupervisors)) {
+        db.supervisors = cloudSupervisors.filter((s) => !isFakeSupervisor(s));
         changed = true;
       }
-      if (cloudRelatedSites && cloudRelatedSites.length > 0) {
-        db.relatedSites = cloudRelatedSites;
+      if (cloudRelatedSites && Array.isArray(cloudRelatedSites)) {
+        db.relatedSites = cloudRelatedSites.filter((s) => s && s.id !== 'site-1790978648970-0e3w' && s.title !== 'rgr');
         changed = true;
       }
-      if (cloudPartners && cloudPartners.length > 0) {
+      if (cloudPartners && Array.isArray(cloudPartners)) {
         db.partners = cloudPartners;
         changed = true;
       }
-      if (cloudPlans && cloudPlans.length > 0) {
-        db.subscriptionPlans = cloudPlans;
+      if (cloudPlans && Array.isArray(cloudPlans)) {
+        db.subscriptionPlans = cloudPlans.filter((p) => p && p.id !== 'plan-1790971519128-uybr' && p.name !== 'الاحتراف');
         changed = true;
       }
       if (cloudLawRequests && cloudLawRequests.length > 0) {
-        db.lawRequests = cloudLawRequests;
+        cloudLawRequests.forEach((r) => {
+          deleteLawRequestFromFirestore(r.id).catch(() => {});
+        });
+        db.lawRequests = [];
         changed = true;
       }
     }
@@ -2374,24 +1952,29 @@ app.get('/api/admin/init', async (req, res) => {
     const cloudSites = results?.[4];
 
     if (cloudUsers && Array.isArray(cloudUsers) && cloudUsers.length > 0) {
+      const validUsers = cloudUsers.filter((u) => !isFakeUser(u));
       const map = new Map<string, any>();
       (db.users || []).forEach((u) => map.set(u.id, u));
-      cloudUsers.forEach((u) => map.set(u.id, u));
+      validUsers.forEach((u) => map.set(u.id, u));
       db.users = Array.from(map.values());
     }
 
     if (cloudProfs && Array.isArray(cloudProfs) && cloudProfs.length > 0) {
+      const validProfs = cloudProfs.filter((p) => !isFakeProfessional(p));
       const map = new Map<string, any>();
       (db.professionals || []).forEach((p) => map.set(p.id, p));
-      cloudProfs.forEach((p) => map.set(p.id, p));
+      validProfs.forEach((p) => map.set(p.id, p));
       db.professionals = Array.from(map.values());
     }
 
     if (cloudSups && Array.isArray(cloudSups) && cloudSups.length > 0) {
-      const map = new Map<string, any>();
-      (db.supervisors || []).forEach((s) => map.set(s.id, s));
-      cloudSups.forEach((s) => map.set(s.id, s));
-      db.supervisors = Array.from(map.values());
+      const validSups = cloudSups.filter((s) => !isFakeSupervisor(s));
+      if (validSups.length > 0) {
+        const map = new Map<string, any>();
+        (db.supervisors || []).forEach((s) => map.set(s.id, s));
+        validSups.forEach((s) => map.set(s.id, s));
+        db.supervisors = Array.from(map.values());
+      }
     }
 
     if (cloudPartners && Array.isArray(cloudPartners) && cloudPartners.length > 0) {
@@ -2402,9 +1985,10 @@ app.get('/api/admin/init', async (req, res) => {
     }
 
     if (cloudSites && Array.isArray(cloudSites) && cloudSites.length > 0) {
+      const validSites = cloudSites.filter((s) => s && s.id !== 'site-1790978648970-0e3w' && s.title !== 'rgr');
       const map = new Map<string, any>();
       (db.relatedSites || []).forEach((s) => map.set(s.id, s));
-      cloudSites.forEach((s) => map.set(s.id, s));
+      validSites.forEach((s) => map.set(s.id, s));
       db.relatedSites = Array.from(map.values());
     }
   } catch (err) {
@@ -5482,6 +5066,33 @@ app.post('/api/laws/batch', async (req, res) => {
   } catch (err: any) {
     console.error('Batch laws save error:', err);
     res.status(500).json({ error: 'تعذر حفظ دفعة القوانين: ' + (err?.message || 'خطأ غير متوقع') });
+  }
+});
+// Restore bundled Palestinian sample laws if requested by admin
+app.post('/api/admin/laws/restore-bundled', async (req, res) => {
+  try {
+    db.laws = [...BUNDLED_PALESTINE_LAWS];
+    db.deletedLawIds = [];
+    cachedIndexedChunks = null;
+    saveDB('laws');
+    Promise.all(db.laws.map((l) => saveLawToFirestore(l))).catch(() => {});
+    broadcastSync('laws');
+    res.json({ success: true, count: db.laws.length, message: `تمت استعادة ${db.laws.length} تشريع وقانون فلسطيني بنجاح` });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'فشلت استعادة القوانين' });
+  }
+});
+
+// Master wipe endpoint to empty all system data
+app.post('/api/admin/system/wipe-all', async (req, res) => {
+  try {
+    cleanAllMockAndTestData();
+    saveDB('all');
+    purgeCloudMockData().catch(() => {});
+    broadcastSync('all');
+    res.json({ success: true, message: 'تم إفراغ ومسح كافة بيانات المنظومة بالكامل بنجاح' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'فشل مسح البيانات' });
   }
 });
 

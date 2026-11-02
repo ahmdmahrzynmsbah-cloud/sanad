@@ -7,13 +7,22 @@ import {
 
 export const SUPERVISORS_CACHE_KEY = 'sanad_cached_supervisors';
 
+export const DEFAULT_OFFICIAL_SUPERVISORS: Supervisor[] = [];
+
 /**
  * تنقية قائمة المشرفين والتحقق من صحة البيانات
  */
 export function cleanSupervisorsList(list: any[]): Supervisor[] {
   if (!Array.isArray(list)) return [];
-  // Ensure every item is a valid supervisor object with at least a name
-  return list.filter((s) => s && typeof s === 'object' && (s.name || s.title));
+  const fakeNames = new Set(['o8eyuf8efyu', 'oituo', 'محمد']);
+  return list.filter((s) => {
+    if (!s || typeof s !== 'object') return false;
+    if (!s.name && !s.title) return false;
+    if (fakeNames.has(s.name)) return false;
+    if (s.title === 'الحي جاني' || s.title === 'euhfoiuew' || s.title === 'eiuro') return false;
+    if (s.id && s.id.startsWith('sup-1790')) return false;
+    return true;
+  });
 }
 
 /**

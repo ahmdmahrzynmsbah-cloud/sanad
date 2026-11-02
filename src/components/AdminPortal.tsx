@@ -191,7 +191,17 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
         const cached = localStorage.getItem('sanad_cached_users');
         if (cached) {
           const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const fakeNames = new Set([
+              'anas-1', 'testuser', 'ahmed_1', 'abed', 'mqb99', 'verifypathuser1', 'abed1',
+              'anas_123@sanadtax.com', 'ahmd_ozre@sanadtax.com', 'sup_4fg3@sanadtax.com',
+              'anas-42', 'sup_epvh@sanadtax.com', 'sup_1kdu@sanadtax.com', 'anas-6',
+              'ahmed_7', 'anas-111', 'afnan@gmail.com', 'abed@gmail.com', 'sup_zwve@sanadtax.com',
+              'sss-2@sanadtax.com', '87767', 'احمد هانيا'
+            ]);
+            const cleaned = parsed.filter((u: any) => u && u.username && !fakeNames.has(u.username.toLowerCase()) && !u.id?.startsWith('user-178') && !u.id?.startsWith('user-179'));
+            if (cleaned.length > 0) return cleaned;
+          }
         }
       } catch {}
     }
@@ -1074,18 +1084,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       if (res.ok) {
         const data = await res.json();
         if (!isSupervisor) {
-          if (data.users && Array.isArray(data.users) && data.users.length > 0) {
+          if (data.users && Array.isArray(data.users)) {
             setUsers(data.users);
-          } else {
-            // If init returned 0 users due to cold start, fetch directly from Firestore
             try {
-              const firestoreUsers = await directFetchUsersFromFirestore();
-              if (firestoreUsers && firestoreUsers.length > 0) {
-                setUsers(firestoreUsers);
-              }
-            } catch (fErr) {
-              console.warn('Fallback direct users fetch failed:', fErr);
-            }
+              localStorage.setItem('sanad_cached_users', JSON.stringify(data.users));
+            } catch {}
+          } else {
+            setUsers([]);
+            try {
+              localStorage.removeItem('sanad_cached_users');
+            } catch {}
           }
         } else {
           setUsers([]);
@@ -1119,30 +1127,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
           } catch {}
           if (onLawsUpdated) onLawsUpdated();
         } else {
-          // If init returned 0 laws due to cold start, fetch from direct Firestore or localStorage cache
-          try {
-            const firestoreLaws = await directFetchLawsFromFirestore();
-            if (firestoreLaws) {
-              const activeLaws = filterDeletedLaws(firestoreLaws);
-              setLaws(activeLaws);
-              try {
-                localStorage.setItem('sanad_cached_laws', JSON.stringify(activeLaws));
-              } catch {}
-              if (onLawsUpdated) onLawsUpdated();
-            } else {
-              const cached = localStorage.getItem('sanad_cached_laws');
-              if (cached) {
-                const parsed = JSON.parse(cached);
-                if (Array.isArray(parsed)) {
-                  const activeLaws = filterDeletedLaws(parsed);
-                  setLaws(activeLaws);
-                  if (onLawsUpdated) onLawsUpdated();
-                }
-              }
-            }
-          } catch (fErr) {
-            console.warn('Fallback laws fetch failed:', fErr);
-          }
+          setLaws([]);
         }
         if (data.categories) {
           setCategories(data.categories);

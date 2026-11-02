@@ -969,80 +969,7 @@ export interface StoredPartner {
   createdAt: string;
 }
 
-export const DEFAULT_PARTNERS: StoredPartner[] = [
-  {
-    id: 'partner-1',
-    name: 'نقابة مدققي الحسابات القانونيين الفلسطينية (PACPA)',
-    description: 'تعاون مهني ومعرفي لاعتماد المنظومة كمرجع ذكي موثوق لمدققي الحسابات والمحاسبين القانونيين في فلسطين في تدقيق الضرائب والبيانات المالية.',
-    category: 'نقابات وجمعيات مهنية',
-    partnershipType: 'شريك مهني وتدريبي',
-    logoUrl: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=300&auto=format&fit=crop&q=80',
-    websiteUrl: 'https://www.pacpa.ps',
-    order: 1,
-    isActive: true,
-    createdAt: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    id: 'partner-2',
-    name: 'اتحاد الغرف التجارية الصناعية الزراعية الفلسطينية',
-    description: 'شراكة استراتيجية لتمكين قطاع التجار والمستوردين وأصحاب الأعمال من فهم التعريفة الجمركية والامتثال الضريبي وتسهيل المعاملات التجارية.',
-    category: 'اتحادات وقطاع خاص',
-    partnershipType: 'شريك استراتيجي',
-    logoUrl: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=300&auto=format&fit=crop&q=80',
-    websiteUrl: 'https://www.pal-chambers.org',
-    order: 2,
-    isActive: true,
-    createdAt: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    id: 'partner-3',
-    name: 'جمعية البنوك في فلسطين (ABP)',
-    description: 'تنسيق وتكامل حول المعايير والسياسات الضريبية والائتمانية المنظمة للعمليات المصرفية والتحويلات المالية والتسهيلات البنكية.',
-    category: 'بنوك ومؤسسات مالية',
-    partnershipType: 'شريك مالي واستشاري',
-    logoUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=300&auto=format&fit=crop&q=80',
-    websiteUrl: 'https://www.abp.ps',
-    order: 3,
-    isActive: true,
-    createdAt: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    id: 'partner-4',
-    name: 'معهد أبحاث السياسات الاقتصادية الفلسطيني (ماس - MAS)',
-    description: 'تعاون بحثي وعلمي في مجال تحليل السياسات المالية العامة، والتشريعات الاقتصادية، ودراسة الآثار التنموية للضرائب والجمارك.',
-    category: 'مراكز أبحاث ودراسات',
-    partnershipType: 'شريك بحثي وأكاديمي',
-    logoUrl: 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=300&auto=format&fit=crop&q=80',
-    websiteUrl: 'https://www.mas.ps',
-    order: 4,
-    isActive: true,
-    createdAt: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    id: 'partner-5',
-    name: 'جامعة بيرزيت - كلية الأعمال والاقتصاد',
-    description: 'شراكة أكاديمية لتدريب طلبة المحاسبة والعلوم المالية وتأهيلهم على المنظومات الذكية للتشريعات الضريبية والجمركية وتطبيقاتها العملية.',
-    category: 'جامعات ومؤسسات أكاديمية',
-    partnershipType: 'اعتماد أكاديمي وتدريب',
-    logoUrl: 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=300&auto=format&fit=crop&q=80',
-    websiteUrl: 'https://www.birzeit.edu',
-    order: 5,
-    isActive: true,
-    createdAt: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    id: 'partner-6',
-    name: 'ملتقى رجال الأعمال الفلسطيني',
-    description: 'دعم وتمكين الشركات الوطنية والمستثمرين في الاستفادة من الحوافز الاستثمارية وقوانين تشجيع الاستثمار والامتثال للأنظمة الضريبية.',
-    category: 'اتحادات وقطاع خاص',
-    partnershipType: 'شريك قطاع الأعمال',
-    logoUrl: 'https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=300&auto=format&fit=crop&q=80',
-    websiteUrl: 'https://www.pbf.ps',
-    order: 6,
-    isActive: true,
-    createdAt: '2026-01-01T00:00:00.000Z',
-  },
-];
+export const DEFAULT_PARTNERS: StoredPartner[] = [];
 
 export async function fetchPartnersFromFirestore(): Promise<StoredPartner[] | null> {
   if (isQuotaExceeded()) return null;
@@ -1144,82 +1071,7 @@ export interface StoredSubscriptionPlan {
   updatedAt?: string;
 }
 
-export const DEFAULT_SUBSCRIPTION_PLANS: StoredSubscriptionPlan[] = [
-  {
-    id: 'plan-trial',
-    name: 'الخطة التجريبية (المجانية)',
-    badge: 'تجربة مجانية',
-    price: 0,
-    currency: '₪',
-    billingPeriod: 'لمدة 7 أيام',
-    description: 'استكشف قوة الذكاء الاصطناعي التشريعي وسهولة الاستعلام عن القوانين الفلسطينية مجاناً.',
-    features: [
-      'الوصول لجميع نصوص القوانين والتشريعات (52+ قانون وقرار بقانون)',
-      'استشارات ذكية وفورية مع المستشار القانوني سَنَد 24/7',
-      'تخريج أرقام المواد والفقرات القانونية مع كل إجابة',
-      'دعم العمل المزدوج عبر الهواتف الذكية وأجهزة الكمبيوتر',
-    ],
-    notIncludedFeatures: [
-      'تصدير المذكرات والاستشارات بصيغ رسمية قابلة للطباعة',
-      'دعم واستشارات مخصصة لملفات التدقيق والمقاصة المعقدة',
-    ],
-    isPopular: false,
-    buttonText: 'ابدأ تجربتك المجانية الآن',
-    buttonActionType: 'register',
-    order: 1,
-    isActive: true,
-    createdAt: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    id: 'plan-pro',
-    name: 'الباقة الاحترافية (المحاسبون والمحامون)',
-    badge: 'الأكثر طلباً',
-    price: 99,
-    currency: '₪',
-    billingPeriod: 'شهرياً',
-    description: 'الخيار الأمثل للمحاسبين القانونيين، المحامين، المستشارين الضريبيين، وأصحاب الأعمال.',
-    features: [
-      'استعلامات واستشارات غير محدودة على مدار الساعة',
-      'تغطية شاملة لكافة قوانين الجمارك، ضريبة الدخل، وضريبة القيمة المضافة',
-      'محاكاة حسابية فورية للضرائب والجمارك الفلسطينية بالشيكل',
-      'تصدير وتوثيق المذكرات والاستشارات القانونية والضريبية',
-      'إمكانية تقديم اقتراحات وإضافة قوانين ولوائح تنظيمية جديدة للمراجعة',
-      'دعم فني واستشاري ذو أولوية عبر واتساب',
-    ],
-    notIncludedFeatures: [],
-    isPopular: true,
-    buttonText: 'اشترك الآن في الباقة الاحترافية',
-    buttonActionType: 'whatsapp',
-    whatsappCustomMessage: 'مرحباً، أرغب بالاشتراك في الباقة الاحترافية (المحاسبون والمحامون) في منصة مساعد الجمارك والضرائب الفلسطينية',
-    order: 2,
-    isActive: true,
-    createdAt: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    id: 'plan-enterprise',
-    name: 'باقة الشركات والمؤسسات الكبرى',
-    badge: 'للشركات والمصانع',
-    price: 249,
-    currency: '₪',
-    billingPeriod: 'شهرياً',
-    description: 'حلول تشريعية وضريبية وجمركية متقدمة للشركات الكبرى، المصانع، والمكاتب الاستشارية متعددة الفروع.',
-    features: [
-      'كل مميزات الباقة الاحترافية مع صلاحيات وصول متعددة لفريق العمل',
-      'استشارات متقدمة في التجارة الخارجية وملفات المقاصة والبيانات الجمركية',
-      'أرشفة مركزية لتقارير واستفسارات الفريق مع سجل زمني كامل',
-      'إسناد تشريعي لاتفاقيات التجارة الحرة والتعرفة الجمركية التفضيلية',
-      'مدير حساب استشاري مخصص وجلسات تدريب وتأهيل لفريق المحاسبة',
-    ],
-    notIncludedFeatures: [],
-    isPopular: false,
-    buttonText: 'تواصل للاشتراك المؤسسي',
-    buttonActionType: 'whatsapp',
-    whatsappCustomMessage: 'مرحباً، نود الاستفسار عن باقة الشركات والمؤسسات الكبرى في منصة مساعد الجمارك والضرائب الفلسطينية',
-    order: 3,
-    isActive: true,
-    createdAt: '2026-01-01T00:00:00.000Z',
-  },
-];
+export const DEFAULT_SUBSCRIPTION_PLANS: StoredSubscriptionPlan[] = [];
 
 export async function fetchSubscriptionPlansFromFirestore(): Promise<StoredSubscriptionPlan[] | null> {
   if (isQuotaExceeded()) return null;
@@ -1616,99 +1468,15 @@ let isAlreadySeeded = false;
  * Seed initial laws, users, categories, supervisors, and related sites to Firestore if they do not already exist
  */
 export async function seedFirestoreIfEmpty(
-  initialUsers: StoredUser[],
-  initialLaws: StoredLaw[],
-  initialCategories: StoredCategory[],
-  initialSupervisors?: StoredSupervisor[],
-  initialRelatedSites?: StoredRelatedSite[],
-  initialPartners?: StoredPartner[]
+  _initialUsers: StoredUser[],
+  _initialLaws: StoredLaw[],
+  _initialCategories: StoredCategory[],
+  _initialSupervisors?: StoredSupervisor[],
+  _initialRelatedSites?: StoredRelatedSite[],
+  _initialPartners?: StoredPartner[]
 ) {
-  if (isAlreadySeeded) return;
-  if (isQuotaExceeded()) return;
-  const db = initFirestore();
-  if (!db) return;
-
-  try {
-    const lawsCol = collection(db, 'laws');
-    const usersCol = collection(db, 'users');
-    const catCol = collection(db, 'legal_categories');
-    const supCol = collection(db, 'supervisors');
-    const sitesCol = collection(db, 'related_sites');
-    const settingsCol = collection(db, 'system_settings');
-    const partnersCol = collection(db, 'partners');
-    const plansCol = collection(db, 'subscription_plans');
-
-    // Check all collections in parallel
-    const [lawSnap, userSnap, catSnap, supSnap, siteSnap, settingsSnap, partnersSnap, plansSnap] = await Promise.all([
-      getDocs(lawsCol),
-      getDocs(usersCol),
-      getDocs(catCol),
-      getDocs(supCol),
-      getDocs(sitesCol),
-      getDocs(settingsCol),
-      getDocs(partnersCol),
-      getDocs(plansCol),
-    ]);
-
-    const seedTasks: Promise<any>[] = [];
-
-    let hasAbout = false;
-    let hasContact = false;
-    settingsSnap.forEach((docSnap) => {
-      if (docSnap.id === 'platform_about') hasAbout = true;
-      if (docSnap.id === 'contact_info') hasContact = true;
-    });
-
-    if (!hasAbout) {
-      console.log('Seeding default platform_about to Firestore...');
-      seedTasks.push(savePlatformAboutToFirestore(DEFAULT_PLATFORM_ABOUT));
-    }
-
-    if (!hasContact) {
-      console.log('Seeding default contact_info to Firestore...');
-      seedTasks.push(saveContactInfoToFirestore(DEFAULT_CONTACT_INFO));
-    }
-
-    if (lawSnap.empty) {
-      console.log('Seeding initial laws to Firestore cloud database in parallel...');
-      seedTasks.push(Promise.all(initialLaws.map((law) => saveLawToFirestore(law))));
-    }
-
-    // Do not seed fake/demo users - only real users who register will be stored in Firestore
-
-    if (catSnap.empty) {
-      console.log('Seeding default legal categories to Firestore cloud database in parallel...');
-      seedTasks.push(Promise.all(initialCategories.map((cat) => saveCategoryToFirestore(cat))));
-    }
-
-    if (supSnap.empty && initialSupervisors && initialSupervisors.length > 0) {
-      console.log('Seeding default supervisors to Firestore cloud database...');
-      seedTasks.push(Promise.all(initialSupervisors.map((s) => saveSupervisorToFirestore(s))));
-    }
-
-    if (siteSnap.empty && initialRelatedSites && initialRelatedSites.length > 0) {
-      console.log('Seeding default related sites to Firestore cloud database...');
-      seedTasks.push(Promise.all(initialRelatedSites.map((s) => saveRelatedSiteToFirestore(s))));
-    }
-
-    if (partnersSnap.empty && initialPartners && initialPartners.length > 0) {
-      console.log('Seeding default partners to Firestore cloud database...');
-      seedTasks.push(Promise.all(initialPartners.map((p) => savePartnerToFirestore(p))));
-    }
-
-    if (plansSnap.empty) {
-      console.log('Seeding default subscription plans to Firestore cloud database...');
-      seedTasks.push(Promise.all(DEFAULT_SUBSCRIPTION_PLANS.map((plan) => saveSubscriptionPlanToFirestore(plan))));
-    }
-
-    if (seedTasks.length > 0) {
-      await Promise.all(seedTasks);
-      console.log('✅ Parallel Firestore database seeding completed.');
-    }
-    isAlreadySeeded = true;
-  } catch (err) {
-    handleFirestoreError('seedFirestoreIfEmpty', err);
-  }
+  isAlreadySeeded = true;
+  return;
 }
 
 export async function fetchVideosFromFirestore(): Promise<any[] | null> {
