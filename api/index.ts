@@ -1,3 +1,6 @@
+process.env.VERCEL = '1';
+process.env.NODE_ENV = 'production';
+
 // Global polyfills for serverless Node execution (Vercel)
 if (typeof (globalThis as any).DOMMatrix === 'undefined') {
   (globalThis as any).DOMMatrix = class DOMMatrix {
