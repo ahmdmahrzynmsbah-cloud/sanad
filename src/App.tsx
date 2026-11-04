@@ -38,6 +38,33 @@ const ModuleLoadingFallback: React.FC<{ label?: string }> = ({ label = 'جاري
   </div>
 );
 
+// System Data Clean Version - Synchronously flushes stale cached users/laws/supervisors in user browsers
+const SYSTEM_WIPE_VERSION = 'v5_permanent_clean_slate_2026';
+if (typeof window !== 'undefined') {
+  try {
+    const currentVer = localStorage.getItem('sanad_wipe_version');
+    if (currentVer !== SYSTEM_WIPE_VERSION) {
+      const keysToPurge = [
+        'sanad_cached_users',
+        'sanad_cached_laws',
+        'sanad_cached_supervisors',
+        'sanad_cached_related_sites',
+        'sanad_cached_partners',
+        'sanad_cached_professionals',
+        'admin_cached_plans',
+        'sanad_deleted_law_ids',
+        'sanad_deleted_plan_ids',
+        'sanad_registered_users',
+        'sanad_mock_users',
+        'pal_laws_count',
+      ];
+      keysToPurge.forEach((k) => localStorage.removeItem(k));
+      localStorage.setItem('sanad_wipe_version', SYSTEM_WIPE_VERSION);
+      localStorage.setItem('pal_laws_count', '0');
+    }
+  } catch {}
+}
+
 export default function App() {
   const [branding, setBranding] = useState<SystemBranding | undefined>(() => {
     try {
@@ -95,10 +122,9 @@ export default function App() {
   const [lawsCount, setLawsCount] = useState<number>(() => {
     try {
       const saved = localStorage.getItem('pal_laws_count');
-      const parsed = saved ? parseInt(saved, 10) : 0;
-      return parsed > 0 ? parsed : 149;
+      return saved ? parseInt(saved, 10) : 0;
     } catch {
-      return 149;
+      return 0;
     }
   });
   const [showWelcomeModal, setShowWelcomeModal] = useState<boolean>(() => {
@@ -126,33 +152,37 @@ export default function App() {
     try {
       const res = await fetch(`/api/laws?_t=${Date.now()}`, { cache: 'no-store' });
       const data = await res.json();
-      if (res.ok && Array.isArray(data.laws) && data.laws.length > 0) {
+      if (res.ok && Array.isArray(data.laws)) {
         loadedCount = data.laws.length;
+        setLawsCount(loadedCount);
+        try {
+          localStorage.setItem('pal_laws_count', String(loadedCount));
+        } catch {}
+        return;
       }
     } catch (err) {
       console.warn('Failed to load laws count from API:', err);
     }
 
-    if (loadedCount === 0) {
-      try {
-        const { directFetchLawsFromFirestore } = await import('./services/clientFirestore');
-        const firestoreLaws = await directFetchLawsFromFirestore();
-        if (firestoreLaws && firestoreLaws.length > 0) {
-          loadedCount = firestoreLaws.length;
-        }
-      } catch (fsErr) {
-        console.warn('Direct Firestore laws count notice:', fsErr);
+    try {
+      const { directFetchLawsFromFirestore } = await import('./services/clientFirestore');
+      const firestoreLaws = await directFetchLawsFromFirestore();
+      if (Array.isArray(firestoreLaws)) {
+        loadedCount = firestoreLaws.length;
+        setLawsCount(loadedCount);
+        try {
+          localStorage.setItem('pal_laws_count', String(loadedCount));
+        } catch {}
+        return;
       }
+    } catch (fsErr) {
+      console.warn('Direct Firestore laws count notice:', fsErr);
     }
 
-    if (loadedCount > 0) {
-      setLawsCount(loadedCount);
-      try {
-        localStorage.setItem('pal_laws_count', String(loadedCount));
-      } catch {}
-    } else {
-      setLawsCount((prev) => (prev > 0 ? prev : 149));
-    }
+    setLawsCount(0);
+    try {
+      localStorage.setItem('pal_laws_count', '0');
+    } catch {}
   }, []);
 
   // Fetch System Branding

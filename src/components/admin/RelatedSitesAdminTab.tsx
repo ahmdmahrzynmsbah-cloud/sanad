@@ -42,18 +42,7 @@ interface SiteCategoryItem {
 export const RelatedSitesAdminTab: React.FC<RelatedSitesAdminTabProps> = ({
   initialSites,
 }) => {
-  const [sites, setSites] = useState<RelatedSite[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = localStorage.getItem('sanad_cached_related_sites');
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch {}
-    }
-    return initialSites || [];
-  });
+  const [sites, setSites] = useState<RelatedSite[]>(initialSites || []);
   const [categories, setCategories] = useState<SiteCategoryItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [loading, setLoading] = useState(false);
@@ -218,49 +207,48 @@ export const RelatedSitesAdminTab: React.FC<RelatedSitesAdminTabProps> = ({
 
   const fetchSites = async () => {
     setLoading(true);
-    const map = new Map<string, RelatedSite>();
-
-    // 1. Local cache
-    try {
-      const cached = localStorage.getItem('sanad_cached_related_sites');
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed)) {
-          parsed.forEach((s: any) => { if (s && s.id && s.title) map.set(s.id, s); });
-        }
-      }
-    } catch {}
-
-    // 2. Fetch from API
     try {
       const res = await fetch(`/api/related-sites?t=${Date.now()}`);
       if (res.ok) {
         const data = await res.json();
-        if (data.relatedSites && Array.isArray(data.relatedSites)) {
-          data.relatedSites.forEach((s: any) => { if (s && s.id && s.title) map.set(s.id, s); });
+        if (Array.isArray(data.relatedSites)) {
+          setSites(data.relatedSites);
+          try {
+            if (data.relatedSites.length > 0) {
+              localStorage.setItem('sanad_cached_related_sites', JSON.stringify(data.relatedSites));
+            } else {
+              localStorage.removeItem('sanad_cached_related_sites');
+            }
+          } catch {}
+          setLoading(false);
+          fetchCategories();
+          return;
         }
       }
     } catch (err) {
       console.warn('Failed to fetch related sites from API:', err);
     }
 
-    // 3. Direct Firestore Fallback
     try {
       const fsSites = await directFetchRelatedSitesFromFirestore();
-      if (fsSites && Array.isArray(fsSites)) {
-        fsSites.forEach((s: any) => { if (s && s.id && s.title) map.set(s.id, s); });
+      if (Array.isArray(fsSites)) {
+        setSites(fsSites);
+        try {
+          if (fsSites.length > 0) {
+            localStorage.setItem('sanad_cached_related_sites', JSON.stringify(fsSites));
+          } else {
+            localStorage.removeItem('sanad_cached_related_sites');
+          }
+        } catch {}
+        setLoading(false);
+        fetchCategories();
+        return;
       }
     } catch (fsErr) {
       console.warn('Firestore direct fetch notice:', fsErr);
     }
 
-    const merged = Array.from(map.values());
-    if (merged.length > 0) {
-      setSites(merged);
-      try {
-        localStorage.setItem('sanad_cached_related_sites', JSON.stringify(merged));
-      } catch {}
-    }
+    setSites([]);
     setLoading(false);
     fetchCategories();
   };

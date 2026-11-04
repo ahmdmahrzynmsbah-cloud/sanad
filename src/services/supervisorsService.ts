@@ -53,6 +53,10 @@ export function syncSupervisorsToLocalStorage(supervisors: Supervisor[]): void {
   if (typeof window !== 'undefined' && Array.isArray(supervisors)) {
     try {
       const cleaned = cleanSupervisorsList(supervisors);
+      if (cleaned.length === 0) {
+        localStorage.removeItem(SUPERVISORS_CACHE_KEY);
+        return;
+      }
       const sorted = [...cleaned].sort((a, b) => (a.order || 0) - (b.order || 0));
       localStorage.setItem(SUPERVISORS_CACHE_KEY, JSON.stringify(sorted));
     } catch (e) {

@@ -1729,6 +1729,24 @@ export async function directDeleteUserFromFirestore(
   }
 }
 
+export async function directWipeAllUsersFromFirestore(): Promise<boolean> {
+  const db = getClientDb();
+  if (!db) return false;
+
+  try {
+    const col = collection(db, 'users');
+    const snap = await getDocs(col);
+    if (!snap.empty) {
+      await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+    }
+    console.log(`[Client Firestore] Successfully wiped all users from Firestore.`);
+    return true;
+  } catch (err) {
+    handleClientFirestoreError('directWipeAllUsersFromFirestore', err);
+    return false;
+  }
+}
+
 /**
  * Direct fetch law requests from Firestore
  */

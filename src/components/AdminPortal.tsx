@@ -133,6 +133,31 @@ interface AdminPortalProps {
   onContactUpdated?: (contact: ContactInfo) => void;
 }
 
+// Synchronous client cache purge to permanently prevent resurrection of stale mock data
+if (typeof window !== 'undefined') {
+  const WIPE_VERSION = 'v5_permanent_clean_slate_2026';
+  try {
+    if (localStorage.getItem('sanad_wipe_version') !== WIPE_VERSION) {
+      const keysToPurge = [
+        'sanad_cached_users',
+        'sanad_cached_laws',
+        'sanad_cached_supervisors',
+        'sanad_cached_related_sites',
+        'sanad_cached_partners',
+        'sanad_cached_professionals',
+        'admin_cached_plans',
+        'sanad_deleted_law_ids',
+        'sanad_deleted_plan_ids',
+        'sanad_registered_users',
+        'sanad_mock_users',
+        'pal_laws_count'
+      ];
+      keysToPurge.forEach((k) => localStorage.removeItem(k));
+      localStorage.setItem('sanad_wipe_version', WIPE_VERSION);
+    }
+  } catch {}
+}
+
 export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUpdated, onBrandingUpdated, onAboutUpdated, onContactUpdated }) => {
   const isSupervisor = currentAdmin?.role === 'supervisor';
 
@@ -183,30 +208,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   // Law Requests state
   const [pendingLawRequestsCount, setPendingLawRequestsCount] = useState<number>(0);
 
-  // Users state with resilient local persistence (Restricted for supervisors)
-  const [users, setUsers] = useState<User[]>(() => {
-    if (isSupervisor) return [];
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = localStorage.getItem('sanad_cached_users');
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            const fakeNames = new Set([
-              'anas-1', 'testuser', 'ahmed_1', 'abed', 'mqb99', 'verifypathuser1', 'abed1',
-              'anas_123@sanadtax.com', 'ahmd_ozre@sanadtax.com', 'sup_4fg3@sanadtax.com',
-              'anas-42', 'sup_epvh@sanadtax.com', 'sup_1kdu@sanadtax.com', 'anas-6',
-              'ahmed_7', 'anas-111', 'afnan@gmail.com', 'abed@gmail.com', 'sup_zwve@sanadtax.com',
-              'sss-2@sanadtax.com', '87767', 'احمد هانيا'
-            ]);
-            const cleaned = parsed.filter((u: any) => u && u.username && !fakeNames.has(u.username.toLowerCase()) && !u.id?.startsWith('user-178') && !u.id?.startsWith('user-179'));
-            if (cleaned.length > 0) return cleaned;
-          }
-        }
-      } catch {}
-    }
-    return SEED_USERS;
-  });
+  // Users state (Empty slate by default, populated only from verified API/Firestore)
+  const [users, setUsers] = useState<User[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
   const [usersFilter, setUsersFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'frozen'>('all');
   const [userActionMessage, setUserActionMessage] = useState<string | null>(null);
@@ -214,6 +217,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [deleteUserError, setDeleteUserError] = useState<string | null>(null);
+  const [showWipeUsersModal, setShowWipeUsersModal] = useState(false);
+  const [isWipingUsers, setIsWipingUsers] = useState(false);
 
   // Trial & Subscription Settings & State
   const [defaultTrialDays, setDefaultTrialDays] = useState<number>(() => {
@@ -433,19 +438,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     handleSavePortalHeader(defaultTitle, defaultSubtitle);
   };
 
-  // Laws state with resilient local caching
-  const [laws, setLaws] = useState<Law[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = localStorage.getItem('sanad_cached_laws');
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch {}
-    }
-    return [];
-  });
+  // Laws state (Empty slate by default)
+  const [laws, setLaws] = useState<Law[]>([]);
   const [lawsLoading, setLawsLoading] = useState(false);
   const [lawSearch, setLawSearch] = useState('');
   const [lawCategoryFilter, setLawCategoryFilter] = useState<string>('الكل');
@@ -683,21 +677,21 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     setUsersLoading(true);
     let loadedUsers: User[] | null = null;
     try {
-      const res = await fetch('/api/admin/users', {
+      const res = await fetch(`/api/admin/users?t=${Date.now()}`, {
         headers: { 'x-admin-role': currentAdmin?.role || 'admin' }
       });
       const data = await safeFetchJson<{ users?: User[] }>(res);
-      if (data.ok && data.data?.users && Array.isArray(data.data.users) && data.data.users.length > 0) {
+      if (data.ok && data.data && Array.isArray(data.data.users)) {
         loadedUsers = data.data.users;
       }
     } catch (err) {
       console.warn('Failed to fetch users from API, trying direct Firestore:', err);
     }
 
-    if (!loadedUsers || loadedUsers.length === 0) {
+    if (loadedUsers === null) {
       try {
         const firestoreUsers = await directFetchUsersFromFirestore();
-        if (firestoreUsers && firestoreUsers.length > 0) {
+        if (Array.isArray(firestoreUsers)) {
           loadedUsers = firestoreUsers;
         }
       } catch (fErr) {
@@ -705,20 +699,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
       }
     }
 
-    if (loadedUsers && loadedUsers.length > 0) {
+    if (loadedUsers !== null) {
       setUsers(loadedUsers);
       try {
-        localStorage.setItem('sanad_cached_users', JSON.stringify(loadedUsers));
-      } catch {}
-    } else {
-      // Secondary fallback: recover previously cached users from localStorage or SEED_USERS
-      try {
-        const cached = localStorage.getItem('sanad_cached_users');
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setUsers(parsed);
-          }
+        if (loadedUsers.length > 0) {
+          localStorage.setItem('sanad_cached_users', JSON.stringify(loadedUsers));
+        } else {
+          localStorage.removeItem('sanad_cached_users');
         }
       } catch {}
     }
@@ -727,9 +714,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
 
   // Users, Laws, and categories localStorage persistence
   useEffect(() => {
-    if (typeof window !== 'undefined' && users.length > 0) {
+    if (typeof window !== 'undefined') {
       try {
-        localStorage.setItem('sanad_cached_users', JSON.stringify(users));
+        if (users.length > 0) {
+          localStorage.setItem('sanad_cached_users', JSON.stringify(users));
+        } else {
+          localStorage.removeItem('sanad_cached_users');
+        }
       } catch {}
     }
   }, [users]);
@@ -1983,6 +1974,33 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     } finally {
       setDeletingUserId(null);
     }
+  };
+
+  const handleWipeAllUsers = async () => {
+    setIsWipingUsers(true);
+    setUsers([]);
+    try {
+      localStorage.removeItem('sanad_cached_users');
+    } catch {}
+
+    try {
+      await fetch('/api/admin/users/wipe-all', { method: 'POST' });
+    } catch (e) {
+      console.warn('API wipe error:', e);
+    }
+
+    try {
+      const { directWipeAllUsersFromFirestore } = await import('../services/clientFirestore');
+      await directWipeAllUsersFromFirestore();
+    } catch (fsE) {
+      console.warn('Firestore wipe error:', fsE);
+    }
+
+    setIsWipingUsers(false);
+    setShowWipeUsersModal(false);
+    setUserActionMessage('تم تفريغ ومسح كافة الحسابات من قاعدة البيانات والمتصفح بنجاح.');
+    setTimeout(() => setUserActionMessage(null), 4000);
+    notifySync('users');
   };
 
   // Toggle user subscription status
@@ -3707,13 +3725,25 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
               </button>
             </div>
 
-            <button
-              onClick={fetchUsers}
-              className="text-xs text-gray-600 hover:text-gray-900 flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg cursor-pointer"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${usersLoading ? 'animate-spin' : ''}`} />
-              تحديث القائمة
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={fetchUsers}
+                className="text-xs text-gray-600 hover:text-gray-900 flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${usersLoading ? 'animate-spin' : ''}`} />
+                تحديث القائمة
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowWipeUsersModal(true)}
+                className="text-xs text-rose-700 hover:text-rose-800 hover:bg-rose-50 flex items-center gap-1.5 px-3 py-1.5 bg-white border border-rose-200 rounded-lg cursor-pointer transition-colors font-medium"
+                title="تفريغ ومسح كافة الحسابات والطلبات دفعة واحدة وتصفير القائمة"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <span>تفريغ الحسابات ({users.length})</span>
+              </button>
+            </div>
           </div>
 
           {/* User Requests Table / Cards */}
@@ -7451,6 +7481,45 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                   <span>تأكيد الحذف</span>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Wipe All Users Modal */}
+      {showWipeUsersModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-gray-200 text-center animate-in zoom-in-95 duration-200">
+            <div className="w-14 h-14 rounded-full bg-rose-100 flex items-center justify-center mx-auto mb-4 border border-rose-200">
+              <Trash2 className="w-7 h-7 text-rose-600" />
+            </div>
+            <h3 className="text-lg font-black text-gray-900 mb-2">تفريغ ومسح كافة الحسابات</h3>
+            <p className="text-xs text-gray-600 leading-relaxed mb-4">
+              هل أنت متأكد من رغبتك في حذف وتفريغ جميع طلبات وحسابات المستخدمين ({users.length} حساب) نهائياً من قاعدة البيانات والمتصفح؟<br/>
+              <span className="text-rose-600 font-bold mt-1 block">سيتم تصفير القائمة لتصبح فارغة تماماً دون أي حسابات وهمية أو سابقة.</span>
+            </p>
+            <div className="flex items-center gap-2 mt-4">
+              <button
+                type="button"
+                onClick={() => setShowWipeUsersModal(false)}
+                disabled={isWipingUsers}
+                className="flex-1 py-2.5 text-xs font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={handleWipeAllUsers}
+                disabled={isWipingUsers}
+                className="flex-1 py-2.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-50 shadow-xs cursor-pointer"
+              >
+                {isWipingUsers ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+                <span>تأكيد مسح وتفريغ الكل</span>
+              </button>
             </div>
           </div>
         </div>

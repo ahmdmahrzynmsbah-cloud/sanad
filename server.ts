@@ -877,8 +877,8 @@ if (Array.isArray(db.referenceEvaluations)) {
 if (!db.deletedLawIds) {
   db.deletedLawIds = [];
 }
-if (!db.laws || db.laws.length === 0) {
-  db.laws = [...BUNDLED_PALESTINE_LAWS];
+if (!db.laws) {
+  db.laws = [];
 }
 // Ensure deleted laws are strictly excluded
 db.laws = db.laws.filter((l) => !db.deletedLawIds!.includes(l.id) && !db.deletedLawIds!.includes(l.title));
@@ -5093,6 +5093,26 @@ app.post('/api/admin/system/wipe-all', async (req, res) => {
     res.json({ success: true, message: 'تم إفراغ ومسح كافة بيانات المنظومة بالكامل بنجاح' });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'فشل مسح البيانات' });
+  }
+});
+
+// Dedicated wipe endpoint to empty all users
+app.post('/api/admin/users/wipe-all', async (req, res) => {
+  try {
+    db.users = [];
+    saveDB('users');
+    try {
+      const cloudUsers = await fetchUsersFromFirestore();
+      if (cloudUsers && Array.isArray(cloudUsers)) {
+        await Promise.all(cloudUsers.map((u) => deleteUserFromFirestore(u.id).catch(() => {})));
+      }
+    } catch (e) {
+      console.warn('Error purging Firestore users in wipe-all:', e);
+    }
+    broadcastSync('users');
+    res.json({ success: true, message: 'تم مسح وإفراغ كافة حسابات وطلبات المستخدمين نهائياً' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'فشل مسح المستخدمين' });
   }
 });
 
