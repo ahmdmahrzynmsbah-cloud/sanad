@@ -39,7 +39,7 @@ const ModuleLoadingFallback: React.FC<{ label?: string }> = ({ label = 'جاري
 );
 
 // System Data Clean Version - Synchronously flushes stale cached users/laws/supervisors in user browsers
-const SYSTEM_WIPE_VERSION = 'v5_permanent_clean_slate_2026';
+const SYSTEM_WIPE_VERSION = 'v6_zero_laws_clean_2026';
 if (typeof window !== 'undefined') {
   try {
     const currentVer = localStorage.getItem('sanad_wipe_version');
@@ -57,6 +57,7 @@ if (typeof window !== 'undefined') {
         'sanad_registered_users',
         'sanad_mock_users',
         'pal_laws_count',
+        'pal_custom_laws',
       ];
       keysToPurge.forEach((k) => localStorage.removeItem(k));
       localStorage.setItem('sanad_wipe_version', SYSTEM_WIPE_VERSION);

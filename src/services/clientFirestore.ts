@@ -239,16 +239,8 @@ export async function directFetchLawsFromFirestore(): Promise<Law[]> {
     } catch {}
   }
 
-  // Merge bundled static laws with firestore and local extra laws, avoiding duplicate IDs/titles
+  // Merge firestore and local extra laws, avoiding duplicate IDs/titles
   const lawsMap = new Map<string, Law>();
-
-  for (const law of BUNDLED_PALESTINE_LAWS) {
-    if (deletedSet.has(law.id) || (law.title && (deletedSet.has(law.title) || deletedSet.has(law.title.trim().toLowerCase())))) {
-      continue;
-    }
-    lawsMap.set(law.id, law);
-    if (law.title) lawsMap.set(law.title.trim().toLowerCase(), law);
-  }
 
   for (const law of firestoreItems) {
     if (deletedSet.has(law.id) || (law.title && (deletedSet.has(law.title) || deletedSet.has(law.title.trim().toLowerCase())))) {
@@ -408,6 +400,31 @@ export async function directDeleteLawFromFirestore(lawId: string, lawTitle?: str
   } catch {}
 
   return true;
+}
+
+export async function directWipeAllLawsFromFirestore(): Promise<boolean> {
+  const db = getClientDb();
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem('sanad_cached_laws');
+      localStorage.removeItem('pal_custom_laws');
+      localStorage.setItem('pal_laws_count', '0');
+    } catch {}
+  }
+  if (!db) return true;
+
+  try {
+    const col = collection(db, 'laws');
+    const snap = await getDocs(col);
+    if (!snap.empty) {
+      await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+    }
+    console.log('[Client Firestore] Successfully wiped all laws from Firestore.');
+    return true;
+  } catch (err) {
+    handleClientFirestoreError('directWipeAllLawsFromFirestore', err);
+    return false;
+  }
 }
 
 // ----------------------------------------------------

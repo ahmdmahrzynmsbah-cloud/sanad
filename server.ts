@@ -5083,6 +5083,28 @@ app.post('/api/admin/laws/restore-bundled', async (req, res) => {
   }
 });
 
+// Dedicated wipe endpoint to empty all laws from database and cloud
+app.post('/api/admin/laws/wipe-all', async (req, res) => {
+  try {
+    db.laws = [];
+    db.deletedLawIds = [];
+    cachedIndexedChunks = null;
+    saveDB('laws');
+    try {
+      const cloudLaws = await fetchLawsFromFirestore();
+      if (cloudLaws && Array.isArray(cloudLaws)) {
+        await Promise.all(cloudLaws.map((l) => deleteLawFromFirestore(l.id).catch(() => {})));
+      }
+    } catch (e) {
+      console.warn('Error purging Firestore laws in wipe-all:', e);
+    }
+    broadcastSync('laws');
+    res.json({ success: true, message: 'تم إفراغ ومسح كافة القوانين والتشريعات من قاعدة المعرفة بنجاح' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'فشل مسح القوانين' });
+  }
+});
+
 // Master wipe endpoint to empty all system data
 app.post('/api/admin/system/wipe-all', async (req, res) => {
   try {

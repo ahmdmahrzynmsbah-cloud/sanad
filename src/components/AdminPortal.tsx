@@ -135,7 +135,7 @@ interface AdminPortalProps {
 
 // Synchronous client cache purge to permanently prevent resurrection of stale mock data
 if (typeof window !== 'undefined') {
-  const WIPE_VERSION = 'v5_permanent_clean_slate_2026';
+  const WIPE_VERSION = 'v6_zero_laws_clean_2026';
   try {
     if (localStorage.getItem('sanad_wipe_version') !== WIPE_VERSION) {
       const keysToPurge = [
@@ -150,7 +150,8 @@ if (typeof window !== 'undefined') {
         'sanad_deleted_plan_ids',
         'sanad_registered_users',
         'sanad_mock_users',
-        'pal_laws_count'
+        'pal_laws_count',
+        'pal_custom_laws',
       ];
       keysToPurge.forEach((k) => localStorage.removeItem(k));
       localStorage.setItem('sanad_wipe_version', WIPE_VERSION);
@@ -219,6 +220,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
   const [deleteUserError, setDeleteUserError] = useState<string | null>(null);
   const [showWipeUsersModal, setShowWipeUsersModal] = useState(false);
   const [isWipingUsers, setIsWipingUsers] = useState(false);
+  const [showWipeLawsModal, setShowWipeLawsModal] = useState(false);
+  const [isWipingLaws, setIsWipingLaws] = useState(false);
 
   // Trial & Subscription Settings & State
   const [defaultTrialDays, setDefaultTrialDays] = useState<number>(() => {
@@ -2001,6 +2004,36 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
     setUserActionMessage('تم تفريغ ومسح كافة الحسابات من قاعدة البيانات والمتصفح بنجاح.');
     setTimeout(() => setUserActionMessage(null), 4000);
     notifySync('users');
+  };
+
+  const handleWipeAllLaws = async () => {
+    setIsWipingLaws(true);
+    setLaws([]);
+    try {
+      localStorage.removeItem('sanad_cached_laws');
+      localStorage.removeItem('pal_custom_laws');
+      localStorage.setItem('pal_laws_count', '0');
+    } catch {}
+
+    try {
+      await fetch('/api/admin/laws/wipe-all', { method: 'POST' });
+    } catch (e) {
+      console.warn('API wipe laws error:', e);
+    }
+
+    try {
+      const { directWipeAllLawsFromFirestore } = await import('../services/clientFirestore');
+      await directWipeAllLawsFromFirestore();
+    } catch (fsE) {
+      console.warn('Firestore wipe laws error:', fsE);
+    }
+
+    setIsWipingLaws(false);
+    setShowWipeLawsModal(false);
+    setLawListFeedback({ type: 'success', message: 'تم إفراغ ومسح كافة القوانين والتشريعات بالكامل (0 قانون).' });
+    setTimeout(() => setLawListFeedback(null), 4000);
+    if (onLawsUpdated) onLawsUpdated();
+    notifySync('laws');
   };
 
   // Toggle user subscription status
@@ -4854,10 +4887,23 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
             )}
 
             {/* Header / Actions: count and expand/collapse all */}
-            <div className="flex items-center justify-between gap-2 mb-3 px-1 text-xs text-gray-500">
-              <span className="font-semibold">
-                عرض {filteredLaws.length} من أصل {laws.length} قانون
-              </span>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3 px-1 text-xs text-gray-500">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold">
+                  عرض {filteredLaws.length} من أصل {laws.length} قانون
+                </span>
+                {laws.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowWipeLawsModal(true)}
+                    className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold transition-colors flex items-center gap-1 text-[11px] cursor-pointer"
+                    title="تفريغ ومسح كافة القوانين والتشريعات من قاعدة المعرفة"
+                  >
+                    <Trash2 className="w-3 h-3 text-rose-600" />
+                    <span>تفريغ ومسح كافة القوانين ({laws.length})</span>
+                  </button>
+                )}
+              </div>
               {filteredLaws.length > 0 && (
                 <div className="flex items-center gap-1.5">
                   <button
@@ -7519,6 +7565,45 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ currentAdmin, onLawsUp
                   <Trash2 className="w-4 h-4" />
                 )}
                 <span>تأكيد مسح وتفريغ الكل</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Wipe All Laws Modal */}
+      {showWipeLawsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-gray-200 text-center animate-in zoom-in-95 duration-200">
+            <div className="w-14 h-14 rounded-full bg-rose-100 flex items-center justify-center mx-auto mb-4 border border-rose-200">
+              <Trash2 className="w-7 h-7 text-rose-600" />
+            </div>
+            <h3 className="text-lg font-black text-gray-900 mb-2">تفريغ ومسح كافة القوانين</h3>
+            <p className="text-xs text-gray-600 leading-relaxed mb-4">
+              هل أنت متأكد من رغبتك في حذف وتفريغ جميع القوانين والتشريعات ({laws.length} قانون) نهائياً من قاعدة المعرفة والمتصفح؟<br/>
+              <span className="text-rose-600 font-bold mt-1 block">ستصبح قاعدة القوانين فارغة تماماً (0 قانون) لتتمكن من رفع وإضافة نصوصك الخاصة.</span>
+            </p>
+            <div className="flex items-center gap-2 mt-4">
+              <button
+                type="button"
+                onClick={() => setShowWipeLawsModal(false)}
+                disabled={isWipingLaws}
+                className="flex-1 py-2.5 text-xs font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={handleWipeAllLaws}
+                disabled={isWipingLaws}
+                className="flex-1 py-2.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-50 shadow-xs cursor-pointer"
+              >
+                {isWipingLaws ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+                <span>تأكيد مسح وتفريغ القوانين</span>
               </button>
             </div>
           </div>
