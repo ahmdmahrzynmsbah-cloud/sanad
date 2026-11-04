@@ -198,7 +198,7 @@ async function extractTextWithPDFJS(
 ): Promise<{ text: string; numPages: number } | null> {
   try {
     const arrayBuffer = await file.arrayBuffer();
-    const loadingTask = pdfjsLib.getDocument({
+    const loadingTask = (pdfjsLib as any).getDocument({
       data: new Uint8Array(arrayBuffer),
       cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.296/cmaps/',
       cMapPacked: true,
